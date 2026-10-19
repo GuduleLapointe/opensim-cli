@@ -1,0 +1,53 @@
+{
+    "name": "magicoli/opensim-cli",
+    "description": "The command line to set up and manage OpenSimulator, in bash.",
+    "type": "project",
+    "license": "AGPL-3.0-or-later",
+    "authors": [
+        {
+            "name": "Olivier van Helden",
+            "homepage": "https://magiiic.com"
+        }
+    ],
+    "require": {
+        "magicoli/bash-tools": "@dev",
+        "magicoli/opensim-engine": "@dev",
+        "magicoli/opensim-rest-php": "@dev"
+    },
+    "repositories": [
+        {
+            "name": "magicoli/bash-tools",
+            "url": "../bash-tools/",
+            "type": "path",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "name": "magicoli/opensim-engine",
+            "url": "../opensim-engine/",
+            "type": "path",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "name": "magicoli/opensim-rest-php",
+            "url": "../opensim-rest-php/",
+            "type": "path",
+            "options": {
+                "symlink": true
+            }
+        }
+    ],
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "platform": {
+            "php": "8.2.0"
+        }
+    },
+    "bin": [
+        "bin/opensim"
+    ]
+}

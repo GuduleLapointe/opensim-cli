@@ -1,48 +1,33 @@
-# What the commands share: bash-tools, the engine and the way to ask it. Sourced by the commands, not run.
+# What the commands share: bash-tools, the engine and the rc file. Sourced by the commands, not run.
 #
-# The rules and the work are the engine's (opensim-api): this tool asks the questions, gives the answers to the engine, shows what it
-# says. bash-tools is in the PATH when installed, else the clone beside this one. The engine is OPENSIM_API, else opensim-api in the
-# PATH, else the one of the package, else the clone beside this one. The rc file (~/.opensimrc) is read first, it may set any of it.
+# The rules and the work are the engine's (opensim-api): this tool shows the questions, gives the answers to the engine and shows what
+# it says. bash-tools and the engine are dependencies (composer, or the packages that link them in vendor/magicoli), found in vendor/
+# of this project; OPENSIM_API names another engine, which is how the tests use a stand-in.
 
 _here=$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 CLI_ROOT=$(cd "$_here/../.." && pwd)
 unset _here
 
-if ! command -v bash-helpers >/dev/null 2>&1; then
-    [[ -r "$CLI_ROOT/../bash-tools/bin/bash-helpers" ]] && PATH="$CLI_ROOT/../bash-tools/bin:$PATH"
-fi
-command -v bash-helpers >/dev/null 2>&1 || {
-    echo "${0##*/}: bash-tools is not found (bash-helpers): install it, or put it beside this tool" >&2
+_helpers="$CLI_ROOT/vendor/magicoli/bash-tools/bin/bash-helpers"
+[[ -f "$_helpers" ]] || {
+    echo "${0##*/}: bash-tools is not installed (composer install in $CLI_ROOT)" >&2
     exit 1
 }
-# shellcheck disable=SC1091
-source bash-helpers
+# shellcheck disable=SC1090
+source "$_helpers"
+unset _helpers
 
-# The engine: where opensim-api is
-find_engine() {
-    local candidate
-    for candidate in "${OPENSIM_API:-}" "$(command -v opensim-api || true)" /usr/share/opensim-engine/bin/opensim-api \
-        "$CLI_ROOT/../opensim-engine/bin/opensim-api"; do
-        if [[ -n "$candidate" && -x "$candidate" ]]; then
-            OPENSIM_API="$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")"
-
-            return 0
-        fi
-    done
-
-    return 1
-}
-
-if find_engine && [[ -r "$(dirname "$OPENSIM_API")/../lib/rc-helpers" ]]; then
-    # The rc file of the engine, for any script: it may fix the PATH, name another engine
-    # shellcheck disable=SC1091
-    source "$(dirname "$OPENSIM_API")/../lib/rc-helpers" && read_rc
-    find_engine
-fi
-[[ -n "${OPENSIM_API:-}" ]] || die "The engine is not found (opensim-api): install opensim-engine, or give OPENSIM_API in ~/.opensimrc"
+OPENSIM_API=${OPENSIM_API:-$CLI_ROOT/vendor/magicoli/opensim-engine/bin/opensim-api}
+[[ -x "$OPENSIM_API" ]] || die "The engine is not installed (composer install in $CLI_ROOT)"
 require jq
 
-# Ask the engine: engine POST /setups/quick < body
+# The rc file, for any script of the ecosystem: it may fix the PATH (which php)
+if [[ -r "$(dirname "$OPENSIM_API")/../lib/rc-helpers" ]]; then
+    # shellcheck disable=SC1091
+    source "$(dirname "$OPENSIM_API")/../lib/rc-helpers" && read_rc
+fi
+
+# Ask the engine: engine POST /setups/quick --data=- < body
 engine() {
     "$OPENSIM_API" "$@"
 }

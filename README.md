@@ -6,9 +6,8 @@ The command line to set up and manage OpenSimulator, in bash. It asks the questi
 
 ## Requirements
 
-- bash 5, `jq`, `php-cli`
-- [bash-tools](https://github.com/magicoli/bash-tools) (`bash-helpers` in the PATH, or its clone beside this one)
-- the engine (`opensim-api` in the PATH, in `/usr/share/opensim-engine/bin`, or its clone beside this one)
+- bash 5, `jq`, `php-cli`, and `dialog` for the form (plain prompts without it)
+- the dependencies, installed with `composer install`: [bash-tools](https://github.com/magicoli/bash-tools) and the [engine](https://github.com/GuduleLapointe/opensim-engine) (the packages link them in `vendor/magicoli/` instead)
 
 ## Usage
 
@@ -17,13 +16,23 @@ bin/opensim setup
 ```
 
 ```
-What do you want to set up?
-  1) A grid: its Robust and a first simulator
-  2) A standalone: one simulator that is the whole grid
+Type: Grid | Standalone
 ```
 
-then, for a grid, the name of the grid, its login URI, the hypergrid (yes by default) and the avatar that owns it (name, password, email); for a standalone, the same with the name of the simulator, which is the grid. Everything else is proposed by the engine.
+then one form with every question, the engine's proposals filled in:
+
+```
+Grid name        Amy
+Login URI        http://Amy.local:8002
+Hypergrid        yes
+Avatar name
+Password
+Password again
+Email
+```
+
+For a standalone the name is the simulator's, which is the grid. What the engine refuses comes back with the form, answers kept. Back returns to the type, Quit leaves (`:back` and `:quit` in plain mode, where a number edits an answer and Enter goes on).
 
 ## Settings
 
-`~/.opensimrc` is read first, it is a bash file: it can set the `PATH` (which `php`, which tools), `OPENSIM_API` (where the engine is), anything the tools need. The `.env` of this project is read by bash-tools.
+`~/.opensimrc` is read first, it is a bash file: it can set the `PATH` (which `php`, which tools) or anything the tools need. The `.env` of this project is read by bash-tools. `OPENSIM_SETUP_UI=plain` asks without dialog.

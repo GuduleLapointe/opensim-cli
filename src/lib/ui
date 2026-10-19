@@ -1,0 +1,160 @@
+# The questions, as the setup of the kit asked them (libexec/setup-frontend.sh there): dialog when there is one and a terminal to
+# draw on, else plain prompts; Back and Quit in both. Here a form shows all the questions at once. Sourced by the commands, not run.
+#
+# Environment: OPENSIM_SETUP_UI=plain|dialog (default: dialog when it is there), FE_TTY (where the person types, default /dev/tty),
+# FE_INPUT_FD (a descriptor to read the answers from instead: the tests), FE_SCREEN (where dialog draws, default /dev/tty).
+#
+# Every question returns 0 when answered, 1 for Back (:back in plain mode), 2 for Quit (:quit, the end of the input).
+#
+# A form is the fields by the name of the variable that holds the answer (the proposal on the way in, the answer on the way out),
+# with LABEL[name] and, for what is not shown when typed, SECRET[name]=1:
+#
+#   declare -A LABEL=([name]="Grid name" [password]="Password") SECRET=([password]=1)
+#   ui_form "Title" "Text above the form" name password
+
+FE_TTY=${FE_TTY:-/dev/tty}
+FE_INPUT_FD=${FE_INPUT_FD:-}
+FE_SCREEN=${FE_SCREEN:-/dev/tty}
+FE_UI=
+FE_ANSWER=
+
+# The way to ask: dialog when it is there and the person has a terminal, else plain prompts
+fe_choose_ui() {
+    FE_UI=${OPENSIM_SETUP_UI:-}
+    [[ -n $FE_UI ]] && return
+    FE_UI=plain
+    if command -v dialog >/dev/null 2>&1 && [[ $FE_TTY == /dev/tty && $FE_SCREEN == /dev/tty && -t 1 && ${TERM:-dumb} != dumb ]]; then
+        FE_UI=dialog
+    fi
+}
+
+# Read from the person: the options of read and the name of the variable
+fe_in() {
+    if [[ -n $FE_INPUT_FD ]]; then
+        IFS= read -r -u "$FE_INPUT_FD" "$@"
+    else
+        IFS= read -r "$@" <"$FE_TTY"
+    fi
+}
+
+# Read a line from the person: 0 when read, 2 at the end of the input (nobody is there to answer)
+fe_read() { # prompt default [secret]
+    local value
+    if [[ -n ${3:-} ]]; then
+        fe_in -s -p "$1" value || return 2
+        printf '\n' >&2
+    elif [[ $FE_TTY == /dev/tty && -z $FE_INPUT_FD ]]; then
+        fe_in -e -p "$1" -i "$2" value || return 2
+    else
+        fe_in -p "$1" value || return 2
+        [[ -z $value ]] && value=$2
+    fi
+    FE_ANSWER=$value
+}
+
+# Answers that are not an answer: :back and :quit
+fe_special() {
+    case $FE_ANSWER in
+        :back | :b) return 1 ;;
+        :quit | :q) return 2 ;;
+    esac
+    return 0
+}
+
+# dialog, its answer in FE_ANSWER; the cancel button is Back unless FE_CANCEL says another
+fe_dialog() { # title, arguments of dialog
+    local title=$1 out status=0
+    shift
+    out=$(dialog --output-fd 9 --title "$title" --cancel-label "${FE_CANCEL:-Back}" "$@" 9>&1 >"$FE_SCREEN" <"$FE_SCREEN") || status=$?
+    FE_ANSWER=$out
+    case $status in
+        0) return 0 ;;
+        1) return 1 ;;
+        *) return 2 ;;
+    esac
+}
+
+# ui_menu VARIABLE "Question" KEY "Label" [KEY "Label"...]: the key of the line chosen; the first is proposed
+ui_menu() {
+    local variable=$1 question=$2 keys=() labels=() items=() i status=0
+    shift 2
+    while (($# >= 2)); do
+        keys+=("$1")
+        labels+=("$2")
+        items+=("$1" "$2")
+        shift 2
+    done
+    fe_choose_ui
+    if [[ $FE_UI == dialog ]]; then
+        FE_CANCEL=Quit fe_dialog "$question" --menu "$question" 0 0 0 "${items[@]}" || return $?
+    else
+        for i in "${!keys[@]}"; do
+            printf '  %d) %s\n' "$((i + 1))" "${labels[$i]}" >&2
+        done
+        while :; do
+            fe_read "$question [1]: " 1 || return 2
+            fe_special || return $?
+            if [[ $FE_ANSWER =~ ^[0-9]+$ ]] && ((FE_ANSWER >= 1 && FE_ANSWER <= ${#keys[@]})); then
+                FE_ANSWER=${keys[FE_ANSWER - 1]}
+                break
+            fi
+            for i in "${!keys[@]}"; do
+                [[ "${keys[$i]}" == "$FE_ANSWER" ]] && break 2
+            done
+        done
+    fi
+    printf -v "$variable" '%s' "$FE_ANSWER"
+    return $status
+}
+
+# ui_form "Title" "Text" NAME...: all the questions at once. (The locals are named so that they cannot hide a variable of a form.)
+ui_form() {
+    local _u_title=$1 _u_text=$2 _u_n _u_i _u_w=0 _u_items=() _u_values=()
+    shift 2
+    local _u_names=("$@")
+    fe_choose_ui
+    if [[ $FE_UI == dialog ]]; then
+        for _u_n in "${_u_names[@]}"; do ((${#LABEL[$_u_n]} > _u_w)) && _u_w=${#LABEL[$_u_n]}; done
+        for _u_i in "${!_u_names[@]}"; do
+            _u_n=${_u_names[$_u_i]}
+            _u_items+=("${LABEL[$_u_n]}" "$((_u_i + 1))" 1 "${!_u_n}" "$((_u_i + 1))" "$((_u_w + 2))" 40 200 "${SECRET[$_u_n]:-0}")
+        done
+        fe_dialog "$_u_title" --insecure --mixedform "$_u_text" 0 0 "${#_u_names[@]}" "${_u_items[@]}" || return $?
+        mapfile -t _u_values <<<"$FE_ANSWER"
+        for _u_i in "${!_u_names[@]}"; do
+            printf -v "${_u_names[$_u_i]}" '%s' "${_u_values[$_u_i]:-}"
+        done
+    else
+        ui_form_plain "$_u_title" "$_u_text" "${_u_names[@]}"
+    fi
+}
+
+# The form as text: every question with its answer, a number to change one, Enter when it is right
+ui_form_plain() {
+    local _u_title=$1 _u_text=$2 _u_n _u_i _u_shown _u_status
+    shift 2
+    local _u_names=("$@")
+    [[ -n "$_u_text" ]] && printf '\n%s\n' "$_u_text" >&2
+    while :; do
+        printf '\n%s\n' "$_u_title" >&2
+        for _u_i in "${!_u_names[@]}"; do
+            _u_n=${_u_names[$_u_i]}
+            _u_shown=${!_u_n}
+            [[ -n "${SECRET[$_u_n]:-}" && -n "$_u_shown" ]] && _u_shown='********'
+            printf '  %d) %-26s %s\n' "$((_u_i + 1))" "${LABEL[$_u_n]}" "$_u_shown" >&2
+        done
+        fe_read "Edit [1-${#_u_names[@]}, Enter to continue]: " '' || return 2
+        fe_special || return $?
+        [[ -z "$FE_ANSWER" ]] && return 0
+        if [[ "$FE_ANSWER" =~ ^[0-9]+$ ]] && ((FE_ANSWER >= 1 && FE_ANSWER <= ${#_u_names[@]})); then
+            _u_n=${_u_names[$((FE_ANSWER - 1))]}
+            _u_status=0
+            if [[ -n "${SECRET[$_u_n]:-}" ]]; then
+                fe_read "${LABEL[$_u_n]}: " '' secret || return 2
+            else
+                fe_read "${LABEL[$_u_n]}: " "${!_u_n}" || return 2
+            fi
+            printf -v "$_u_n" '%s' "$FE_ANSWER"
+        fi
+    done
+}
