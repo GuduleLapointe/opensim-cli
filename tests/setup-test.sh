@@ -51,9 +51,9 @@ function setup_with_dialog() {
     )
 }
 
-function test_a_grid_is_asked_in_one_form_then_shown_as_a_list_of_values() {
+function test_a_grid_is_asked_in_one_form_then_options_then_shown_as_a_list_of_values() {
     local out
-    out=$(setup_with 1 "" 1 "Magic Grid" 3 "Ada Love" 4 secret123 5 secret123 6 ada@example.org "")
+    out=$(setup_with 1 1 "Magic Grid" 3 "Ada Love" 4 secret123 5 secret123 6 ada@example.org "" "")
     assert_contains "Magic Grid" "$(grep '1) Grid name' <<<"$out" | tail -1)"
     assert_contains "amy.example.org:8002" "$(grep '2) Login URI' <<<"$out" | tail -1)"
     assert_contains "* Grid name: Magic Grid (magic_grid)" "$out"
@@ -65,13 +65,13 @@ function test_a_grid_is_asked_in_one_form_then_shown_as_a_list_of_values() {
 
 function test_the_sections_of_the_list_are_separated_by_a_blank_line() {
     local out
-    out=$(setup_with 1 "" 3 "Ada Love" 4 secret123 5 secret123 "")
+    out=$(setup_with 1 3 "Ada Love" 4 secret123 5 secret123 "" "")
     assert_contains $'* Hypergrid: yes\n\n* Simulator: Welcome\n\n* Avatar: Ada Love' "$out"
 }
 
 function test_a_standalone_names_its_region_and_hypergrid_is_a_check_box() {
     local out
-    out=$(setup_with 2 no 1 "My Island" 3 "Ada Love" 4 secret123 5 secret123 "")
+    out=$(setup_with 2 1 "My Island" 3 "Ada Love" 4 secret123 5 secret123 "" no)
     assert_contains "My Island" "$(grep '1) Region name' <<<"$out" | tail -1)"
     assert_contains "* Hypergrid: no" "$out"
     assert_contains "* Simulator: My Island" "$out"
@@ -79,7 +79,7 @@ function test_a_standalone_names_its_region_and_hypergrid_is_a_check_box() {
 
 function test_what_the_engine_refuses_comes_back_with_the_form_and_its_answers() {
     local out
-    out=$(setup_with 1 "" 3 "Ada" 4 secret123 5 secret123 "" 3 "Ada Love" "")
+    out=$(setup_with 1 3 "Ada" 4 secret123 5 secret123 "" 3 "Ada Love" "" "")
     assert_contains "Error: Avatar name invalid (First Last)" "$out"
     assert_contains "* Avatar: Ada Love" "$out"
     assert_not_contains "Error: Password" "$out"
@@ -87,33 +87,34 @@ function test_what_the_engine_refuses_comes_back_with_the_form_and_its_answers()
 
 function test_two_different_passwords_are_not_sent() {
     local out
-    out=$(setup_with 1 "" 3 "Ada Love" 4 secret123 5 other "" 4 secret123 5 secret123 "")
+    out=$(setup_with 1 3 "Ada Love" 4 secret123 5 other "" 4 secret123 5 secret123 "" "")
     assert_contains "Error: Passwords differ" "$out"
     assert_contains "* Avatar: Ada Love" "$out"
 }
 
 function test_a_choice_is_asked_until_it_is_one() {
     local out
-    out=$(setup_with 9 2 "" 3 "Ada Love" 4 secret123 5 secret123 "")
+    out=$(setup_with 9 2 3 "Ada Love" 4 secret123 5 secret123 "" "")
     assert_contains "* Grid name: Amy" "$out"
 }
 
 function test_the_presets_are_listed_but_not_available_yet() {
     local out
-    out=$(setup_with 3 2 "" 3 "Ada Love" 4 secret123 5 secret123 "")
+    out=$(setup_with 3 2 3 "Ada Love" 4 secret123 5 secret123 "" "")
     assert_contains "3) Speculoos (soon)" "$out"
     assert_contains "4) OSGrid (soon)" "$out"
     assert_contains "Not available yet" "$out"
     assert_contains "* Grid name: Amy" "$out"
 }
 
-function test_back_from_the_form_goes_to_the_options_and_back_from_the_options_to_the_type() {
+function test_back_goes_one_step_back() {
     local out
-    out=$(setup_with 1 "" :back no 3 "Ada Love" 4 secret123 5 secret123 "")
+    # From the options to the form (the answers stay), from the form to the type
+    out=$(setup_with 1 3 "Ada Love" 4 secret123 5 secret123 "" :back 6 ada@example.org "" no)
     assert_contains "* Hypergrid: no" "$out"
-    out=$(setup_with 1 :back 2 "" 3 "Ada Love" 4 secret123 5 secret123 "")
-    assert_contains "Region name" "$out"
-    assert_contains "* Simulator: My Island" "$(setup_with 2 "" 1 "My Island" 3 "Ada Love" 4 secret123 5 secret123 "")"
+    assert_contains "* Avatar: Ada Love" "$out"
+    out=$(setup_with 1 :back 2 3 "Ada Love" 4 secret123 5 secret123 "" "")
+    assert_contains "* Simulator: Amy" "$out"
 }
 
 function test_quit_ends_the_setup() {
@@ -134,36 +135,39 @@ function test_the_help_of_a_command() {
     assert_contains "usage: opensim setup" "$("$OPENSIM" setup --help 2>&1)"
 }
 
-function test_dialog_shows_a_menu_check_boxes_and_one_form() {
+function test_dialog_shows_a_menu_one_form_then_check_boxes() {
     local out log
     make_fake_dialog
-    printf '%s\n' '0:standalone' '0:hypergrid\n' '0:My Island\namy.example.org:8002\nAda Love\nsecret123\nsecret123\nada@example.org\n' >"$DIALOG_ANSWERS"
+    printf '%s\n' '0:standalone' '0:My Island\namy.example.org:8002\nAda Love\nsecret123\nsecret123\nada@example.org\n' '0:hypergrid\n' >"$DIALOG_ANSWERS"
     out=$(setup_with_dialog)
     log=$(cat "$DIALOG_LOG")
     assert_contains "* Grid name: My Island (my_island)" "$out"
+    assert_contains "* Hypergrid: yes" "$out"
     assert_contains "* Avatar: Ada Love" "$out"
     assert_contains "--no-tags --menu  11 50 4 grid Grid standalone Standalone speculoos Speculoos (soon) osgrid OSGrid (soon)" "$log"
     assert_contains "--no-tags --separate-output --checklist  9 50 1 hypergrid Hypergrid on" "$log"
     assert_contains "Region name" "$(grep mixedform "$DIALOG_LOG")"
-    assert_equals 3 "$(grep -c -- '--title' "$DIALOG_LOG")"
+    assert_equals "menu mixedform checklist" "$(grep -oE -- '--(menu|mixedform|checklist)' "$DIALOG_LOG" | sed 's/--//' | tr '\n' ' ' | sed 's/ $//')"
     assert_contains "bindkey formfield ENTER form_NEXT" "$log"
 }
 
-function test_dialog_unchecked_hypergrid_is_no_and_back_returns_to_the_previous_screen() {
+function test_dialog_unchecked_hypergrid_is_no_and_back_returns_to_the_form() {
     local out
     make_fake_dialog
-    printf '%s\n' '0:grid' '0:' '1:' '0:' '0:Magic Grid\namy.example.org:8002\nAda Love\nsecret123\nsecret123\n\n' >"$DIALOG_ANSWERS"
+    printf '%s\n' '0:grid' \
+        '0:Magic Grid\namy.example.org:8002\nAda Love\nsecret123\nsecret123\n\n' '1:' \
+        '0:Magic Grid\namy.example.org:8002\nAda Love\nsecret123\nsecret123\n\n' '0:' >"$DIALOG_ANSWERS"
     out=$(setup_with_dialog)
     assert_contains "* Hypergrid: no" "$out"
-    assert_equals 5 "$(grep -c -- '--title' "$DIALOG_LOG")"
+    assert_equals "menu mixedform checklist mixedform checklist" "$(grep -oE -- '--(menu|mixedform|checklist)' "$DIALOG_LOG" | sed 's/--//' | tr '\n' ' ' | sed 's/ $//')"
 }
 
 function test_dialog_engine_problems_come_back_in_the_form() {
     local out
     make_fake_dialog
-    printf '%s\n' '0:grid' '0:hypergrid\n' \
+    printf '%s\n' '0:grid' \
         '0:Magic Grid\namy.example.org:8002\nAda\nsecret123\nsecret123\n\n' \
-        '0:Magic Grid\namy.example.org:8002\nAda Love\nsecret123\nsecret123\n\n' >"$DIALOG_ANSWERS"
+        '0:Magic Grid\namy.example.org:8002\nAda Love\nsecret123\nsecret123\n\n' '0:hypergrid\n' >"$DIALOG_ANSWERS"
     out=$(setup_with_dialog)
     assert_contains "* Grid name: Magic Grid (magic_grid)" "$out"
     assert_contains "Error: Avatar name invalid (First Last)" "$(grep mixedform "$DIALOG_LOG" | tail -1)"

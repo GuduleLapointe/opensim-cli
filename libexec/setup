@@ -63,7 +63,7 @@ summary() {
 # What can be set up: the grid and the standalone, and the presets, listed to preview the menu (the engine will list the ones there are)
 UNAVAILABLE=" speculoos osgrid "
 
-# The steps: the type, the options (check boxes), the form. Back goes one step back; Back from the type and Quit end it.
+# The steps: the type, the form, the options (check boxes). Back goes one step back; Back from the type and Quit end it.
 step=type
 while :; do
     status=0
@@ -81,24 +81,34 @@ while :; do
             login_uri="$(field .data.attributes.setup.grid.hostname):$(field .data.attributes.setup.grid.public_port)"
             notice=
             tries=0
-            step=options
-            ;;
-        options)
-            ui_checks "Setup: ${type^}" "" hypergrid || status=$?
-            case $status in 0) step=form ;; 1) step=type ;; *) die "Cancelled" ;; esac
+            step=form
             ;;
         form)
             ui_form "Setup: ${type^}" "$notice" name login_uri avatar password password2 email || status=$?
-            case $status in 1) step=options; continue ;; 2) die "Cancelled" ;; esac
+            case $status in 1) step=type; continue ;; 2) die "Cancelled" ;; esac
             if [[ "$password" != "$password2" ]]; then
                 notice="Error: Passwords differ"
                 password= password2=
                 continue
             fi
             check
-            [[ "$(field .data.attributes.valid)" == true ]] && break
-            ((++tries < 8)) || die "Still not right after $tries tries"
+            if [[ "$(field .data.attributes.valid)" == true ]]; then
+                notice=
+                step=options
+            else
+                ((++tries < 8)) || die "Still not right after $tries tries"
+                notice=$(problems)
+            fi
+            ;;
+        options)
+            ui_checks "Setup: ${type^}" "" hypergrid || status=$?
+            case $status in 1) step=form; continue ;; 2) die "Cancelled" ;; esac
+            check
+            if [[ "$(field .data.attributes.valid)" == true ]]; then
+                break
+            fi
             notice=$(problems)
+            step=form
             ;;
     esac
 done

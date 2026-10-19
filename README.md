@@ -19,7 +19,7 @@ bin/opensim setup
 Type: Grid | Standalone | Speculoos (soon) | OSGrid (soon)
 ```
 
-then the options as check boxes (Hypergrid, checked), then one form with every question, the engine's proposals filled in (Enter moves to the next field, the last one leads to OK):
+then one form with every question, the engine's proposals filled in (Enter moves to the next field, the last one leads to OK):
 
 ```
 Grid name        Amy
@@ -30,7 +30,7 @@ Password again
 Email
 ```
 
-For a standalone the first field is `Region name`: the region is the simulator and the grid. What the engine refuses comes back with the form, answers kept. Back goes one step back, Quit leaves. The setup the answers stand for is listed, every value the engine defines, by section:
+For a standalone the first field is `Region name`: the region is the simulator and the grid. What the engine refuses comes back with the form, answers kept (`Error: Email invalid`). Then the options, as check boxes (Hypergrid, checked; search, currency, OSSL will join it). Back goes one step back, Quit leaves. The setup the answers stand for is listed, every value the engine defines, by section:
 
 ```
 * Grid name: Amy (amy)
