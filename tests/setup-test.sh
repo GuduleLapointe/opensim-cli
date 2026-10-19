@@ -30,6 +30,7 @@ function make_fake_dialog() {
     cat >"$WORK/bin/dialog" <<'FAKE'
 #!/usr/bin/env bash
 echo "$*" >>"$DIALOG_LOG"
+echo "rc: $(tr '\n' ';' <"$DIALOGRC")" >>"$DIALOG_LOG"
 answer=$(head -n 1 "$DIALOG_ANSWERS")
 sed -i.bak 1d "$DIALOG_ANSWERS" && rm -f "$DIALOG_ANSWERS.bak"
 code=${answer%%:*}
@@ -50,47 +51,76 @@ function setup_with_dialog() {
     )
 }
 
-function test_a_grid_is_asked_in_one_form_then_shown_with_what_the_engine_proposes() {
+function test_a_grid_is_asked_in_one_form_then_shown_as_a_list_of_values() {
     local out
-    out=$(setup_with 1 1 "Magic Grid" 4 "Ada Love" 5 secret123 6 secret123 7 ada@example.org "")
+    out=$(setup_with 1 "" 1 "Magic Grid" 3 "Ada Love" 4 secret123 5 secret123 6 ada@example.org "")
     assert_contains "Magic Grid" "$(grep '1) Grid name' <<<"$out" | tail -1)"
-    assert_contains "yes" "$(grep '3) Hypergrid' <<<"$out" | tail -1)"
-    assert_contains "Grid Magic Grid (magic_grid)" "$out"
-    assert_contains "Login       http://amy.example.org:8002" "$out"
-    assert_contains "Simulator   Welcome, region Welcome" "$out"
-    assert_contains "Databases   amy_robust and amy_welcome (user opensim)" "$out"
-    assert_contains "Owner       Ada Love <ada@example.org>" "$out"
+    assert_contains "amy.example.org:8002" "$(grep '2) Login URI' <<<"$out" | tail -1)"
+    assert_contains "* Grid name: Magic Grid (magic_grid)" "$out"
+    assert_contains "* Login URI: http://amy.example.org:8002" "$out"
+    assert_contains "* Hypergrid: yes" "$out"
+    assert_contains "* Simulator: Welcome" "$out"
+    assert_contains "* Avatar: Ada Love" "$out"
 }
 
-function test_a_standalone_is_the_simulator_and_the_grid() {
+function test_the_sections_of_the_list_are_separated_by_a_blank_line() {
     local out
-    out=$(setup_with 2 1 "My Island" 3 no 4 "Ada Love" 5 secret123 6 secret123 "")
-    assert_contains "My Island" "$(grep '1) Simulator name' <<<"$out" | tail -1)"
-    assert_contains "Standalone My Island (my_island)" "$out"
-    assert_contains "Hypergrid   no" "$out"
-    assert_contains "Simulator   My Island" "$out"
-    assert_contains "Database    amy_welcome (user opensim)" "$out"
+    out=$(setup_with 1 "" 3 "Ada Love" 4 secret123 5 secret123 "")
+    assert_contains $'* Hypergrid: yes\n\n* Simulator: Welcome\n\n* Avatar: Ada Love' "$out"
+}
+
+function test_a_standalone_names_its_region_and_hypergrid_is_a_check_box() {
+    local out
+    out=$(setup_with 2 no 1 "My Island" 3 "Ada Love" 4 secret123 5 secret123 "")
+    assert_contains "My Island" "$(grep '1) Region name' <<<"$out" | tail -1)"
+    assert_contains "* Hypergrid: no" "$out"
+    assert_contains "* Simulator: My Island" "$out"
 }
 
 function test_what_the_engine_refuses_comes_back_with_the_form_and_its_answers() {
     local out
-    out=$(setup_with 1 4 "Ada" 5 secret123 6 secret123 "" 4 "Ada Love" "")
+    out=$(setup_with 1 "" 3 "Ada" 4 secret123 5 secret123 "" 3 "Ada Love" "")
     assert_contains "! Avatar name: First and last name, e.g. Jane Doe." "$out"
-    assert_contains "Owner       Ada Love" "$out"
-    assert_not_contains "! Avatar password" "$out"
+    assert_contains "* Avatar: Ada Love" "$out"
+    assert_not_contains "! Password" "$out"
 }
 
 function test_two_different_passwords_are_not_sent() {
     local out
-    out=$(setup_with 1 4 "Ada Love" 5 secret123 6 other "" 5 secret123 6 secret123 "")
+    out=$(setup_with 1 "" 3 "Ada Love" 4 secret123 5 other "" 4 secret123 5 secret123 "")
     assert_contains "! Passwords differ" "$out"
-    assert_contains "Owner       Ada Love" "$out"
+    assert_contains "* Avatar: Ada Love" "$out"
 }
 
 function test_a_choice_is_asked_until_it_is_one() {
     local out
-    out=$(setup_with 9 2 4 "Ada Love" 5 secret123 6 secret123 "")
-    assert_contains "Standalone" "$out"
+    out=$(setup_with 9 2 "" 3 "Ada Love" 4 secret123 5 secret123 "")
+    assert_contains "* Grid name: Amy" "$out"
+}
+
+function test_the_presets_are_listed_but_not_available_yet() {
+    local out
+    out=$(setup_with 3 2 "" 3 "Ada Love" 4 secret123 5 secret123 "")
+    assert_contains "3) Speculoos (soon)" "$out"
+    assert_contains "4) OSGrid (soon)" "$out"
+    assert_contains "Not available yet" "$out"
+    assert_contains "* Grid name: Amy" "$out"
+}
+
+function test_back_from_the_form_goes_to_the_options_and_back_from_the_options_to_the_type() {
+    local out
+    out=$(setup_with 1 "" :back no 3 "Ada Love" 4 secret123 5 secret123 "")
+    assert_contains "* Hypergrid: no" "$out"
+    out=$(setup_with 1 :back 2 "" 3 "Ada Love" 4 secret123 5 secret123 "")
+    assert_contains "Region name" "$out"
+    assert_contains "* Simulator: My Island" "$(setup_with 2 "" 1 "My Island" 3 "Ada Love" 4 secret123 5 secret123 "")"
+}
+
+function test_quit_ends_the_setup() {
+    local out status=0
+    out=$(setup_with 1 :quit) || status=$?
+    assert_contains "Cancelled" "$out"
+    assert_not_equals 0 "$status"
 }
 
 function test_no_command_says_the_usage() {
@@ -104,58 +134,37 @@ function test_the_help_of_a_command() {
     assert_contains "usage: opensim setup" "$("$OPENSIM" setup --help 2>&1)"
 }
 
-function test_back_from_the_form_is_the_menu_again() {
-    local out
-    out=$(setup_with 1 :back 2 4 "Ada Love" 5 secret123 6 secret123 "")
-    assert_contains "Standalone" "$out"
-    assert_contains "Owner       Ada Love" "$out"
+function test_dialog_shows_a_menu_check_boxes_and_one_form() {
+    local out log
+    make_fake_dialog
+    printf '%s\n' '0:standalone' '0:hypergrid\n' '0:My Island\namy.example.org:8002\nAda Love\nsecret123\nsecret123\nada@example.org\n' >"$DIALOG_ANSWERS"
+    out=$(setup_with_dialog)
+    log=$(cat "$DIALOG_LOG")
+    assert_contains "* Grid name: My Island (my_island)" "$out"
+    assert_contains "* Avatar: Ada Love" "$out"
+    assert_contains "--no-tags --menu  11 50 4 grid Grid standalone Standalone speculoos Speculoos (soon) osgrid OSGrid (soon)" "$log"
+    assert_contains "--no-tags --separate-output --checklist  9 50 1 hypergrid Hypergrid on" "$log"
+    assert_contains "Region name" "$(grep mixedform "$DIALOG_LOG")"
+    assert_equals 3 "$(grep -c -- '--title' "$DIALOG_LOG")"
+    assert_contains "bindkey formfield ENTER form_NEXT" "$log"
 }
 
-function test_quit_ends_the_setup() {
-    local out status=0
-    out=$(setup_with 1 :quit) || status=$?
-    assert_contains "Cancelled" "$out"
-    assert_not_equals 0 "$status"
-}
-
-function test_dialog_shows_the_form_with_all_the_questions_at_once() {
+function test_dialog_unchecked_hypergrid_is_no_and_back_returns_to_the_previous_screen() {
     local out
     make_fake_dialog
-    printf '%s\n' '0:standalone' '0:My Island\nhttp://amy.example.org:8002\nyes\nAda Love\nsecret123\nsecret123\nada@example.org\n' >"$DIALOG_ANSWERS"
+    printf '%s\n' '0:grid' '0:' '1:' '0:' '0:Magic Grid\namy.example.org:8002\nAda Love\nsecret123\nsecret123\n\n' >"$DIALOG_ANSWERS"
     out=$(setup_with_dialog)
-    assert_contains "Standalone My Island (my_island)" "$out"
-    assert_contains "Owner       Ada Love <ada@example.org>" "$out"
-    assert_contains "--menu" "$(cat "$DIALOG_LOG")"
-    assert_contains "--mixedform" "$(cat "$DIALOG_LOG")"
-    assert_contains "Avatar name" "$(grep mixedform "$DIALOG_LOG")"
-    assert_equals 2 "$(wc -l <"$DIALOG_LOG" | tr -d ' ')"
+    assert_contains "* Hypergrid: no" "$out"
+    assert_equals 5 "$(grep -c -- '--title' "$DIALOG_LOG")"
 }
 
-function test_dialog_back_from_the_form_is_the_menu_again_and_the_engine_problems_come_back_in_the_form() {
+function test_dialog_engine_problems_come_back_in_the_form() {
     local out
     make_fake_dialog
-    printf '%s\n' '0:grid' '1:' '0:grid' \
-        '0:Magic Grid\nhttp://amy.example.org:8002\nyes\nAda\nsecret123\nsecret123\n\n' \
-        '0:Magic Grid\nhttp://amy.example.org:8002\nyes\nAda Love\nsecret123\nsecret123\n\n' >"$DIALOG_ANSWERS"
+    printf '%s\n' '0:grid' '0:hypergrid\n' \
+        '0:Magic Grid\namy.example.org:8002\nAda\nsecret123\nsecret123\n\n' \
+        '0:Magic Grid\namy.example.org:8002\nAda Love\nsecret123\nsecret123\n\n' >"$DIALOG_ANSWERS"
     out=$(setup_with_dialog)
-    assert_contains "Grid Magic Grid (magic_grid)" "$out"
+    assert_contains "* Grid name: Magic Grid (magic_grid)" "$out"
     assert_contains "! Avatar name: First and last name" "$(grep mixedform "$DIALOG_LOG" | tail -1)"
 }
-
-function test_the_presets_are_listed_but_not_available_yet() {
-    local out
-    out=$(setup_with 3 2 4 "Ada Love" 5 secret123 6 secret123 "")
-    assert_contains "3) Speculoos (soon)" "$out"
-    assert_contains "4) OSGrid (soon)" "$out"
-    assert_contains "Not available yet" "$out"
-    assert_contains "Standalone" "$out"
-}
-
-function test_dialog_menu_has_its_size_and_no_repeated_tags() {
-    local out
-    make_fake_dialog
-    printf '%s\n' '0:standalone' '0:My Island\nhttp://amy.example.org:8002\nyes\nAda Love\nsecret123\nsecret123\n\n' >"$DIALOG_ANSWERS"
-    out=$(setup_with_dialog)
-    assert_contains "--no-tags --menu  11 50 4 grid Grid standalone Standalone speculoos Speculoos (soon) osgrid OSGrid (soon)" "$(grep -- --menu "$DIALOG_LOG")"
-}
-

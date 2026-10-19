@@ -19,19 +19,30 @@ bin/opensim setup
 Type: Grid | Standalone | Speculoos (soon) | OSGrid (soon)
 ```
 
-then one form with every question, the engine's proposals filled in:
+then the options as check boxes (Hypergrid, checked), then one form with every question, the engine's proposals filled in (Enter moves to the next field, the last one leads to OK):
 
 ```
 Grid name        Amy
-Login URI        http://Amy.local:8002
-Hypergrid        yes
+Login URI        Amy.local:8002
 Avatar name
 Password
 Password again
 Email
 ```
 
-For a standalone the name is the simulator's, which is the grid. What the engine refuses comes back with the form, answers kept. Back returns to the type, Quit leaves. Without a terminal (a script) the questions are plain lines, a number edits an answer (`:back`, `:quit`).
+For a standalone the first field is `Region name`: the region is the simulator and the grid. What the engine refuses comes back with the form, answers kept. Back goes one step back, Quit leaves. The setup the answers stand for is listed, every value the engine defines, by section:
+
+```
+* Grid name: Amy (amy)
+* Login URI: http://Amy.local:8002
+* Hypergrid: yes
+...
+
+* Simulator: Welcome (amy_welcome)
+...
+```
+
+Without a terminal (a script) the questions are plain lines, a number edits an answer (`:back`, `:quit`).
 
 ## Settings
 

@@ -63,11 +63,22 @@ fe_special() {
     return 0
 }
 
+# The configuration of dialog: the one of the person, and Enter moves to the next field of a form (the last one leads to OK), which
+# submits only when it is pressed on the button
+fe_dialogrc() {
+    FE_DIALOGRC=${FE_DIALOGRC:-${TMP:-$(mktemp)}.dialogrc}
+    {
+        cat "${DIALOGRC:-${HOME:-}/.dialogrc}" 2>/dev/null || true
+        printf '%s\n' 'bindkey formfield ENTER form_NEXT' 'bindkey formfield ^M form_NEXT' 'bindkey formfield ^J form_NEXT'
+    } >"$FE_DIALOGRC"
+}
+
 # dialog, its answer in FE_ANSWER; the cancel button is Back unless FE_CANCEL says another
 fe_dialog() { # title, arguments of dialog
     local title=$1 out status=0
     shift
-    out=$(dialog --output-fd 9 --title "$title" --cancel-label "${FE_CANCEL:-Back}" "$@" 9>&1 >"$FE_SCREEN" <"$FE_SCREEN") || status=$?
+    [[ -f "${FE_DIALOGRC:-}" ]] || fe_dialogrc
+    out=$(DIALOGRC="$FE_DIALOGRC" dialog --output-fd 9 --title "$title" --cancel-label "${FE_CANCEL:-Back}" "$@" 9>&1 >"$FE_SCREEN" <"$FE_SCREEN") || status=$?
     FE_ANSWER=$out
     case $status in
         0) return 0 ;;
@@ -169,6 +180,37 @@ ui_message() {
         FE_CANCEL=OK fe_dialog "OpenSim" --msgbox "$1" 6 50 || true
     else
         printf '%s\n' "$1" >&2
+    fi
+}
+
+# ui_checks "Title" "Text" NAME...: yes or no for each, in the variable of that name (LABEL[name] says it); check boxes in dialog
+ui_checks() {
+    local _u_title=$1 _u_text=$2 _u_n _u_i _u_items=() _u_picked
+    shift 2
+    local _u_names=("$@")
+    fe_choose_ui
+    if [[ $FE_UI == dialog ]]; then
+        for _u_n in "${_u_names[@]}"; do
+            _u_items+=("$_u_n" "${LABEL[$_u_n]}" "$([[ ${!_u_n} == yes ]] && echo on || echo off)")
+        done
+        fe_dialog "$_u_title" --no-tags --separate-output --checklist "$_u_text" "$((${#_u_names[@]} + 8))" 50 "${#_u_names[@]}" "${_u_items[@]}" || return $?
+        _u_picked=$'\n'$FE_ANSWER$'\n'
+        for _u_n in "${_u_names[@]}"; do
+            [[ $_u_picked == *$'\n'"$_u_n"$'\n'* ]] && printf -v "$_u_n" yes || printf -v "$_u_n" no
+        done
+    else
+        for _u_n in "${_u_names[@]}"; do
+            while :; do
+                fe_read "${LABEL[$_u_n]} [${!_u_n}]: " "${!_u_n}" || return 2
+                fe_special || return $?
+                case ${FE_ANSWER,,} in
+                    y | yes) printf -v "$_u_n" yes ;;
+                    n | no) printf -v "$_u_n" no ;;
+                    *) continue ;;
+                esac
+                break
+            done
+        done
     fi
 }
 

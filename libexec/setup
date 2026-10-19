@@ -22,7 +22,7 @@ set_labels() {
         [password2]="Password again"
         [email]="Email"
     )
-    [[ $type == standalone ]] && LABEL[name]="Simulator name"
+    [[ $type == standalone ]] && LABEL[name]="Region name"
 }
 
 # Ask the engine about the answers so far: its reply is $reply
@@ -50,60 +50,57 @@ problems() {
     done
 }
 
+# Every value the setup defines, as the engine lists them: * Label: value, a blank line between the sections
 summary() {
-    local setup=.data.attributes.setup kind simulator
-    [[ $type == standalone ]] && kind=Standalone || kind=Grid
-    echo
-    echo "$kind $(field "$setup.grid.name") ($(field "$setup.grid.nick"))"
-    printf '  %-11s %s\n' "Login" "http://$(field "$setup.grid.hostname"):$(field "$setup.grid.public_port")"
-    printf '  %-11s %s\n' "Hypergrid" "$(field "if $setup.grid.hypergrid then \"yes\" else \"no\" end")"
-    simulator=$(field "$setup.simulators[0].name")
-    if [[ $type == standalone ]]; then
-        printf '  %-11s %s\n' "Simulator" "$simulator"
-        printf '  %-11s %s\n' "Database" "$(field "$setup.simulators[0].database.name") (user $(field "$setup.simulators[0].database.user"))"
-    else
-        printf '  %-11s %s\n' "Simulator" "$simulator, region $(field "$setup.simulators[0].regions[0].name")"
-        printf '  %-11s %s\n' "Databases" "$(field "$setup.grid.database.name") and $(field "$setup.simulators[0].database.name") (user $(field "$setup.grid.database.user"))"
-    fi
-    printf '  %-11s %s\n' "Owner" "$(field "$setup.owner.name")${email:+ <$email>}"
+    local section label value previous=
+    while IFS=$'\t' read -r section label value; do
+        [[ -n "$previous" && "$section" != "$previous" ]] && echo
+        previous=$section
+        printf '* %s: %s\n' "$label" "$value"
+    done < <(field '.data.attributes.rows[] | [.section, .label, .value] | @tsv')
 }
 
 # What can be set up: the grid and the standalone, and the presets, listed to preview the menu (the engine will list the ones there are)
 UNAVAILABLE=" speculoos osgrid "
 
-# Back from the form is the menu again, Quit and Back from the menu end it
+# The steps: the type, the options (check boxes), the form. Back goes one step back; Back from the type and Quit end it.
+step=type
 while :; do
     status=0
-    ui_menu type "Type" grid "Grid" standalone "Standalone" speculoos "Speculoos (soon)" osgrid "OSGrid (soon)" || status=$?
-    ((status == 0)) || die "Cancelled"
-    if [[ "$UNAVAILABLE" == *" $type "* ]]; then
-        ui_message "Not available yet: only Grid and Standalone for now."
-        continue
-    fi
-    set_labels
-
-    # The engine proposes what it can
-    check
-    name=$(field .data.attributes.setup.grid.name)
-    login_uri="http://$(field .data.attributes.setup.grid.hostname):$(field .data.attributes.setup.grid.public_port)"
-
-    notice=
-    tries=0
-    while :; do
-        status=0
-        ui_form "Setup: ${type^}" "$notice" name login_uri hypergrid avatar password password2 email || status=$?
-        ((status == 0)) || break
-        if [[ "$password" != "$password2" ]]; then
-            notice="! Passwords differ"
-            password= password2=
-            continue
-        fi
-        check
-        [[ "$(field .data.attributes.valid)" == true ]] && break 2
-        ((++tries < 8)) || die "Still not right after $tries tries"
-        notice=$(problems)
-    done
-    ((status == 1)) || die "Cancelled"
+    case $step in
+        type)
+            ui_menu type "Type" grid "Grid" standalone "Standalone" speculoos "Speculoos (soon)" osgrid "OSGrid (soon)" || status=$?
+            ((status == 0)) || die "Cancelled"
+            if [[ "$UNAVAILABLE" == *" $type "* ]]; then
+                ui_message "Not available yet: only Grid and Standalone for now."
+                continue
+            fi
+            set_labels
+            check
+            name=$(field .data.attributes.setup.grid.name)
+            login_uri="$(field .data.attributes.setup.grid.hostname):$(field .data.attributes.setup.grid.public_port)"
+            notice=
+            tries=0
+            step=options
+            ;;
+        options)
+            ui_checks "Setup: ${type^}" "" hypergrid || status=$?
+            case $status in 0) step=form ;; 1) step=type ;; *) die "Cancelled" ;; esac
+            ;;
+        form)
+            ui_form "Setup: ${type^}" "$notice" name login_uri avatar password password2 email || status=$?
+            case $status in 1) step=options; continue ;; 2) die "Cancelled" ;; esac
+            if [[ "$password" != "$password2" ]]; then
+                notice="! Passwords differ"
+                password= password2=
+                continue
+            fi
+            check
+            [[ "$(field .data.attributes.valid)" == true ]] && break
+            ((++tries < 8)) || die "Still not right after $tries tries"
+            notice=$(problems)
+            ;;
+    esac
 done
 
 summary

@@ -18,5 +18,12 @@ jq -n --argjson body "$body" '
             simulators: [{name: (if $type == "standalone" then $name else "Welcome" end),
                 database: {name: "amy_welcome", user: "opensim"}, regions: [{name: "Welcome"}]}],
             owner: {name: ($a.avatar // "")}
-        }
+        },
+        rows: [
+            {section: "grid", label: "Grid name", value: ($name + " (" + ($name | ascii_downcase | gsub(" "; "_")) + ")")},
+            {section: "grid", label: "Login URI", value: "http://amy.example.org:8002"},
+            {section: "grid", label: "Hypergrid", value: (if ($a.hypergrid // "yes") == "no" then "no" else "yes" end)},
+            {section: "simulator", label: "Simulator", value: (if $type == "standalone" then $name else "Welcome" end)},
+            {section: "owner", label: "Avatar", value: ($a.avatar // "")}
+        ]
     }}}'
