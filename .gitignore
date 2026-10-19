@@ -1,0 +1,12 @@
+#*#
+*~
+\#*\#
+._*
+.#*
+tmp/
+vendor/
+.env
+.env.*
+!.env.example
+tests/.env
+.bashunit/
