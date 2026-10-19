@@ -5,8 +5,8 @@ jq -n --argjson body "$body" '
     $body.data.attributes as $a
     | ($a.type // "grid") as $type
     | ($a.name // "Amy") as $name
-    | ((if ($a.avatar // "") | test("^\\S+ \\S+$") then {} else {avatar: "First and last name, e.g. Jane Doe."} end)
-        + (if ($a.password // "") == "" then {password: "This field is required."} else {} end)) as $problems
+    | ((if ($a.avatar // "") | test("^\\S+ \\S+$") then {} else {avatar: "invalid (First Last)"} end)
+        + (if ($a.password // "") == "" then {password: "required"} else {} end)) as $problems
     | {data: {type: "setups", id: "quick", attributes: {
         valid: ($problems | length == 0),
         problems: $problems,

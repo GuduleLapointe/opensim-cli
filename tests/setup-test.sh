@@ -80,15 +80,15 @@ function test_a_standalone_names_its_region_and_hypergrid_is_a_check_box() {
 function test_what_the_engine_refuses_comes_back_with_the_form_and_its_answers() {
     local out
     out=$(setup_with 1 "" 3 "Ada" 4 secret123 5 secret123 "" 3 "Ada Love" "")
-    assert_contains "! Avatar name: First and last name, e.g. Jane Doe." "$out"
+    assert_contains "Error: Avatar name invalid (First Last)" "$out"
     assert_contains "* Avatar: Ada Love" "$out"
-    assert_not_contains "! Password" "$out"
+    assert_not_contains "Error: Password" "$out"
 }
 
 function test_two_different_passwords_are_not_sent() {
     local out
     out=$(setup_with 1 "" 3 "Ada Love" 4 secret123 5 other "" 4 secret123 5 secret123 "")
-    assert_contains "! Passwords differ" "$out"
+    assert_contains "Error: Passwords differ" "$out"
     assert_contains "* Avatar: Ada Love" "$out"
 }
 
@@ -166,5 +166,5 @@ function test_dialog_engine_problems_come_back_in_the_form() {
         '0:Magic Grid\namy.example.org:8002\nAda Love\nsecret123\nsecret123\n\n' >"$DIALOG_ANSWERS"
     out=$(setup_with_dialog)
     assert_contains "* Grid name: Magic Grid (magic_grid)" "$out"
-    assert_contains "! Avatar name: First and last name" "$(grep mixedform "$DIALOG_LOG" | tail -1)"
+    assert_contains "Error: Avatar name invalid (First Last)" "$(grep mixedform "$DIALOG_LOG" | tail -1)"
 }

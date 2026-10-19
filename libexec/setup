@@ -46,7 +46,7 @@ field() {
 problems() {
     local question
     for question in $(field '.data.attributes.problems | keys[]'); do
-        printf '! %s: %s\n' "${LABEL[$question]:-$question}" "$(field ".data.attributes.problems.$question")"
+        printf 'Error: %s %s\n' "${LABEL[$question]:-$question}" "$(field ".data.attributes.problems.$question")"
     done
 }
 
@@ -91,7 +91,7 @@ while :; do
             ui_form "Setup: ${type^}" "$notice" name login_uri avatar password password2 email || status=$?
             case $status in 1) step=options; continue ;; 2) die "Cancelled" ;; esac
             if [[ "$password" != "$password2" ]]; then
-                notice="! Passwords differ"
+                notice="Error: Passwords differ"
                 password= password2=
                 continue
             fi
