@@ -42,6 +42,15 @@ field() {
     jq -r "$1" <<<"$reply"
 }
 
+# The answers the engine rewrote (a name without its accents): they replace the ones typed, the person validates them by sending the form
+# again
+apply_corrections() {
+    local question
+    for question in $(field '.data.attributes.corrected | keys[]'); do
+        printf -v "$question" '%s' "$(field ".data.attributes.corrected.$question")"
+    done
+}
+
 # What the engine found wrong, one line each, by the name of the question
 problems() {
     local question
@@ -88,6 +97,7 @@ while :; do
             case $status in 1) step=type; continue ;; 2) die "Cancelled" ;; esac
             # Every error at once: the engine's and ours
             check
+            apply_corrections
             notice=$(problems)
             if [[ "$password" != "$password2" ]]; then
                 notice+="${notice:+$'\n'}Error: Passwords differ"

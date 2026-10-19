@@ -179,3 +179,12 @@ function test_every_error_comes_at_once_the_engines_and_ours() {
     assert_contains $'Error: Avatar name invalid (First Last)\nError: Passwords differ' "$out"
     assert_contains "* Avatar: Ada Love" "$out"
 }
+
+function test_the_accents_of_an_avatar_name_are_replaced_and_the_person_validates_the_change() {
+    local out
+    out=$(setup_with 1 3 "José García" 4 secret123 5 secret123 "" "" "" "")
+    assert_contains "Error: Avatar name transliterated" "$out"
+    assert_contains "Jose Garcia" "$(grep '3) Avatar name' <<<"$out" | tail -1)"
+    assert_contains "* Avatar: Jose Garcia" "$out"
+}
+
