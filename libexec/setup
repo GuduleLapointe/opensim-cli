@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# opensim setup: what to set up and the few answers it needs, checked by the engine, then the setup they stand for.
+
+USAGE="opensim setup [-hqv]"
+HELP="Asks what to set up, then a few questions, and checks the answers with the engine. The engine proposes everything else."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+source "$CLI_ROOT/src/lib/ask"
+
+type= name= login_uri= hypergrid=yes avatar= password= email=
+reply=
+
+# Ask the engine about the answers so far: its reply is $reply
+check() {
+    local body
+    body=$(jq -n \
+        --arg type "$type" --arg name "$name" --arg login_uri "$login_uri" --arg hypergrid "$hypergrid" \
+        --arg avatar "$avatar" --arg password "$password" --arg email "$email" \
+        '{data: {type: "setups", attributes: ({type: $type, name: $name, login_uri: $login_uri, hypergrid: $hypergrid,
+            avatar: $avatar, password: $password, email: $email} | with_entries(select(.value != "")))}}')
+    reply=$(engine POST /setups/quick --data=- <<<"$body" 2>&1)
+    jq -e '.data.attributes.setup' >/dev/null 2>&1 <<<"$reply" || die "The engine does not answer as it should: $reply"
+}
+
+# One thing of the reply
+field() {
+    jq -r "$1" <<<"$reply"
+}
+
+# What a question is called
+label_of() {
+    case $1 in
+        type) echo "Type" ;;
+        name) [[ $type == standalone ]] && echo "Simulator name (it is the grid)" || echo "Grid name" ;;
+        login_uri) echo "Login URI" ;;
+        hypergrid) echo "Hypergrid" ;;
+        avatar) echo "Avatar name (First Last)" ;;
+        password) echo "Avatar password" ;;
+        email) echo "Avatar email (optional)" ;;
+    esac
+}
+
+ask_password() {
+    local again
+    while :; do
+        ask_secret password "$(label_of password)"
+        ask_secret again "Again"
+        [[ "$password" == "$again" ]] && return 0
+        echo "  The two passwords differ." >&2
+        [[ -t 0 ]] || {
+            password=
+            return 0
+        }
+    done
+}
+
+ask_question() {
+    case $1 in
+        type) choose type "What do you want to set up?" \
+            grid "A grid: its Robust and a first simulator" \
+            standalone "A standalone: one simulator that is the whole grid" ;;
+        name) ask name "$(label_of name)" "${name:-$(field .data.attributes.setup.grid.name)}" ;;
+        login_uri) ask login_uri "$(label_of login_uri)" \
+            "${login_uri:-http://$(field .data.attributes.setup.grid.hostname):$(field .data.attributes.setup.grid.public_port)}" ;;
+        hypergrid) yesno -y "Enable the hypergrid?" && hypergrid=yes || hypergrid=no ;;
+        avatar) ask avatar "$(label_of avatar)" "$avatar" ;;
+        password) ask_password ;;
+        email) ask email "$(label_of email)" "$email" ;;
+    esac
+}
+
+summary() {
+    local setup=.data.attributes.setup kind simulator
+    [[ $type == standalone ]] && kind=Standalone || kind=Grid
+    echo
+    echo "$kind $(field "$setup.grid.name") ($(field "$setup.grid.nick"))"
+    printf '  %-11s %s\n' "Login" "http://$(field "$setup.grid.hostname"):$(field "$setup.grid.public_port")"
+    printf '  %-11s %s\n' "Hypergrid" "$(field "if $setup.grid.hypergrid then \"yes\" else \"no\" end")"
+    simulator=$(field "$setup.simulators[0].name")
+    if [[ $type == standalone ]]; then
+        printf '  %-11s %s\n' "Simulator" "$simulator (it is the grid)"
+        printf '  %-11s %s\n' "Database" "$(field "$setup.simulators[0].database.name") (user $(field "$setup.simulators[0].database.user"))"
+    else
+        printf '  %-11s %s\n' "Simulator" "$simulator, region $(field "$setup.simulators[0].regions[0].name")"
+        printf '  %-11s %s\n' "Databases" "$(field "$setup.grid.database.name") and $(field "$setup.simulators[0].database.name") (user $(field "$setup.grid.database.user"))"
+    fi
+    printf '  %-11s %s\n' "Owner" "$(field "$setup.owner.name")${email:+ <$email>}"
+}
+
+ask_question type || die "No type chosen"
+check
+for question in name login_uri hypergrid avatar password email; do
+    ask_question "$question"
+done
+
+tries=0
+while :; do
+    check
+    [[ "$(field .data.attributes.valid)" == true ]] && break
+    ((++tries < 5)) || die "Still not right after $tries tries"
+    for question in $(field '.data.attributes.problems | keys[]'); do
+        printf '  %s: %s\n' "$(label_of "$question")" "$(field ".data.attributes.problems.$question")" >&2
+        ask_question "$question"
+    done
+done
+
+summary
+echo
+echo "Checked. Nothing is created yet."

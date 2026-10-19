@@ -1,0 +1,52 @@
+# The questions: one line each, the answer proposed is the default. A terminal gets an editable default, a pipe gets the line as it
+# is (an empty one takes the default). Sourced by the commands, not run.
+
+# ask VARIABLE "Label" [DEFAULT]
+ask() {
+    local variable=$1 label=$2 default=${3:-} answer=
+    if [[ -t 0 ]]; then
+        read -r -e -p "$label: " -i "$default" answer || answer=
+    else
+        read -r -p "$label${default:+ [$default]}: " answer || answer=
+    fi
+    printf -v "$variable" '%s' "${answer:-$default}"
+}
+
+# ask_secret VARIABLE "Label": nothing shows while it is typed
+ask_secret() {
+    local variable=$1 label=$2 answer=
+    if [[ -t 0 ]]; then
+        read -r -s -p "$label: " answer || answer=
+        printf '\n' >&2
+    else
+        read -r -p "$label: " answer || answer=
+    fi
+    printf -v "$variable" '%s' "$answer"
+}
+
+# choose VARIABLE "Question" KEY "Label" [KEY "Label"...]: the first is the default; the number or the key answers
+choose() {
+    local variable=$1 question=$2 keys=() labels=() i answer=
+    shift 2
+    while (($# >= 2)); do
+        keys+=("$1")
+        labels+=("$2")
+        shift 2
+    done
+    printf '%s\n' "$question" >&2
+    for i in "${!keys[@]}"; do
+        printf '  %d) %s\n' "$((i + 1))" "${labels[$i]}" >&2
+    done
+    while :; do
+        read -r -p "Choice [1]: " answer || return 1
+        answer=${answer:-1}
+        for i in "${!keys[@]}"; do
+            if [[ "$answer" == "$((i + 1))" || "$answer" == "${keys[$i]}" ]]; then
+                printf -v "$variable" '%s' "${keys[$i]}"
+
+                return 0
+            fi
+        done
+        printf '  One of: %s\n' "$(seq -s ' ' 1 "${#keys[@]}")" >&2
+    done
+}

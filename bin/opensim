@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# opensim COMMAND [ARGUMENTS]: set up and manage OpenSimulator (see README.md). The commands are in libexec/.
+
+set -e
+here=$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
+libexec=$(cd "$here/../libexec" && pwd)
+
+usage() {
+    cat >&2 <<USAGE
+usage: opensim COMMAND [ARGUMENTS]
+
+  setup    make a grid, a standalone or a simulator that joins a grid
+
+Type 'opensim COMMAND --help' for the help of a command.
+USAGE
+    exit 2
+}
+
+command=${1:-}
+[[ -n "$command" && -x "$libexec/$command" ]] || usage
+shift
+exec "$libexec/$command" "$@"

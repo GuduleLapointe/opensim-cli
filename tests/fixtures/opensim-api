@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# A stand-in for opensim-api: answers POST /setups/quick as the engine does (the questions that are wrong, the setup), for the tests.
+body=$(cat)
+jq -n --argjson body "$body" '
+    $body.data.attributes as $a
+    | ($a.type // "grid") as $type
+    | ($a.name // "Amy") as $name
+    | ((if ($a.avatar // "") | test("^\\S+ \\S+$") then {} else {avatar: "First and last name, e.g. Jane Doe."} end)
+        + (if ($a.password // "") == "" then {password: "This field is required."} else {} end)) as $problems
+    | {data: {type: "setups", id: "quick", attributes: {
+        valid: ($problems | length == 0),
+        problems: $problems,
+        setup: {
+            grid: {
+                name: $name, nick: ($name | ascii_downcase | gsub(" "; "_")), hostname: "amy.example.org", public_port: 8002,
+                hypergrid: (($a.hypergrid // "yes") != "no"), database: {name: "amy_robust", user: "opensim"}
+            },
+            simulators: [{name: (if $type == "standalone" then $name else "Welcome" end),
+                database: {name: "amy_welcome", user: "opensim"}, regions: [{name: "Welcome"}]}],
+            owner: {name: ($a.avatar // "")}
+        }
+    }}}'
