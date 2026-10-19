@@ -86,18 +86,17 @@ while :; do
         form)
             ui_form "Setup: ${type^}" "$notice" name login_uri avatar password password2 email || status=$?
             case $status in 1) step=type; continue ;; 2) die "Cancelled" ;; esac
-            if [[ "$password" != "$password2" ]]; then
-                notice="Error: Passwords differ"
-                password= password2=
-                continue
-            fi
+            # Every error at once: the engine's and ours
             check
-            if [[ "$(field .data.attributes.valid)" == true ]]; then
-                notice=
+            notice=$(problems)
+            if [[ "$password" != "$password2" ]]; then
+                notice+="${notice:+$'\n'}Error: Passwords differ"
+                password= password2=
+            fi
+            if [[ -z "$notice" ]]; then
                 step=options
             else
                 ((++tries < 8)) || die "Still not right after $tries tries"
-                notice=$(problems)
             fi
             ;;
         options)

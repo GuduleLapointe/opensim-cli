@@ -172,3 +172,10 @@ function test_dialog_engine_problems_come_back_in_the_form() {
     assert_contains "* Grid name: Magic Grid (magic_grid)" "$out"
     assert_contains "Error: Avatar name invalid (First Last)" "$(grep mixedform "$DIALOG_LOG" | tail -1)"
 }
+
+function test_every_error_comes_at_once_the_engines_and_ours() {
+    local out
+    out=$(setup_with 1 4 secret123 5 other "" 3 "Ada Love" 4 secret123 5 secret123 "" "")
+    assert_contains $'Error: Avatar name invalid (First Last)\nError: Passwords differ' "$out"
+    assert_contains "* Avatar: Ada Love" "$out"
+}
