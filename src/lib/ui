@@ -1,7 +1,7 @@
-# The questions, as the setup of the kit asked them (libexec/setup-frontend.sh there): dialog when there is one and a terminal to
-# draw on, else plain prompts; Back and Quit in both. Here a form shows all the questions at once. Sourced by the commands, not run.
+# The questions, as the setup of the kit asked them (libexec/setup-frontend.sh there): dialog for a person at a terminal, plain lines
+# for a script; Back and Quit in both. Here a form shows all the questions at once. Sourced by the commands, not run.
 #
-# Environment: OPENSIM_SETUP_UI=plain|dialog (default: dialog when it is there), FE_TTY (where the person types, default /dev/tty),
+# Environment: OPENSIM_SETUP_UI=plain|dialog (default: dialog at a terminal), FE_TTY (where the person types, default /dev/tty),
 # FE_INPUT_FD (a descriptor to read the answers from instead: the tests), FE_SCREEN (where dialog draws, default /dev/tty).
 #
 # Every question returns 0 when answered, 1 for Back (:back in plain mode), 2 for Quit (:quit, the end of the input).
@@ -18,12 +18,14 @@ FE_SCREEN=${FE_SCREEN:-/dev/tty}
 FE_UI=
 FE_ANSWER=
 
-# The way to ask: dialog when it is there and the person has a terminal, else plain prompts
+# The way to ask: dialog for a person at a terminal (it is a dependency: nothing replaces it), plain lines when nobody is there
+# (a script, the tests: the answers come from FE_INPUT_FD or the standard input)
 fe_choose_ui() {
     FE_UI=${OPENSIM_SETUP_UI:-}
     [[ -n $FE_UI ]] && return
     FE_UI=plain
-    if command -v dialog >/dev/null 2>&1 && [[ $FE_TTY == /dev/tty && $FE_SCREEN == /dev/tty && -t 1 && ${TERM:-dumb} != dumb ]]; then
+    if [[ -z $FE_INPUT_FD && $FE_TTY == /dev/tty && $FE_SCREEN == /dev/tty && -t 0 && -t 1 ]]; then
+        command -v dialog >/dev/null 2>&1 || die "dialog is required to ask the questions (brew install dialog, apt install dialog)"
         FE_UI=dialog
     fi
 }
@@ -86,7 +88,8 @@ ui_menu() {
     done
     fe_choose_ui
     if [[ $FE_UI == dialog ]]; then
-        FE_CANCEL=Quit fe_dialog "$question" --menu "$question" 0 0 0 "${items[@]}" || return $?
+        # The size is given: a menu height of 0 shows one line on some builds, and the tags repeat the labels
+        FE_CANCEL=Quit fe_dialog "$question" --no-tags --menu "" "$((${#keys[@]} + 7))" 50 "${#keys[@]}" "${items[@]}" || return $?
     else
         for i in "${!keys[@]}"; do
             printf '  %d) %s\n' "$((i + 1))" "${labels[$i]}" >&2
@@ -119,7 +122,7 @@ ui_form() {
             _u_n=${_u_names[$_u_i]}
             _u_items+=("${LABEL[$_u_n]}" "$((_u_i + 1))" 1 "${!_u_n}" "$((_u_i + 1))" "$((_u_w + 2))" 40 200 "${SECRET[$_u_n]:-0}")
         done
-        fe_dialog "$_u_title" --insecure --mixedform "$_u_text" 0 0 "${#_u_names[@]}" "${_u_items[@]}" || return $?
+        fe_dialog "$_u_title" --insecure --mixedform "$_u_text" "$((${#_u_names[@]} + 8 + $(grep -c '' <<<"$_u_text")))" 72 "${#_u_names[@]}" "${_u_items[@]}" || return $?
         mapfile -t _u_values <<<"$FE_ANSWER"
         for _u_i in "${!_u_names[@]}"; do
             printf -v "${_u_names[$_u_i]}" '%s' "${_u_values[$_u_i]:-}"
@@ -158,3 +161,14 @@ ui_form_plain() {
         fi
     done
 }
+
+# ui_message "Text": something to read before going on
+ui_message() {
+    fe_choose_ui
+    if [[ $FE_UI == dialog ]]; then
+        FE_CANCEL=OK fe_dialog "OpenSim" --msgbox "$1" 6 50 || true
+    else
+        printf '%s\n' "$1" >&2
+    fi
+}
+

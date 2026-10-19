@@ -6,7 +6,7 @@ The command line to set up and manage OpenSimulator, in bash. It asks the questi
 
 ## Requirements
 
-- bash 5, `jq`, `php-cli`, and `dialog` for the form (plain prompts without it)
+- bash 5, `jq`, `php-cli` and `dialog` (`brew install dialog`, `apt install dialog`)
 - the dependencies, installed with `composer install`: [bash-tools](https://github.com/magicoli/bash-tools) and the [engine](https://github.com/GuduleLapointe/opensim-engine) (the packages link them in `vendor/magicoli/` instead)
 
 ## Usage
@@ -16,7 +16,7 @@ bin/opensim setup
 ```
 
 ```
-Type: Grid | Standalone
+Type: Grid | Standalone | Speculoos (soon) | OSGrid (soon)
 ```
 
 then one form with every question, the engine's proposals filled in:
@@ -31,8 +31,8 @@ Password again
 Email
 ```
 
-For a standalone the name is the simulator's, which is the grid. What the engine refuses comes back with the form, answers kept. Back returns to the type, Quit leaves (`:back` and `:quit` in plain mode, where a number edits an answer and Enter goes on).
+For a standalone the name is the simulator's, which is the grid. What the engine refuses comes back with the form, answers kept. Back returns to the type, Quit leaves. Without a terminal (a script) the questions are plain lines, a number edits an answer (`:back`, `:quit`).
 
 ## Settings
 
-`~/.opensimrc` is read first, it is a bash file: it can set the `PATH` (which `php`, which tools) or anything the tools need. The `.env` of this project is read by bash-tools. `OPENSIM_SETUP_UI=plain` asks without dialog.
+`~/.opensimrc` is read first, it is a bash file: it can set the `PATH` (which `php`, which tools) or anything the tools need. The `.env` of this project is read by bash-tools. 

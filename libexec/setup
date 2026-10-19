@@ -68,11 +68,18 @@ summary() {
     printf '  %-11s %s\n' "Owner" "$(field "$setup.owner.name")${email:+ <$email>}"
 }
 
+# What can be set up: the grid and the standalone, and the presets, listed to preview the menu (the engine will list the ones there are)
+UNAVAILABLE=" speculoos osgrid "
+
 # Back from the form is the menu again, Quit and Back from the menu end it
 while :; do
     status=0
-    ui_menu type "Type" grid "Grid" standalone "Standalone" || status=$?
+    ui_menu type "Type" grid "Grid" standalone "Standalone" speculoos "Speculoos (soon)" osgrid "OSGrid (soon)" || status=$?
     ((status == 0)) || die "Cancelled"
+    if [[ "$UNAVAILABLE" == *" $type "* ]]; then
+        ui_message "Not available yet: only Grid and Standalone for now."
+        continue
+    fi
     set_labels
 
     # The engine proposes what it can

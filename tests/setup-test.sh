@@ -142,3 +142,20 @@ function test_dialog_back_from_the_form_is_the_menu_again_and_the_engine_problem
     assert_contains "! Avatar name: First and last name" "$(grep mixedform "$DIALOG_LOG" | tail -1)"
 }
 
+function test_the_presets_are_listed_but_not_available_yet() {
+    local out
+    out=$(setup_with 3 2 4 "Ada Love" 5 secret123 6 secret123 "")
+    assert_contains "3) Speculoos (soon)" "$out"
+    assert_contains "4) OSGrid (soon)" "$out"
+    assert_contains "Not available yet" "$out"
+    assert_contains "Standalone" "$out"
+}
+
+function test_dialog_menu_has_its_size_and_no_repeated_tags() {
+    local out
+    make_fake_dialog
+    printf '%s\n' '0:standalone' '0:My Island\nhttp://amy.example.org:8002\nyes\nAda Love\nsecret123\nsecret123\n\n' >"$DIALOG_ANSWERS"
+    out=$(setup_with_dialog)
+    assert_contains "--no-tags --menu  11 50 4 grid Grid standalone Standalone speculoos Speculoos (soon) osgrid OSGrid (soon)" "$(grep -- --menu "$DIALOG_LOG")"
+}
+
