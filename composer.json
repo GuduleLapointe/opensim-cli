@@ -10,19 +10,11 @@
         }
     ],
     "require": {
-        "magicoli/bash-tools": "@dev",
+        "magicoli/bash-tools": "^1.0.7",
         "magicoli/opensim-engine": "@dev",
         "magicoli/opensim-rest-php": "@dev"
     },
     "repositories": [
-        {
-            "name": "magicoli/bash-tools",
-            "url": "../bash-tools/",
-            "type": "path",
-            "options": {
-                "symlink": true
-            }
-        },
         {
             "name": "magicoli/opensim-engine",
             "url": "../opensim-engine/",
@@ -49,5 +41,8 @@
     },
     "bin": [
         "bin/opensim"
-    ]
+    ],
+    "require-dev": {
+        "magicoli/build-tools": "^0.1.2"
+    }
 }

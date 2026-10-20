@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Prepares what the Debian package installs, in build/opensim-cli (build-tools stage). Run by apt-package from the
+# project root, or by dev/build.sh.
+
+set -e
+cd "$(dirname "$0")/.."
+
+vendor/bin/build-tools stage build/opensim-cli deb

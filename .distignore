@@ -1,0 +1,12 @@
+# What a distribution of the project leaves out, among what git tracks (the zip, the Debian package): /name is at the root,
+# name is anywhere, a glob is fine
+/.distignore
+/.editorconfig
+/.gitignore
+/.php-version
+/.node-version
+/.lerd.yaml
+/DEVELOPERS.md
+/dev
+/packaging
+/tests
