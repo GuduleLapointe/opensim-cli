@@ -48,7 +48,9 @@ fe_read() { # prompt default [secret]
     elif [[ $FE_TTY == /dev/tty && -z $FE_INPUT_FD ]]; then
         fe_in -e -p "$1" -i "$2" value || return 2
     else
-        fe_in -p "$1" value || return 2
+        # Nobody types at a terminal (a script, the tests): the question is shown, read does not show it for what is not one
+        printf '%s' "$1" >&2
+        fe_in value || return 2
         [[ -z $value ]] && value=$2
     fi
     FE_ANSWER=$value
@@ -78,7 +80,7 @@ fe_dialog() { # title, arguments of dialog
     local title=$1 out status=0
     shift
     [[ -f "${FE_DIALOGRC:-}" ]] || fe_dialogrc
-    out=$(DIALOGRC="$FE_DIALOGRC" dialog --output-fd 9 --title "$title" --cancel-label "${FE_CANCEL:-Back}" "$@" 9>&1 >"$FE_SCREEN" <"$FE_SCREEN") || status=$?
+    out=$(DIALOGRC="$FE_DIALOGRC" dialog --output-fd 9 --title "$title" --ok-label "${FE_OK:-OK}" --cancel-label "${FE_CANCEL:-Back}" "$@" 9>&1 >"$FE_SCREEN" <"$FE_SCREEN") || status=$?
     FE_ANSWER=$out
     case $status in
         0) return 0 ;;
@@ -214,3 +216,30 @@ ui_checks() {
     fi
 }
 
+# ui_review "Title" "ROWS": what the setup stands for, to confirm. ROWS is the lines section, label, value separated by tabs. In dialog a
+# list that scrolls with Install and Back, in plain text the list and a question.
+ui_review() {
+    local _u_title=$1 _u_rows=$2 _u_section _u_label _u_value _u_previous= _u_items=() _u_n=0 _u_height _u_lines _u_text=
+    fe_choose_ui
+    while IFS=$'\t' read -r _u_section _u_label _u_value; do
+        [[ -z "$_u_section" ]] && continue
+        if [[ "$_u_section" != "$_u_previous" ]]; then
+            _u_text+="${_u_previous:+$'\n'}"
+            _u_items+=("h$((++_u_n))" "-- ${_u_section^} --")
+            _u_text+="* ${_u_section^}"$'\n'
+            _u_previous=$_u_section
+        fi
+        _u_items+=("r$((++_u_n))" "$_u_label: $_u_value")
+        _u_text+="* $_u_label: $_u_value"$'\n'
+    done <<<"$_u_rows"
+    if [[ $FE_UI == dialog ]]; then
+        # The list scrolls when it does not fit: a terminal of 24 lines has 15 for it
+        _u_lines=$((${#_u_items[@]} / 2))
+        _u_height=$((_u_lines + 7 > 22 ? 22 : _u_lines + 7))
+        FE_OK=Install fe_dialog "$_u_title" --scrollbar --no-tags --menu "" "$_u_height" 78 "$((_u_height - 7))" "${_u_items[@]}" || return $?
+    else
+        printf '%s' "$_u_text" >&2
+        fe_read "Install? [Enter]: " '' || return 2
+        fe_special || return $?
+    fi
+}

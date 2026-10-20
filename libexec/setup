@@ -1,45 +1,70 @@
 #!/usr/bin/env bash
-# opensim setup: what to set up, then all the questions on one screen, checked by the engine, then the setup they stand for.
+# opensim setup: what to set up, all the questions on one screen, the options, checked by the engine, then what the setup stands for,
+# to confirm.
 
 USAGE="opensim setup [-hqv]"
-HELP="Asks what to set up, then a form with the few questions it needs, and checks the answers with the engine. The engine proposes everything else."
+HELP="Asks what to set up, then a form with the few questions it needs and the options, and checks the answers with the engine. The engine proposes everything else."
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 source "$CLI_ROOT/src/lib/ui"
 
-type= name= login_uri= hypergrid=yes avatar= password= password2= email=
+type= name= login_uri= avatar= password= password2= email=
 reply=
 declare -A LABEL=() SECRET=([password]=1 [password2]=1)
+# What the engine offers: the types of setup and the options, as it lists them (see `check`)
+TYPE_KEYS=() OPTION_KEYS=()
+declare -A TYPE_LABEL=() TYPE_DONE=()
 
 # What the questions are called, for the type chosen
 set_labels() {
-    LABEL=(
-        [name]="Grid name"
-        [login_uri]="Login URI"
-        [hypergrid]="Hypergrid"
-        [avatar]="Avatar name"
-        [password]="Password"
-        [password2]="Password again"
-        [email]="Email"
-    )
+    LABEL[name]="Grid name"
+    LABEL[login_uri]="Login URI"
+    LABEL[avatar]="Avatar name"
+    LABEL[password]="Password"
+    LABEL[password2]="Password again"
+    LABEL[email]="Email"
     [[ $type == standalone ]] && LABEL[name]="Region name"
 }
 
 # Ask the engine about the answers so far: its reply is $reply
 check() {
-    local body
-    body=$(jq -n \
-        --arg type "$type" --arg name "$name" --arg login_uri "$login_uri" --arg hypergrid "$hypergrid" \
+    local key attributes options='{}'
+    for key in "${OPTION_KEYS[@]}"; do
+        options=$(jq -c --arg key "$key" --arg value "$(option_value "$key")" '. + {($key): $value}' <<<"$options")
+    done
+    attributes=$(jq -n --argjson options "$options" \
+        --arg type "$type" --arg name "$name" --arg login_uri "$login_uri" \
         --arg avatar "$avatar" --arg password "$password" --arg email "$email" \
-        '{data: {type: "setups", attributes: ({type: $type, name: $name, login_uri: $login_uri, hypergrid: $hypergrid,
-            avatar: $avatar, password: $password, email: $email} | with_entries(select(.value != "")))}}')
-    reply=$(engine POST /setups/quick --data=- <<<"$body" 2>&1)
+        '{type: $type, name: $name, login_uri: $login_uri, avatar: $avatar, password: $password, email: $email}
+            | with_entries(select(.value != "")) + $options')
+    reply=$(engine POST /setups/quick --data=- <<<"{\"data\":{\"type\":\"setups\",\"attributes\":$attributes}}" 2>&1)
     jq -e '.data.attributes.setup' >/dev/null 2>&1 <<<"$reply" || die "The engine does not answer as it should: $reply"
 }
 
 # One thing of the reply
 field() {
     jq -r "$1" <<<"$reply"
+}
+
+# The variable that holds an option (yes or no)
+option_value() {
+    local variable="opt_$1"
+    echo "${!variable:-no}"
+}
+
+# What the engine offers, once: the types of setup, and the options with their default and what is not applied yet
+load_offers() {
+    local key label done default
+    while IFS=$'\t' read -r key label done; do
+        TYPE_KEYS+=("$key")
+        TYPE_LABEL[$key]=$label
+        TYPE_DONE[$key]=$done
+    done < <(field '.data.attributes.types[] | [.name, .label, .implemented] | @tsv')
+    while IFS=$'\t' read -r key label done default; do
+        OPTION_KEYS+=("$key")
+        LABEL[opt_$key]="$label$([[ $done == true ]] || echo ' (not implemented)')"
+        printf -v "opt_$key" '%s' "$([[ $default == true ]] && echo yes || echo no)"
+    done < <(field '.data.attributes.options[] | [.name, .label, .implemented, .default] | @tsv')
 }
 
 # The answers the engine rewrote (a name without its accents): they replace the ones typed, the person validates them by sending the form
@@ -53,35 +78,38 @@ apply_corrections() {
 
 # What the engine found wrong, one line each, by the name of the question
 problems() {
-    local question
+    local question label
     for question in $(field '.data.attributes.problems | keys[]'); do
-        printf 'Error: %s %s\n' "${LABEL[$question]:-$question}" "$(field ".data.attributes.problems.$question")"
+        label=${LABEL[$question]:-${LABEL[opt_$question]:-$question}}
+        printf 'Error: %s %s\n' "${label% (not implemented)}" "$(field ".data.attributes.problems.$question")"
     done
 }
 
-# Every value the setup defines, as the engine lists them: * Label: value, a blank line between the sections
-summary() {
-    local section label value previous=
-    while IFS=$'\t' read -r section label value; do
-        [[ -n "$previous" && "$section" != "$previous" ]] && echo
-        previous=$section
-        printf '* %s: %s\n' "$label" "$value"
-    done < <(field '.data.attributes.rows[] | [.section, .label, .value] | @tsv')
+# Every value the setup defines, as the engine lists them: section, label, value
+rows() {
+    field '.data.attributes.rows[] | [.section, .label, .value] | @tsv'
 }
 
-# What can be set up: the grid and the standalone, and the presets, listed to preview the menu (the engine will list the ones there are)
-UNAVAILABLE=" speculoos osgrid "
-
-# The steps: the type, the form, the options (check boxes). Back goes one step back; Back from the type and Quit end it.
+# The steps: the type, the form, the options (check boxes), the review. Back goes one step back; Back from the type and Quit end it.
+init=1
 step=type
 while :; do
     status=0
     case $step in
         type)
-            ui_menu type "Type" grid "Grid" standalone "Standalone" speculoos "Speculoos (soon)" osgrid "OSGrid (soon)" || status=$?
+            if ((init)); then
+                check
+                load_offers
+                init=0
+            fi
+            items=()
+            for key in "${TYPE_KEYS[@]}"; do
+                items+=("$key" "${TYPE_LABEL[$key]}$([[ ${TYPE_DONE[$key]} == true ]] || echo ' (not implemented)')")
+            done
+            ui_menu type "OpenSim setup" "${items[@]}" || status=$?
             ((status == 0)) || die "Cancelled"
-            if [[ "$UNAVAILABLE" == *" $type "* ]]; then
-                ui_message "Not available yet: only Grid and Standalone for now."
+            if [[ ${TYPE_DONE[$type]:-} != true ]]; then
+                ui_message "Not implemented yet: only Grid and Standalone for now."
                 continue
             fi
             set_labels
@@ -93,7 +121,7 @@ while :; do
             step=form
             ;;
         form)
-            ui_form "Setup: ${type^}" "$notice" name login_uri avatar password password2 email || status=$?
+            ui_form "${TYPE_LABEL[$type]}" "$notice" name login_uri avatar password password2 email || status=$?
             case $status in 1) step=type; continue ;; 2) die "Cancelled" ;; esac
             # Every error at once: the engine's and ours
             check
@@ -110,18 +138,29 @@ while :; do
             fi
             ;;
         options)
-            ui_checks "Setup: ${type^}" "" hypergrid || status=$?
+            names=()
+            for key in "${OPTION_KEYS[@]}"; do names+=("opt_$key"); done
+            ui_checks "Options" "" "${names[@]}" || status=$?
             case $status in 1) step=form; continue ;; 2) die "Cancelled" ;; esac
             check
             if [[ "$(field .data.attributes.valid)" == true ]]; then
-                break
+                step=review
+            else
+                notice=$(problems)
+                step=form
             fi
-            notice=$(problems)
-            step=form
+            ;;
+        review)
+            ui_review "Review" "$(rows)" || status=$?
+            case $status in 1) step=options; continue ;; 2) die "Cancelled" ;; esac
+            break
             ;;
     esac
 done
 
-summary
+# What to keep for the next step
+echo "Grid name:  $(field .data.attributes.setup.grid.name)"
+echo "Login URI:  $(rows | awk -F'\t' '$2 == "Login URI" {print $3}')"
+echo "Avatar:     $(field .data.attributes.setup.owner.name)"
 echo
-echo "Nothing is created yet."
+echo "Nothing was created yet."
