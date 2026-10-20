@@ -2,7 +2,7 @@
 
 The command line to set up and manage OpenSimulator, in bash. It asks the questions and shows the results; the rules and the work are the [OpenSim engine](https://github.com/GuduleLapointe/opensim-engine)'s. It needs nothing else of the OpenSim ecosystem: not the core, not the helpers, not the modules.
 
-**Under construction.** Only the first screen of the quick setup is there: it asks what to set up and a few answers, checks them with the engine and shows the setup they stand for. It does not create anything yet.
+**Under construction.** The quick setup asks what to set up and a few answers, checks them with the engine and shows the setup they stand for. Besides it: status, start, stop, restart, console and install-dotnet. `dev/build.sh` makes the Debian package and the zip into `dist/`.
 
 ## Requirements
 
@@ -13,14 +13,14 @@ The command line to set up and manage OpenSimulator, in bash. It asks the questi
 
 Commands:
 
-- [ ] status
-- [ ] start [--sims] [target...]
-- [ ] stop|restart [--sims] [now] [target...]
+- [x] status
+- [x] start [--simulators] [target...]
+- [x] stop|restart [--simulators] [now] [target...]
 - [ ] enable|disable <instance...>
 - [ ] enable|disable <grid> search [<url prefix>]
 - [ ] enable|disable <grid> economy [beta|gloebit] [<url prefix>]
 - [ ] enable|disable <grid> profiles
-- [ ] console|screen <instance>
+- [x] console|screen <instance>
 - [ ] command <instance> <text>|-
 - [ ] ports [instance...] [--publish|--ufw]
 
@@ -47,7 +47,7 @@ This machine
 - [ ] profile list|add|default|remove
 - [ ] oar pack|info|check|unpack
 - [ ] rest --url http://HOST:PORT --user USER (-- <command> | - | --repl)
-- [ ] install-dotnet install the .NET runtime OpenSim needs (as root)
+- [x] install-dotnet install the .NET runtime OpenSim needs (as root)
 
 ## Usage
 
