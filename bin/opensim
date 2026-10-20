@@ -6,14 +6,14 @@ here=$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURC
 libexec=$(cd "$here/../libexec" && pwd)
 
 usage() {
-    cat >&2 <<USAGE
+	cat >&2 <<USAGE
 usage: opensim COMMAND [ARGUMENTS]
 
   setup    make a grid, a standalone or a simulator that joins a grid
 
 Type 'opensim COMMAND --help' for the help of a command.
 USAGE
-    exit 2
+	exit 2
 }
 
 command=${1:-}

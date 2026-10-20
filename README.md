@@ -9,6 +9,46 @@ The command line to set up and manage OpenSimulator, in bash. It asks the questi
 - bash 5, `jq`, `php-cli` and `dialog` (`brew install dialog`, `apt install dialog`)
 - the dependencies, installed with `composer install`: [bash-tools](https://github.com/magicoli/bash-tools) and the [engine](https://github.com/GuduleLapointe/opensim-engine) (the packages link them in `vendor/magicoli/` instead)
 
+## Features
+
+Commands:
+
+- [ ] status
+- [ ] start [--sims] [target...]
+- [ ] stop|restart [--sims] [now] [target...]
+- [ ] enable|disable <instance...>
+- [ ] enable|disable <grid> search [<url prefix>]
+- [ ] enable|disable <grid> economy [beta|gloebit] [<url prefix>]
+- [ ] enable|disable <grid> profiles
+- [ ] console|screen <instance>
+- [ ] command <instance> <text>|-
+- [ ] ports [instance...] [--publish|--ufw]
+
+Grids
+
+- [x] setup
+- [ ] import [grid] FILE [--grid] [--simulator] [--users] [--apply]
+- [ ] web [grid] [show|check]
+- [ ] web [grid] snippet <caddy|nginx|apache>
+- [ ] next <grid> location [X,Y] [COUNT] [-e X,Y]
+- [ ] ban [grid] <name|uuid>... [--output DIR]
+
+Archives and backups
+
+- [ ] save iar [GRID [SIM]] [options] [--keep N] FIRST LAST PATH [PASSWORD] [FILE]
+- [ ] load iar [GRID [SIM]] [-m|--merge] FIRST LAST PATH [PASSWORD] [FILE]
+- [ ] save oar [GRID [REGION|SIM]] [options] [--keep N] [FILE]
+- [ ] load oar [GRID [REGION|SIM]] [--merge] [options] [FILE]
+- [ ] backup [GRID [SIM]] [--logs] [--archives] [--output DIR] [--keep N]
+
+This machine
+
+- [ ] next port [-e PORT] [MIN] [COUNT]
+- [ ] profile list|add|default|remove
+- [ ] oar pack|info|check|unpack
+- [ ] rest --url http://HOST:PORT --user USER (-- <command> | - | --repl)
+- [ ] install-dotnet install the .NET runtime OpenSim needs (as root)
+
 ## Usage
 
 ```bash
@@ -38,7 +78,7 @@ For a standalone the first field is `Region name`: the region is the simulator a
 * Hypergrid: yes
 ...
 
-* Simulator: Welcome (amy_welcome)
+* Simulator: Welcome (amy.welcome)
 ...
 ```
 
@@ -46,4 +86,4 @@ Without a terminal (a script) the questions are plain lines, a number edits an a
 
 ## Settings
 
-`~/.opensimrc` is read first, it is a bash file: it can set the `PATH` (which `php`, which tools) or anything the tools need. The `.env` of this project is read by bash-tools. 
+`~/.opensimrc` is read first, it is a bash file: it can set the `PATH` (which `php`, which tools) or anything the tools need. The `.env` of this project is read by bash-tools.
