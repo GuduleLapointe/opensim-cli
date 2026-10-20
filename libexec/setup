@@ -12,11 +12,24 @@ state= button=next answers='{}'
 errors=$(mktemp) answer=$(mktemp)
 trap 'rm -f "$errors" "$answer"' EXIT
 
-# Show what the engine told since the last time
+# Show what the engine told since the last time. A line starting with "~" is what a wait is on: on a terminal it takes one line
+# that the next one replaces, elsewhere it is not shown.
+pending=
 show_progress() {
-	local size
+	local size line
 	size=$(wc -c <"$errors")
-	(( size > shown )) && tail -c +"$((shown + 1))" "$errors" | head -c "$((size - shown))" | grep '^opensim: ' >&2
+	if ((size > shown)); then
+		while IFS= read -r line; do
+			[[ $line == "opensim: "* ]] || continue
+			if [[ ${line#opensim: } == "~"* ]]; then
+				[[ -t 2 ]] && printf '\r\033[K%s' "opensim: ${line#opensim: ~}" >&2 && pending=1
+			else
+				[[ -n $pending ]] && printf '\r\033[K' >&2
+				pending=
+				printf '%s\n' "$line" >&2
+			fi
+		done < <(tail -c +"$((shown + 1))" "$errors" | head -c "$((size - shown))")
+	fi
 	shown=$size
 	return 0
 }

@@ -23,7 +23,7 @@ use OpenSim\Exceptions\InstanceFailed;
 use OpenSim\OpenSim;
 use OpenSim\Provisioning\UiInterface;
 use OpenSim\Runtime\DotnetInstaller;
-use OpenSim\Runtime\ReporterInterface;
+use OpenSim\Runtime\PendingReporterInterface;
 use OpenSim\Runtime\Status;
 
 foreach ([__DIR__ . '/../../vendor/autoload.php', __DIR__ . '/../../../../autoload.php'] as $autoload) {
@@ -39,8 +39,10 @@ if (!class_exists(OpenSim::class)) {
 }
 
 /** What the engine says, on the error output as `opensim: <message>`; the details with DEBUG=yes. */
-final class CliReporter implements ReporterInterface
+final class CliReporter implements PendingReporterInterface
 {
+    private bool $pending = false;
+
     public function __construct(private readonly bool $debug = false) {}
 
     public function info(string $message): void
@@ -60,7 +62,17 @@ final class CliReporter implements ReporterInterface
 
     public function step(string $text): void
     {
-        fwrite(STDERR, "opensim: $text\n");
+        fwrite(STDERR, ($this->pending ? "\r\033[K" : '') . "opensim: $text\n");
+        $this->pending = false;
+    }
+
+    /** What the wait is on, on one line a terminal replaces with the next. */
+    public function pending(string $text): void
+    {
+        if (stream_isatty(STDERR)) {
+            fwrite(STDERR, "\r\033[Kopensim: $text");
+            $this->pending = true;
+        }
     }
 
     public function stepEnd(): void {}
