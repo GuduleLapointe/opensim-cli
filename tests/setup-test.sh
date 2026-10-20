@@ -216,3 +216,20 @@ function test_dialog_shows_the_notice_above_the_screen() {
     assert_contains "Error: Passwords differ" "$(grep mixedform "$DIALOG_LOG")"
     assert_contains "--mixedform Error: Passwords differ 11 72 2" "$(grep mixedform "$DIALOG_LOG")"
 }
+
+function test_what_the_engine_says_on_its_error_output_is_not_part_of_its_answer() {
+    local out status=0
+    engine_says "$QUIT"
+    out=$(ENGINE_NOISE="Deprecated: a library is old" setup_with) || status=$?
+    assert_equals 0 "$status"
+    assert_contains "Written in /etc/opensim/grids/amy." "$out"
+    assert_not_contains "Deprecated" "$out"
+}
+
+function test_it_is_shown_when_the_answer_is_not_one() {
+    local out status=0
+    engine_says "not json at all"
+    out=$(ENGINE_NOISE="Fatal: the engine is broken" setup_with) || status=$?
+    assert_contains "Fatal: the engine is broken" "$out"
+    assert_not_equals 0 "$status"
+}

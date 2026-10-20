@@ -5,4 +5,5 @@ dir=${ENGINE_REPLIES:?}
 n=$(($(cat "$dir/.count" 2>/dev/null || echo 0) + 1))
 echo "$n" >"$dir/.count"
 jq -c . >>"${ENGINE_LOG:?}"
+[[ -n "${ENGINE_NOISE:-}" ]] && echo "$ENGINE_NOISE" >&2
 cat "$dir/$n.json"
