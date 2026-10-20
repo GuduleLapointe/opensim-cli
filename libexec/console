@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# opensim console: Attaches to the console of a running instance, its screen session, or a prompt on its remote console. Ctrl-A D leaves a screen running.
+
+USAGE="opensim console [-hqv] <instance>"
+HELP="Attaches to the console of a running instance, its screen session, or a prompt on its remote console. Ctrl-A D leaves a screen running."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run console "$@"

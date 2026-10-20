@@ -9,7 +9,13 @@ usage() {
 	cat >&2 <<USAGE
 usage: opensim COMMAND [ARGUMENTS]
 
-  setup    make a grid, a standalone or a simulator that joins a grid
+  setup           make a grid, a standalone or a simulator that joins a grid
+  status          the instances of this machine, running or not
+  start           start grids and simulators
+  stop            stop grids and simulators
+  restart         stop, then start grids and simulators
+  console|screen  attach to the console of a running instance
+  install-dotnet  install the .NET runtime OpenSimulator needs
 
 Type 'opensim COMMAND --help' for the help of a command.
 USAGE

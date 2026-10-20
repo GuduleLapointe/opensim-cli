@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# opensim start: Starts the services of grids (their Robust) and simulators, everything enabled when none is given; with --simulators, the simulators of the grids named too, after their Robust.
+
+USAGE="opensim start [-hqv] [--simulators] [target...]"
+HELP="Starts the services of grids (their Robust) and simulators, everything enabled when none is given; with --simulators, the simulators of the grids named too, after their Robust."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run start "$@"

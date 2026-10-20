@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# opensim restart: Stops, then starts the services of grids and simulators; with --simulators, the simulators of the grids named too.
+
+USAGE="opensim restart [-hqv] [--simulators] [now] [target...]"
+HELP="Stops, then starts the services of grids and simulators; with --simulators, the simulators of the grids named too."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run restart "$@"

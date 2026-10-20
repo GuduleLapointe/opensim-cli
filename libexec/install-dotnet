@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# opensim install-dotnet: Installs the .NET runtime OpenSimulator needs (8, a newer one fits) and libgdiplus; as root for the whole system, else in the home of the person.
+
+USAGE="opensim install-dotnet [-hqv] [MAJOR]"
+HELP="Installs the .NET runtime OpenSimulator needs (8, a newer one fits) and libgdiplus; as root for the whole system, else in the home of the person."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run install-dotnet "$@"

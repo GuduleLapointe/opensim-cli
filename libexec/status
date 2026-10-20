@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# opensim status: The enabled instances of this machine, running or not, what they use, and a summary line.
+
+USAGE="opensim status [-hqv]"
+HELP="The enabled instances of this machine, running or not, what they use, and a summary line."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run status "$@"

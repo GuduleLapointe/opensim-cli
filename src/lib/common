@@ -31,3 +31,8 @@ fi
 engine() {
     "$OPENSIM_API" "$@"
 }
+
+# Act on this machine through the engine (src/php/run.php): run COMMAND [ARGUMENTS]; its status is the one of the command
+run() {
+    php "$CLI_ROOT/src/php/run.php" "$@"
+}
