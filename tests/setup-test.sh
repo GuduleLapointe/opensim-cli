@@ -112,6 +112,15 @@ function test_the_options_not_implemented_say_it() {
     assert_contains "Hypergrid [yes]" "$out"
 }
 
+function test_a_name_of_the_engine_is_not_taken_for_a_name_of_variable() {
+    local out checks
+    checks=$(jq -c '.data.attributes.items += [{"name":"economy-gloebit","label":"Economy: Gloebit","checked":false,"note":""}]' <<<"$CHECKS")
+    engine_says "$checks" "$ABORT"
+    out=$(setup_with "" "" yes) || true
+    assert_not_contains "variable" "$out"
+    assert_equals '{"ssl":false,"hypergrid":true,"economy-gloebit":true}' "$(request 2 '.answers | tojson')"
+}
+
 function test_the_password_is_not_shown_in_the_list_of_the_form() {
     local out
     engine_says "$MENU" "$FORM" "$ABORT"

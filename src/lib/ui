@@ -255,10 +255,21 @@ ui_review() {
     fi
 }
 
+# _ui_var NAME: NAME as a name of variable, whatever the engine called it (a hyphen in the name of an option...): every character that
+# is not a letter or a digit becomes _ and its code in hexadecimal
+_ui_var() {
+    local _u_in=$1 _u_out= _u_c _u_i
+    for ((_u_i = 0; _u_i < ${#_u_in}; _u_i++)); do
+        _u_c=${_u_in:_u_i:1}
+        [[ $_u_c == [A-Za-z0-9] ]] && _u_out+=$_u_c || _u_out+=$(printf '_%02x' "'$_u_c")
+    done
+    printf '%s' "$_u_out"
+}
+
 # ui_screen "SCREEN": draws a screen of the engine (menu, form, checks or review) and sets what goes back to it: $answers (the screen,
 # filled, as JSON), $button (next, back or quit) and $state (as the engine gave it)
 ui_screen() {
-    local _u_screen=$1 _u_kind _u_title _u_text _u_status=0 _u_name _u_label _u_value _u_secret _u_note _u_key _u_items=() _u_names=() _u_default
+    local _u_screen=$1 _u_kind _u_title _u_text _u_status=0 _u_name _u_label _u_value _u_secret _u_note _u_key _u_items=() _u_names=() _u_default _u_var
     _u_kind=$(jq -r .kind <<<"$_u_screen")
     _u_title=$(jq -r .title <<<"$_u_screen")
     _u_text=$(jq -r '[.text, .notice] | map(select(. != "")) | join("\n\n")' <<<"$_u_screen")
@@ -278,30 +289,34 @@ ui_screen() {
             answers=$(jq -cn --arg name "$_u_name" --arg value "$_u_value" '{($name): $value}')
             ;;
         form)
-            declare -gA LABEL=() SECRET=() READONLY=()
+            declare -gA LABEL=() SECRET=() READONLY=() ENGINE_NAME=()
             while IFS=$'\x1f' read -r _u_name _u_label _u_value _u_secret _u_readonly; do
-                LABEL[f_$_u_name]=$_u_label
-                [[ $_u_secret == true ]] && SECRET[f_$_u_name]=1
-                [[ $_u_readonly == true ]] && READONLY[f_$_u_name]=1
-                printf -v "f_$_u_name" '%s' "$_u_value"
-                _u_names+=("f_$_u_name")
+                _u_var=f_$(_ui_var "$_u_name")
+                ENGINE_NAME[$_u_var]=$_u_name
+                LABEL[$_u_var]=$_u_label
+                [[ $_u_secret == true ]] && SECRET[$_u_var]=1
+                [[ $_u_readonly == true ]] && READONLY[$_u_var]=1
+                printf -v "$_u_var" '%s' "$_u_value"
+                _u_names+=("$_u_var")
             done < <(jq -r '.fields[] | [.name, .label, .value, .secret, (.readonly // false)] | map(tostring) | join("\u001f")' <<<"$_u_screen")
             ui_form "$_u_title" "$_u_text" "${_u_names[@]}" || _u_status=$?
             for _u_name in "${_u_names[@]}"; do
                 [[ -n "${READONLY[$_u_name]:-}" ]] && continue
-                answers=$(jq -c --arg name "${_u_name#f_}" --arg value "${!_u_name}" '. + {($name): $value}' <<<"$answers")
+                answers=$(jq -c --arg name "${ENGINE_NAME[$_u_name]}" --arg value "${!_u_name}" '. + {($name): $value}' <<<"$answers")
             done
             ;;
         checks)
-            declare -gA LABEL=()
+            declare -gA LABEL=() ENGINE_NAME=()
             while IFS=$'\x1f' read -r _u_name _u_label _u_value _u_note; do
-                LABEL[c_$_u_name]="$_u_label${_u_note:+ ($_u_note)}"
-                printf -v "c_$_u_name" '%s' "$([[ $_u_value == true ]] && echo yes || echo no)"
-                _u_names+=("c_$_u_name")
+                _u_var=c_$(_ui_var "$_u_name")
+                ENGINE_NAME[$_u_var]=$_u_name
+                LABEL[$_u_var]="$_u_label${_u_note:+ ($_u_note)}"
+                printf -v "$_u_var" '%s' "$([[ $_u_value == true ]] && echo yes || echo no)"
+                _u_names+=("$_u_var")
             done < <(jq -r '.items[] | [.name, .label, .checked, .note] | map(tostring) | join("\u001f")' <<<"$_u_screen")
             ui_checks "$_u_title" "$_u_text" "${_u_names[@]}" || _u_status=$?
             for _u_name in "${_u_names[@]}"; do
-                answers=$(jq -c --arg name "${_u_name#c_}" --argjson value "$([[ ${!_u_name} == yes ]] && echo true || echo false)" '. + {($name): $value}' <<<"$answers")
+                answers=$(jq -c --arg name "${ENGINE_NAME[$_u_name]}" --argjson value "$([[ ${!_u_name} == yes ]] && echo true || echo false)" '. + {($name): $value}' <<<"$answers")
             done
             ;;
         review)
