@@ -80,7 +80,7 @@ fe_dialog() { # title, arguments of dialog
     local title=$1 out status=0
     shift
     [[ -f "${FE_DIALOGRC:-}" ]] || fe_dialogrc
-    out=$(DIALOGRC="$FE_DIALOGRC" dialog --output-fd 9 --title "$title" --ok-label "${FE_OK:-OK}" --cancel-label "${FE_CANCEL:-Back}" "$@" 9>&1 >"$FE_SCREEN" <"$FE_SCREEN") || status=$?
+    out=$(DIALOGRC="$FE_DIALOGRC" dialog --output-fd 9 --title "$title" ${FE_OK:+--ok-label "$FE_OK"} --cancel-label "${FE_CANCEL:-Back}" "$@" 9>&1 >"$FE_SCREEN" <"$FE_SCREEN") || status=$?
     FE_ANSWER=$out
     case $status in
         0) return 0 ;;
@@ -89,10 +89,10 @@ fe_dialog() { # title, arguments of dialog
     esac
 }
 
-# ui_menu VARIABLE "Question" KEY "Label" [KEY "Label"...]: the key of the line chosen; the first is proposed
+# ui_menu VARIABLE "Title" "Text" DEFAULT KEY "Label" [KEY "Label"...]: the key of the line chosen, the default proposed
 ui_menu() {
-    local variable=$1 question=$2 keys=() labels=() items=() i status=0
-    shift 2
+    local variable=$1 title=$2 text=$3 default=$4 keys=() labels=() items=() i status=0 height
+    shift 4
     while (($# >= 2)); do
         keys+=("$1")
         labels+=("$2")
@@ -102,13 +102,15 @@ ui_menu() {
     fe_choose_ui
     if [[ $FE_UI == dialog ]]; then
         # The size is given: a menu height of 0 shows one line on some builds, and the tags repeat the labels
-        FE_CANCEL=Quit fe_dialog "$question" --no-tags --menu "" "$((${#keys[@]} + 7))" 50 "${#keys[@]}" "${items[@]}" || return $?
+        height=$((${#keys[@]} + 7 + $(fe_lines "$text")))
+        fe_dialog "$title" ${default:+--default-item "$default"} --no-tags --menu "$text" "$height" 60 "${#keys[@]}" "${items[@]}" || return $?
     else
+        [[ -n "$text" ]] && printf '\n%s\n' "$text" >&2
         for i in "${!keys[@]}"; do
             printf '  %d) %s\n' "$((i + 1))" "${labels[$i]}" >&2
         done
         while :; do
-            fe_read "$question [1]: " 1 || return 2
+            fe_read "$title [1]: " 1 || return 2
             fe_special || return $?
             if [[ $FE_ANSWER =~ ^[0-9]+$ ]] && ((FE_ANSWER >= 1 && FE_ANSWER <= ${#keys[@]})); then
                 FE_ANSWER=${keys[FE_ANSWER - 1]}
@@ -121,6 +123,11 @@ ui_menu() {
     fi
     printf -v "$variable" '%s' "$FE_ANSWER"
     return $status
+}
+
+# The number of lines of a text, 0 for none
+fe_lines() {
+    [[ -z "$1" ]] && echo 0 || grep -c '' <<<"$1"
 }
 
 # ui_form "Title" "Text" NAME...: all the questions at once. (The locals are named so that they cannot hide a variable of a form.)
@@ -195,12 +202,13 @@ ui_checks() {
         for _u_n in "${_u_names[@]}"; do
             _u_items+=("$_u_n" "${LABEL[$_u_n]}" "$([[ ${!_u_n} == yes ]] && echo on || echo off)")
         done
-        fe_dialog "$_u_title" --no-tags --separate-output --checklist "$_u_text" "$((${#_u_names[@]} + 8))" 50 "${#_u_names[@]}" "${_u_items[@]}" || return $?
+        fe_dialog "$_u_title" --no-tags --separate-output --checklist "$_u_text" "$((${#_u_names[@]} + 8 + $(fe_lines "$_u_text")))" 50 "${#_u_names[@]}" "${_u_items[@]}" || return $?
         _u_picked=$'\n'$FE_ANSWER$'\n'
         for _u_n in "${_u_names[@]}"; do
             [[ $_u_picked == *$'\n'"$_u_n"$'\n'* ]] && printf -v "$_u_n" yes || printf -v "$_u_n" no
         done
     else
+        [[ -n "$_u_text" ]] && printf '\n%s\n' "$_u_text" >&2
         for _u_n in "${_u_names[@]}"; do
             while :; do
                 fe_read "${LABEL[$_u_n]} [${!_u_n}]: " "${!_u_n}" || return 2
@@ -216,12 +224,12 @@ ui_checks() {
     fi
 }
 
-# ui_review "Title" "ROWS": what the setup stands for, to confirm. ROWS is the lines section, label, value separated by tabs. In dialog a
-# list that scrolls with Install and Back, in plain text the list and a question.
+# ui_review "Title" "Text" "ROWS": what the setup stands for, to confirm. ROWS is the lines section, label, value separated by the unit separator (an empty value stays one). In dialog
+# a list that scrolls, in plain text the list and a question.
 ui_review() {
-    local _u_title=$1 _u_rows=$2 _u_section _u_label _u_value _u_previous= _u_items=() _u_n=0 _u_height _u_lines _u_text=
+    local _u_title=$1 _u_text_above=$2 _u_rows=$3 _u_section _u_label _u_value _u_previous= _u_items=() _u_n=0 _u_height _u_lines _u_above _u_text=
     fe_choose_ui
-    while IFS=$'\t' read -r _u_section _u_label _u_value; do
+    while IFS=$'\x1f' read -r _u_section _u_label _u_value; do
         [[ -z "$_u_section" ]] && continue
         if [[ "$_u_section" != "$_u_previous" ]]; then
             _u_text+="${_u_previous:+$'\n'}"
@@ -235,11 +243,72 @@ ui_review() {
     if [[ $FE_UI == dialog ]]; then
         # The list scrolls when it does not fit: a terminal of 24 lines has 15 for it
         _u_lines=$((${#_u_items[@]} / 2))
-        _u_height=$((_u_lines + 7 > 22 ? 22 : _u_lines + 7))
-        FE_OK=Install fe_dialog "$_u_title" --scrollbar --no-tags --menu "" "$_u_height" 78 "$((_u_height - 7))" "${_u_items[@]}" || return $?
+        _u_above=$(fe_lines "$_u_text_above")
+        _u_height=$((_u_lines + 7 + _u_above > 22 ? 22 : _u_lines + 7 + _u_above))
+        fe_dialog "$_u_title" --scrollbar --no-tags --menu "$_u_text_above" "$_u_height" 78 "$((_u_height - 7 - _u_above))" "${_u_items[@]}" || return $?
     else
+        [[ -n "$_u_text_above" ]] && printf '\n%s\n' "$_u_text_above" >&2
         printf '%s' "$_u_text" >&2
-        fe_read "Install? [Enter]: " '' || return 2
+        fe_read "${FE_OK:-OK}? [Enter]: " '' || return 2
         fe_special || return $?
     fi
+}
+
+# ui_screen "SCREEN": draws a screen of the engine (menu, form, checks or review) and sets what goes back to it: $answers (the screen,
+# filled, as JSON), $button (next, back or quit) and $state (as the engine gave it)
+ui_screen() {
+    local _u_screen=$1 _u_kind _u_title _u_text _u_status=0 _u_name _u_label _u_value _u_secret _u_note _u_key _u_items=() _u_names=() _u_default
+    _u_kind=$(jq -r .kind <<<"$_u_screen")
+    _u_title=$(jq -r .title <<<"$_u_screen")
+    _u_text=$(jq -r '[.text, .notice] | map(select(. != "")) | join("\n\n")' <<<"$_u_screen")
+    # The label of OK is the default of dialog: said only when it is another
+    FE_OK=$(jq -r 'if (.buttons.next // "OK") == "OK" then empty else .buttons.next end' <<<"$_u_screen")
+    FE_CANCEL=$(jq -r '.buttons.back // "Back"' <<<"$_u_screen")
+    state=$(jq -r .state <<<"$_u_screen")
+    answers='{}'
+    case $_u_kind in
+        menu)
+            _u_name=$(jq -r .name <<<"$_u_screen")
+            _u_default=$(jq -r .value <<<"$_u_screen")
+            while IFS=$'\x1f' read -r _u_key _u_label _u_note; do
+                _u_items+=("$_u_key" "$_u_label${_u_note:+ ($_u_note)}")
+            done < <(jq -r '.items[] | [.key, .label, .note] | join("\u001f")' <<<"$_u_screen")
+            ui_menu _u_value "$_u_title" "$_u_text" "$_u_default" "${_u_items[@]}" || _u_status=$?
+            answers=$(jq -cn --arg name "$_u_name" --arg value "$_u_value" '{($name): $value}')
+            ;;
+        form)
+            declare -gA LABEL=() SECRET=()
+            while IFS=$'\x1f' read -r _u_name _u_label _u_value _u_secret; do
+                LABEL[f_$_u_name]=$_u_label
+                [[ $_u_secret == true ]] && SECRET[f_$_u_name]=1
+                printf -v "f_$_u_name" '%s' "$_u_value"
+                _u_names+=("f_$_u_name")
+            done < <(jq -r '.fields[] | [.name, .label, .value, .secret] | map(tostring) | join("\u001f")' <<<"$_u_screen")
+            ui_form "$_u_title" "$_u_text" "${_u_names[@]}" || _u_status=$?
+            for _u_name in "${_u_names[@]}"; do
+                answers=$(jq -c --arg name "${_u_name#f_}" --arg value "${!_u_name}" '. + {($name): $value}' <<<"$answers")
+            done
+            ;;
+        checks)
+            declare -gA LABEL=()
+            while IFS=$'\x1f' read -r _u_name _u_label _u_value _u_note; do
+                LABEL[c_$_u_name]="$_u_label${_u_note:+ ($_u_note)}"
+                printf -v "c_$_u_name" '%s' "$([[ $_u_value == true ]] && echo yes || echo no)"
+                _u_names+=("c_$_u_name")
+            done < <(jq -r '.items[] | [.name, .label, .checked, .note] | map(tostring) | join("\u001f")' <<<"$_u_screen")
+            ui_checks "$_u_title" "$_u_text" "${_u_names[@]}" || _u_status=$?
+            for _u_name in "${_u_names[@]}"; do
+                answers=$(jq -c --arg name "${_u_name#c_}" --argjson value "$([[ ${!_u_name} == yes ]] && echo true || echo false)" '. + {($name): $value}' <<<"$answers")
+            done
+            ;;
+        review)
+            ui_review "$_u_title" "$_u_text" "$(jq -r '.rows[] | [.section, .label, .value] | join("\u001f")' <<<"$_u_screen")" || _u_status=$?
+            ;;
+        *) die "The engine shows a screen this command does not know: $_u_kind" ;;
+    esac
+    case $_u_status in
+        0) button=next ;;
+        1) button=back ;;
+        *) button=quit ;;
+    esac
 }

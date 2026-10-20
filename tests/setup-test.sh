@@ -1,20 +1,45 @@
 #!/usr/bin/env bash
-# opensim setup, with a stand-in for the engine (tests/fixtures/opensim-api): the questions, what the engine refuses, the summary.
+# opensim setup, with a stand-in for the engine (tests/fixtures/opensim-api) that replays screens: the loop draws a screen, sends it back
+# filled with the button pressed, and does the action it gets. What the screens say is the engine's business, tested there.
 #
 # Run with: tests/lib/bashunit tests/
 
 OPENSIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/bin/opensim"
 
+# The screens of the engine, as it gives them
+MENU='{"data":{"attributes":{"action":"screen","kind":"menu","name":"type","title":"OpenSim setup","text":"","notice":"","items":[{"key":"grid","label":"Grid","note":""},{"key":"standalone","label":"Standalone","note":""},{"key":"speculoos","label":"Speculoos","note":"not implemented"}],"value":"","buttons":{"next":"OK","back":"Quit"},"state":"s1"}}}'
+FORM='{"data":{"attributes":{"action":"screen","kind":"form","title":"Grid","text":"","notice":"","fields":[{"name":"name","label":"Grid name","value":"Amy","secret":false},{"name":"password","label":"Password","value":"","secret":true}],"buttons":{"next":"OK","back":"Back"},"state":"s2"}}}'
+CHECKS='{"data":{"attributes":{"action":"screen","kind":"checks","title":"Options","text":"","notice":"","items":[{"name":"ssl","label":"SSL","checked":false,"note":"not implemented"},{"name":"hypergrid","label":"Hypergrid","checked":true,"note":""}],"buttons":{"next":"OK","back":"Back"},"state":"s3"}}}'
+REVIEW='{"data":{"attributes":{"action":"screen","kind":"review","title":"Review","text":"","notice":"","rows":[{"section":"grid","label":"Grid name","value":"Amy"},{"section":"grid","label":"Login URI","value":"http://amy.example.org:8002"},{"section":"options","label":"Hypergrid","value":"yes"}],"buttons":{"next":"Install","back":"Back"},"state":"s4"}}}'
+QUIT='{"data":{"attributes":{"action":"quit","message":"Grid name:  Amy\nWritten in /etc/opensim/grids/amy."}}}'
+ABORT='{"data":{"attributes":{"action":"abort","error":"Cancelled"}}}'
+
 function set_up() {
-    export OPENSIM_API="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fixtures/opensim-api"
     WORK="$(mktemp -d)"
     export HOME="$WORK"
+    export OPENSIM_API="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fixtures/opensim-api"
+    export ENGINE_REPLIES="$WORK/replies" ENGINE_LOG="$WORK/requests"
+    mkdir -p "$ENGINE_REPLIES"
 }
 function tear_down() {
     rm -rf "$WORK"
 }
 
-# opensim setup with these lines as the answers, in plain text (the form is a list, a number changes one answer)
+# The engine gives these replies, one for each call
+function engine_says() {
+    local n=0 reply
+    rm -f "$ENGINE_REPLIES"/* "$ENGINE_REPLIES"/.count "$ENGINE_LOG"
+    for reply in "$@"; do
+        printf '%s' "$reply" >"$ENGINE_REPLIES/$((++n)).json"
+    done
+}
+
+# The requests the engine got: one thing of the n-th (jq filter)
+function request() { # n filter
+    sed -n "${1}p" "$ENGINE_LOG" | jq -r ".data.attributes$2"
+}
+
+# opensim setup with these lines as the answers, in plain text (a form is a list, a number changes one answer)
 function setup_with() {
     printf '%s\n' "$@" >"$WORK/answers"
     (
@@ -51,110 +76,93 @@ function setup_with_dialog() {
     )
 }
 
-# The five options of the stub engine are asked one by one in plain text, Enter keeps the proposal
-OPTS=("" "" "" "" "")
-
-function test_a_grid_is_asked_in_one_form_then_the_options_then_shown_to_confirm() {
+function test_the_screens_of_the_engine_are_drawn_one_after_the_other_and_sent_back_filled() {
     local out
-    out=$(setup_with 1 1 "Magic Grid" 3 "Ada Love" 4 secret123 5 secret123 6 ada@example.org "" "${OPTS[@]}" "")
-    assert_contains "Magic Grid" "$(grep '1) Grid name' <<<"$out" | tail -1)"
-    assert_contains "amy.example.org:8002" "$(grep '2) Login URI' <<<"$out" | tail -1)"
-    assert_contains "* Grid name: Magic Grid (magic_grid)" "$out"
-    assert_contains "* Login URI: http://amy.example.org:8002" "$out"
-    assert_contains "* Hypergrid: yes" "$out"
-    assert_contains "* Simulator: Welcome" "$out"
-    assert_contains "* Avatar: Ada Love" "$out"
+    engine_says "$MENU" "$FORM" "$CHECKS" "$REVIEW" "$QUIT"
+    out=$(setup_with 2 1 "My Island" 2 secret123 "" "" no "")
+    assert_contains "Grid name:  Amy" "$out"
+    assert_contains "Written in /etc/opensim/grids/amy." "$out"
+    # The first request asks for the first screen, the others carry the state of the screen before and its answers
+    assert_equals "" "$(request 1 .state)"
+    assert_equals "next" "$(request 1 .button)"
+    assert_equals "s1" "$(request 2 .state)"
+    assert_equals '{"type":"standalone"}' "$(request 2 '.answers | tojson')"
+    assert_equals "s2" "$(request 3 .state)"
+    assert_equals '{"name":"My Island","password":"secret123"}' "$(request 3 '.answers | tojson')"
+    assert_equals '{"ssl":false,"hypergrid":false}' "$(request 4 '.answers | tojson')"
+    assert_equals "s4" "$(request 5 .state)"
+    assert_equals "next" "$(request 5 .button)"
+    assert_equals 5 "$(grep -c '' "$ENGINE_LOG")"
 }
 
-function test_the_options_say_what_is_not_implemented() {
+function test_what_the_engine_says_is_shown_with_the_screen() {
+    local out notice
+    notice=$(jq -c '.data.attributes.notice = "Error: Avatar name invalid (First Last)"' <<<"$FORM")
+    engine_says "$MENU" "$notice" "$ABORT"
+    out=$(setup_with 1 "" :quit) || true
+    assert_contains "Error: Avatar name invalid (First Last)" "$out"
+    assert_contains "3) Speculoos (not implemented)" "$out"
+}
+
+function test_the_options_not_implemented_say_it() {
     local out
-    out=$(setup_with 1 3 "Ada Love" 4 secret123 5 secret123 "" "${OPTS[@]}" "")
+    engine_says "$CHECKS" "$ABORT"
+    out=$(setup_with "" "") || true
     assert_contains "SSL (not implemented) [no]" "$out"
     assert_contains "Hypergrid [yes]" "$out"
-    assert_contains "Cross-grid Search (not implemented) [no]" "$out"
-    assert_contains "Economy: Gloebit (not implemented) [no]" "$out"
-    assert_contains "Extended OSSL (not implemented) [no]" "$out"
-    assert_contains "* SSL: no (not implemented)" "$out"
 }
 
-function test_the_sections_of_the_review_are_separated_by_a_blank_line() {
+function test_the_password_is_not_shown_in_the_list_of_the_form() {
     local out
-    out=$(setup_with 1 3 "Ada Love" 4 secret123 5 secret123 "" "${OPTS[@]}" "")
-    assert_contains $'* Login URI: http://amy.example.org:8002\n\n* Options\n* Hypergrid: yes' "$out"
-    assert_contains $'* SSL: no (not implemented)\n\n* Simulator\n* Simulator: Welcome\n\n* Owner\n* Avatar: Ada Love' "$out"
+    engine_says "$MENU" "$FORM" "$ABORT"
+    out=$(setup_with 1 2 secret123 "" ) || true
+    assert_not_contains "secret123" "$out"
+    assert_contains "********" "$out"
 }
 
-function test_what_to_keep_is_said_at_the_end() {
-    local out
-    out=$(setup_with 1 1 "Magic Grid" 3 "Ada Love" 4 secret123 5 secret123 "" "${OPTS[@]}" "")
-    assert_contains $'Grid name:  Magic Grid\nLogin URI:  http://amy.example.org:8002\nAvatar:     Ada Love\n\nNothing was created yet.' "$out"
+function test_the_button_pressed_goes_back_to_the_engine_which_decides_what_comes() {
+    engine_says "$MENU" "$FORM" "$CHECKS" "$FORM" "$ABORT"
+    setup_with 1 "" :back "" >/dev/null || true
+    assert_equals "back" "$(request 4 .button)"
+    assert_equals "s3" "$(request 4 .state)"
 }
 
-function test_a_standalone_names_its_region_and_hypergrid_is_an_option() {
-    local out
-    out=$(setup_with 2 1 "My Island" 3 "Ada Love" 4 secret123 5 secret123 "" "" no "" "" "" "")
-    assert_contains "My Island" "$(grep '1) Region name' <<<"$out" | tail -1)"
-    assert_contains "* Hypergrid: no" "$out"
-    assert_contains "* Simulator: My Island" "$out"
+function test_quit_is_a_button_too() {
+    engine_says "$MENU" "$ABORT"
+    setup_with :quit >/dev/null || true
+    assert_equals "quit" "$(request 2 .button)"
 }
 
-function test_what_the_engine_refuses_comes_back_with_the_form_and_its_answers() {
-    local out
-    out=$(setup_with 1 3 "Ada" 4 secret123 5 secret123 "" 3 "Ada Love" "" "${OPTS[@]}" "")
-    assert_contains "Error: Avatar name invalid (First Last)" "$out"
-    assert_contains "* Avatar: Ada Love" "$out"
-    assert_not_contains "Error: Password" "$out"
-}
-
-function test_two_different_passwords_are_not_sent() {
-    local out
-    out=$(setup_with 1 3 "Ada Love" 4 secret123 5 other "" 4 secret123 5 secret123 "" "${OPTS[@]}" "")
-    assert_contains "Error: Passwords differ" "$out"
-    assert_contains "* Avatar: Ada Love" "$out"
-}
-
-function test_a_choice_is_asked_until_it_is_one() {
-    local out
-    out=$(setup_with 9 2 3 "Ada Love" 4 secret123 5 secret123 "" "${OPTS[@]}" "")
-    assert_contains "* Grid name: Amy" "$out"
-}
-
-function test_the_types_come_from_the_engine_and_the_ones_not_implemented_are_refused() {
-    local out
-    out=$(setup_with 3 2 3 "Ada Love" 4 secret123 5 secret123 "" "${OPTS[@]}" "")
-    assert_contains "1) Grid" "$out"
-    assert_contains "3) Simulator (join other grid) (not implemented)" "$out"
-    assert_contains "4) Speculoos (not implemented)" "$out"
-    assert_contains "Not implemented yet" "$out"
-    assert_contains "* Grid name: Amy" "$out"
-}
-
-function test_back_goes_one_step_back() {
-    local out
-    # From the options to the form (the answers stay), from the review to the options, from the form to the type
-    out=$(setup_with 1 3 "Ada Love" 4 secret123 5 secret123 "" :back 6 ada@example.org "" "" no "" "" "" "")
-    assert_contains "* Hypergrid: no" "$out"
-    assert_contains "* Avatar: Ada Love" "$out"
-    out=$(setup_with 1 3 "Ada Love" 4 secret123 5 secret123 "" "${OPTS[@]}" :back "" no "" "" "" "")
-    assert_contains "Nothing was created yet." "$out"
-    assert_contains "* Hypergrid: yes" "$out"
-    assert_contains "* Hypergrid: no" "$out"
-    out=$(setup_with 1 :back 2 3 "Ada Love" 4 secret123 5 secret123 "" "${OPTS[@]}" "")
-    assert_contains "* Simulator: Amy" "$out"
-}
-
-function test_quit_ends_the_setup() {
+function test_an_abort_ends_with_the_error_of_the_engine_and_a_failure() {
     local out status=0
-    out=$(setup_with 1 :quit) || status=$?
+    engine_says "$ABORT"
+    out=$(setup_with) || status=$?
     assert_contains "Cancelled" "$out"
     assert_not_equals 0 "$status"
 }
 
-function test_nothing_is_said_at_the_end_when_the_setup_is_cancelled_in_the_review() {
+function test_a_quit_ends_with_its_message_and_a_success() {
     local out status=0
-    out=$(setup_with 1 3 "Ada Love" 4 secret123 5 secret123 "" "${OPTS[@]}" :quit) || status=$?
-    assert_contains "Cancelled" "$out"
-    assert_not_contains "Nothing was created yet." "$out"
+    engine_says "$QUIT"
+    out=$(setup_with) || status=$?
+    assert_contains "Written in /etc/opensim/grids/amy." "$out"
+    assert_equals 0 "$status"
+}
+
+function test_a_reply_that_is_not_one_ends_the_setup() {
+    local out status=0
+    engine_says "not json at all"
+    out=$(setup_with) || status=$?
+    assert_contains "does not answer as it should" "$out"
+    assert_not_equals 0 "$status"
+}
+
+function test_a_screen_nobody_knows_ends_the_setup() {
+    local out status=0
+    engine_says "$(jq -c '.data.attributes.kind = "carousel"' <<<"$MENU")"
+    out=$(setup_with) || status=$?
+    assert_contains "screen this command does not know: carousel" "$out"
+    assert_not_equals 0 "$status"
 }
 
 function test_no_command_says_the_usage() {
@@ -168,66 +176,43 @@ function test_the_help_of_a_command() {
     assert_contains "usage: opensim setup" "$("$OPENSIM" setup --help 2>&1)"
 }
 
-function test_dialog_shows_a_menu_one_form_the_options_then_a_review_that_scrolls() {
+function test_dialog_draws_each_kind_of_screen_with_the_buttons_the_engine_names() {
     local out log
     make_fake_dialog
-    printf '%s\n' '0:standalone' '0:My Island\namy.example.org:8002\nAda Love\nsecret123\nsecret123\nada@example.org\n' '0:opt_hypergrid\n' '0:' >"$DIALOG_ANSWERS"
+    engine_says "$MENU" "$FORM" "$CHECKS" "$REVIEW" "$QUIT"
+    printf '%s\n' '0:standalone' '0:My Island\nsecret123\n' '0:c_hypergrid\n' '0:' >"$DIALOG_ANSWERS"
     out=$(setup_with_dialog)
     log=$(cat "$DIALOG_LOG")
-    assert_contains "Grid name:  My Island" "$out"
-    assert_contains "Nothing was created yet." "$out"
-    assert_contains "--title OpenSim setup --ok-label OK --cancel-label Quit --no-tags --menu  11 50 4 grid Grid standalone Standalone simulator Simulator (join other grid) (not implemented) speculoos Speculoos (not implemented)" "$log"
-    assert_contains "--title Options" "$log"
-    assert_contains "--no-tags --separate-output --checklist  13 50 5 opt_ssl SSL (not implemented) off opt_hypergrid Hypergrid on opt_search Cross-grid Search (not implemented) off opt_gloebit Economy: Gloebit (not implemented) off opt_ossl Extended OSSL (not implemented) off" "$log"
-    assert_contains "--title Review --ok-label Install --cancel-label Back --scrollbar --no-tags --menu  17 78 10 h1 -- Grid -- r2 Grid name: My Island (my_island)" "$log"
-    assert_contains "Region name" "$(grep mixedform "$DIALOG_LOG")"
-    assert_contains "--title Standalone" "$(grep mixedform "$DIALOG_LOG")"
+    assert_contains "Written in /etc/opensim/grids/amy." "$out"
+    assert_contains "--title OpenSim setup --cancel-label Quit --no-tags --menu  10 60 3 grid Grid standalone Standalone speculoos Speculoos (not implemented)" "$log"
+    assert_contains "--title Grid --cancel-label Back --insecure --mixedform  11 72 2 Grid name 1 1 Amy 1" "$log"
+    assert_contains "Password 2 1  2" "$(grep mixedform "$DIALOG_LOG")"
+    assert_contains "--title Options --cancel-label Back --no-tags --separate-output --checklist  10 50 2 c_ssl SSL (not implemented) off c_hypergrid Hypergrid on" "$log"
+    assert_contains "--title Review --ok-label Install --cancel-label Back --scrollbar --no-tags --menu  12 78 5" "$log"
+    assert_not_contains "--ok-label OK" "$log"
     assert_equals "menu mixedform checklist menu" "$(grep -oE -- '--(menu|mixedform|checklist)' "$DIALOG_LOG" | sed 's/--//' | tr '\n' ' ' | sed 's/ $//')"
+    assert_equals '{"type":"standalone"}' "$(request 2 '.answers | tojson')"
+    assert_equals '{"name":"My Island","password":"secret123"}' "$(request 3 '.answers | tojson')"
+    assert_equals '{"ssl":false,"hypergrid":true}' "$(request 4 '.answers | tojson')"
     assert_contains "bindkey formfield ENTER form_NEXT" "$log"
 }
 
-function test_dialog_unchecked_hypergrid_is_no_and_back_returns_one_screen() {
-    local out
+function test_dialog_the_cancel_button_is_back_and_escape_is_quit() {
     make_fake_dialog
-    printf '%s\n' '0:grid' \
-        '0:Magic Grid\namy.example.org:8002\nAda Love\nsecret123\nsecret123\n\n' '1:' \
-        '0:Magic Grid\namy.example.org:8002\nAda Love\nsecret123\nsecret123\n\n' '0:' '0:' >"$DIALOG_ANSWERS"
-    out=$(setup_with_dialog)
-    assert_contains "Hypergrid: no" "$(grep -- '--scrollbar' "$DIALOG_LOG")"
-    assert_equals "menu mixedform checklist mixedform checklist menu" "$(grep -oE -- '--(menu|mixedform|checklist)' "$DIALOG_LOG" | sed 's/--//' | tr '\n' ' ' | sed 's/ $//')"
+    engine_says "$MENU" "$FORM" "$CHECKS" "$ABORT"
+    printf '%s\n' '0:grid' '0:Amy\n\n' '1:' '255:' >"$DIALOG_ANSWERS"
+    setup_with_dialog >/dev/null || true
+    assert_equals "back" "$(request 4 .button)"
+    assert_equals "next" "$(request 3 .button)"
 }
 
-function test_dialog_back_from_the_review_returns_to_the_options() {
-    local out
+function test_dialog_shows_the_notice_above_the_screen() {
+    local notice
     make_fake_dialog
-    printf '%s\n' '0:grid' '0:Magic Grid\namy.example.org:8002\nAda Love\nsecret123\nsecret123\n\n' '0:opt_hypergrid\n' '1:' '0:opt_hypergrid\nopt_ssl\n' '0:' >"$DIALOG_ANSWERS"
-    out=$(setup_with_dialog)
-    assert_equals "menu mixedform checklist menu checklist menu" "$(grep -oE -- '--(menu|mixedform|checklist)' "$DIALOG_LOG" | sed 's/--//' | tr '\n' ' ' | sed 's/ $//')"
-    assert_contains "SSL: yes (not implemented)" "$(grep -- '--scrollbar' "$DIALOG_LOG" | tail -1)"
-}
-
-function test_dialog_engine_problems_come_back_in_the_form() {
-    local out
-    make_fake_dialog
-    printf '%s\n' '0:grid' \
-        '0:Magic Grid\namy.example.org:8002\nAda\nsecret123\nsecret123\n\n' \
-        '0:Magic Grid\namy.example.org:8002\nAda Love\nsecret123\nsecret123\n\n' '0:opt_hypergrid\n' '0:' >"$DIALOG_ANSWERS"
-    out=$(setup_with_dialog)
-    assert_contains "Grid name:  Magic Grid" "$out"
-    assert_contains "Error: Avatar name invalid (First Last)" "$(grep mixedform "$DIALOG_LOG" | tail -1)"
-}
-
-function test_every_error_comes_at_once_the_engines_and_ours() {
-    local out
-    out=$(setup_with 1 4 secret123 5 other "" 3 "Ada Love" 4 secret123 5 secret123 "" "${OPTS[@]}" "")
-    assert_contains $'Error: Avatar name invalid (First Last)\nError: Passwords differ' "$out"
-    assert_contains "* Avatar: Ada Love" "$out"
-}
-
-function test_the_accents_of_an_avatar_name_are_replaced_and_the_person_validates_the_change() {
-    local out
-    out=$(setup_with 1 3 "José García" 4 secret123 5 secret123 "" "" "${OPTS[@]}" "")
-    assert_contains "Error: Avatar name transliterated" "$out"
-    assert_contains "Jose Garcia" "$(grep '3) Avatar name' <<<"$out" | tail -1)"
-    assert_contains "* Avatar: Jose Garcia" "$out"
+    notice=$(jq -c '.data.attributes.notice = "Error: Passwords differ"' <<<"$FORM")
+    engine_says "$MENU" "$notice" "$ABORT"
+    printf '%s\n' '0:grid' '255:' >"$DIALOG_ANSWERS"
+    setup_with_dialog >/dev/null || true
+    assert_contains "Error: Passwords differ" "$(grep mixedform "$DIALOG_LOG")"
+    assert_contains "--mixedform Error: Passwords differ 11 72 2" "$(grep mixedform "$DIALOG_LOG")"
 }
