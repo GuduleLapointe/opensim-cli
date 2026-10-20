@@ -15,7 +15,7 @@ while :; do
 	request=$(jq -cn --arg state "$state" --arg button "$button" --argjson answers "$answers" \
 		'{data: {type: "steps", attributes: {state: $state, button: $button, answers: $answers}}}')
 	# What the engine says on its error output is not part of its answer: shown only when the answer is not one
-	reply=$(engine POST /setups/steps --data=- <<<"$request" 2>"$errors")
+	reply=$(engine POST /setups/steps --data=- <<<"$request" 2> >(tee "$errors" | grep --line-buffered "^opensim: " >&2))
 	screen=$(jq -c '.data.attributes' 2>/dev/null <<<"$reply") && [[ "$(jq -r '.action // empty' <<<"$screen")" != "" ]] ||
 		die "The engine does not answer as it should: $reply$(cat "$errors")"
 	case "$(jq -r .action <<<"$screen")" in
