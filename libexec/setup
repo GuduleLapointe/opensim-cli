@@ -33,6 +33,13 @@ show_progress() {
 	shown=$size
 	return 0
 }
+# The engine gave no screen: what it said (a problem: its status and title), and the errors it wrote that are not progress. Nothing else is done.
+fail_engine() {
+	local what
+	what=$(jq -r 'select(.status) | "HTTP \(.status) \(.title)\(if .detail then ": " + .detail else "" end)"' 2>/dev/null <<<"$1")
+	die "The engine does not answer as it should: ${what:-$1}$(grep -v '^opensim: ' "$errors" | sed 's/^/\n  /')"
+}
+
 while :; do
 	request=$(jq -cn --arg state "$state" --arg button "$button" --argjson answers "$answers" \
 		'{data: {type: "steps", attributes: {state: $state, button: $button, answers: $answers}}}')
@@ -50,7 +57,7 @@ while :; do
 	show_progress
 	reply=$(<"$answer")
 	screen=$(jq -c '.data.attributes' 2>/dev/null <<<"$reply") && [[ "$(jq -r '.action // empty' <<<"$screen")" != "" ]] ||
-		die "The engine does not answer as it should: $reply$(cat "$errors")"
+		fail_engine "$reply"
 	case "$(jq -r .action <<<"$screen")" in
 	screen) ui_screen "$screen" ;;
 	quit)
