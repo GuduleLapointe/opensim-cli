@@ -233,3 +233,32 @@ function test_it_is_shown_when_the_answer_is_not_one() {
     assert_contains "Fatal: the engine is broken" "$out"
     assert_not_equals 0 "$status"
 }
+
+function test_a_field_that_is_only_shown_is_not_asked_nor_sent_back() {
+    local out form
+    form=$(jq -c '.data.attributes.fields = [{"name":"preset_grid","label":"Grid","value":"Speculoos","secret":false,"readonly":true},{"name":"name","label":"Region name","value":"Welcome","secret":false,"readonly":false}]' <<<"$FORM")
+    engine_says "$MENU" "$form" "$ABORT"
+    out=$(setup_with 1 1 2 Plaza "") || true
+    assert_contains "1) Grid                       Speculoos" "$out"
+    assert_equals '{"name":"Plaza"}' "$(request 3 '.answers | tojson')"
+}
+
+function test_dialog_draws_a_field_that_is_only_shown_read_only() {
+    local form
+    make_fake_dialog
+    form=$(jq -c '.data.attributes.fields = [{"name":"preset_grid","label":"Grid","value":"Speculoos","secret":false,"readonly":true},{"name":"name","label":"Region name","value":"Welcome","secret":false,"readonly":false}]' <<<"$FORM")
+    engine_says "$MENU" "$form" "$ABORT"
+    printf '%s\n' '0:grid' '0:Speculoos\nPlaza\n' >"$DIALOG_ANSWERS"
+    setup_with_dialog >/dev/null || true
+    assert_contains "Grid 1 1 Speculoos 1 13 40 200 2 Region name 2 1 Welcome 2 13 40 200 0" "$(grep mixedform "$DIALOG_LOG")"
+    assert_equals '{"name":"Plaza"}' "$(request 3 '.answers | tojson')"
+}
+
+function test_what_takes_time_is_said_before_it_is_asked() {
+    local out review
+    review=$(jq -c '.data.attributes.wait = "Installing, this can take a few minutes…"' <<<"$REVIEW")
+    engine_says "$review" "$QUIT"
+    out=$(setup_with "") || true
+    assert_contains "Installing, this can take a few minutes…" "$out"
+    assert_contains "Written in /etc/opensim/grids/amy." "$out"
+}

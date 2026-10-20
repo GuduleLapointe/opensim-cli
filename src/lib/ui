@@ -7,7 +7,7 @@
 # Every question returns 0 when answered, 1 for Back (:back in plain mode), 2 for Quit (:quit, the end of the input).
 #
 # A form is the fields by the name of the variable that holds the answer (the proposal on the way in, the answer on the way out),
-# with LABEL[name] and, for what is not shown when typed, SECRET[name]=1:
+# with LABEL[name] and, for what is not shown when typed, SECRET[name]=1 (and READONLY[name]=1 for what is only shown):
 #
 #   declare -A LABEL=([name]="Grid name" [password]="Password") SECRET=([password]=1)
 #   ui_form "Title" "Text above the form" name password
@@ -140,7 +140,7 @@ ui_form() {
         for _u_n in "${_u_names[@]}"; do ((${#LABEL[$_u_n]} > _u_w)) && _u_w=${#LABEL[$_u_n]}; done
         for _u_i in "${!_u_names[@]}"; do
             _u_n=${_u_names[$_u_i]}
-            _u_items+=("${LABEL[$_u_n]}" "$((_u_i + 1))" 1 "${!_u_n}" "$((_u_i + 1))" "$((_u_w + 2))" 40 200 "${SECRET[$_u_n]:-0}")
+            _u_items+=("${LABEL[$_u_n]}" "$((_u_i + 1))" 1 "${!_u_n}" "$((_u_i + 1))" "$((_u_w + 2))" 40 200 "$([[ -n "${READONLY[$_u_n]:-}" ]] && echo 2 || echo "${SECRET[$_u_n]:-0}")")
         done
         fe_dialog "$_u_title" --insecure --mixedform "$_u_text" "$((${#_u_names[@]} + 8 + $(grep -c '' <<<"$_u_text")))" 72 "${#_u_names[@]}" "${_u_items[@]}" || return $?
         mapfile -t _u_values <<<"$FE_ANSWER"
@@ -172,6 +172,7 @@ ui_form_plain() {
         if [[ "$FE_ANSWER" =~ ^[0-9]+$ ]] && ((FE_ANSWER >= 1 && FE_ANSWER <= ${#_u_names[@]})); then
             _u_n=${_u_names[$((FE_ANSWER - 1))]}
             _u_status=0
+            [[ -n "${READONLY[$_u_n]:-}" ]] && continue
             if [[ -n "${SECRET[$_u_n]:-}" ]]; then
                 fe_read "${LABEL[$_u_n]}: " '' secret || return 2
             else
@@ -277,15 +278,17 @@ ui_screen() {
             answers=$(jq -cn --arg name "$_u_name" --arg value "$_u_value" '{($name): $value}')
             ;;
         form)
-            declare -gA LABEL=() SECRET=()
-            while IFS=$'\x1f' read -r _u_name _u_label _u_value _u_secret; do
+            declare -gA LABEL=() SECRET=() READONLY=()
+            while IFS=$'\x1f' read -r _u_name _u_label _u_value _u_secret _u_readonly; do
                 LABEL[f_$_u_name]=$_u_label
                 [[ $_u_secret == true ]] && SECRET[f_$_u_name]=1
+                [[ $_u_readonly == true ]] && READONLY[f_$_u_name]=1
                 printf -v "f_$_u_name" '%s' "$_u_value"
                 _u_names+=("f_$_u_name")
-            done < <(jq -r '.fields[] | [.name, .label, .value, .secret] | map(tostring) | join("\u001f")' <<<"$_u_screen")
+            done < <(jq -r '.fields[] | [.name, .label, .value, .secret, (.readonly // false)] | map(tostring) | join("\u001f")' <<<"$_u_screen")
             ui_form "$_u_title" "$_u_text" "${_u_names[@]}" || _u_status=$?
             for _u_name in "${_u_names[@]}"; do
+                [[ -n "${READONLY[$_u_name]:-}" ]] && continue
                 answers=$(jq -c --arg name "${_u_name#f_}" --arg value "${!_u_name}" '. + {($name): $value}' <<<"$answers")
             done
             ;;
@@ -311,4 +314,8 @@ ui_screen() {
         1) button=back ;;
         *) button=quit ;;
     esac
+    # What the engine is about to do takes time: said before it is asked
+    _u_text=$(jq -r '.wait // empty' <<<"$_u_screen")
+    [[ $button == next && -n "$_u_text" ]] && printf '%s\n' "$_u_text" >"$([[ $FE_UI == dialog ]] && echo "$FE_SCREEN" || echo /dev/stderr)"
+    return 0
 }

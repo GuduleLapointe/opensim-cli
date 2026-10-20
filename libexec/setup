@@ -12,16 +12,19 @@ state= button=next answers='{}'
 errors=$(mktemp)
 trap 'rm -f "$errors"' EXIT
 while :; do
-    request=$(jq -cn --arg state "$state" --arg button "$button" --argjson answers "$answers" \
-        '{data: {type: "steps", attributes: {state: $state, button: $button, answers: $answers}}}')
-    # What the engine says on its error output is not part of its answer: shown only when the answer is not one
-    reply=$(engine POST /setups/steps --data=- <<<"$request" 2>"$errors")
-    screen=$(jq -c '.data.attributes' 2>/dev/null <<<"$reply") && [[ "$(jq -r '.action // empty' <<<"$screen")" != "" ]] ||
-        die "The engine does not answer as it should: $reply$(cat "$errors")"
-    case "$(jq -r .action <<<"$screen")" in
-        screen) ui_screen "$screen" ;;
-        quit) jq -r .message <<<"$screen"; exit 0 ;;
-        abort) die "$(jq -r .error <<<"$screen")" ;;
-        *) die "The engine asks for an action this command does not know: $(jq -r .action <<<"$screen")" ;;
-    esac
+	request=$(jq -cn --arg state "$state" --arg button "$button" --argjson answers "$answers" \
+		'{data: {type: "steps", attributes: {state: $state, button: $button, answers: $answers}}}')
+	# What the engine says on its error output is not part of its answer: shown only when the answer is not one
+	reply=$(engine POST /setups/steps --data=- <<<"$request" 2>"$errors")
+	screen=$(jq -c '.data.attributes' 2>/dev/null <<<"$reply") && [[ "$(jq -r '.action // empty' <<<"$screen")" != "" ]] ||
+		die "The engine does not answer as it should: $reply$(cat "$errors")"
+	case "$(jq -r .action <<<"$screen")" in
+	screen) ui_screen "$screen" ;;
+	quit)
+		jq -r .message <<<"$screen"
+		exit 0
+		;;
+	abort) die "$(jq -r .error <<<"$screen")" ;;
+	*) die "The engine asks for an action this command does not know: $(jq -r .action <<<"$screen")" ;;
+	esac
 done
