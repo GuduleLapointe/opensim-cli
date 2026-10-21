@@ -190,6 +190,11 @@ function outcome(array $results): int
 
 $args = array_slice($argv, 1);
 $command = array_shift($args) ?? '';
+// The user the instances run as, empty when the install has none (the commands then run as whoever calls them)
+if ($command === 'system-user') {
+    echo \OpenSim\Config\Layout::resolve()->systemUser(), "\n";
+    exit(0);
+}
 $simulators = in_array('--simulators', $args, true) || in_array('--sims', $args, true);
 $words = array_values(array_filter($args, static fn(string $a): bool => $a === '' || $a[0] !== '-'));
 $engine = OpenSim::environment(new CliReporter(in_array(strtolower((string) getenv('DEBUG')), ['yes', 'true', '1'], true)));

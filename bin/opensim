@@ -25,4 +25,18 @@ USAGE
 command=${1:-}
 [[ -n "$command" && -x "$libexec/$command" ]] || usage
 shift
+
+# The files of the grids belong to the user the instances run as: the command runs as that user (checked now, before any question)
+system_user=$(set --; source "$here/../src/lib/common" && run system-user 2>/dev/null)
+if [[ -n "$system_user" && "$(id -un)" != "$system_user" ]]; then
+	self=$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")
+	if ((EUID == 0)); then
+		exec runuser -u "$system_user" -- "$self" "$command" "$@"
+	fi
+	sudo -u "$system_user" true 2>/dev/null || {
+		echo "opensim $command needs sudo to act as $system_user, which owns the files of the grids: run it with sudo, or as a user allowed to run commands as $system_user" >&2
+		exit 1
+	}
+	exec sudo -H -u "$system_user" "$self" "$command" "$@"
+fi
 exec "$libexec/$command" "$@"

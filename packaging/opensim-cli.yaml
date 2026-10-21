@@ -43,3 +43,5 @@ contents:
   - src: /usr/share/opensim-cli/bin/opensim
     dst: /usr/bin/opensim
     type: symlink
+  - src: share/bash-completion/opensim
+    dst: /usr/share/bash-completion/completions/opensim

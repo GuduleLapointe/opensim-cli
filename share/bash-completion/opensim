@@ -1,0 +1,42 @@
+# bash completion for the opensim command
+
+# The etc folders to look in (OPENSIM_ETC_DIRS overrides them)
+_opensim_etc()
+{
+  echo ${OPENSIM_ETC_DIRS:-/etc/opensim}
+}
+
+# The enabled instances (the links of robust.d and opensim.d), in lower case
+_opensim_instances()
+{
+  local etc file
+  for etc in $(_opensim_etc); do
+    for file in "$etc"/*.d/*.ini; do
+      [ -e "$file" ] && basename "$file" .ini
+    done
+  done | tr '[:upper:]' '[:lower:]' | sort -u
+}
+
+_opensim()
+{
+  local cur
+  COMPREPLY=()
+  cur=${COMP_WORDS[COMP_CWORD]}
+  if [ "$COMP_CWORD" = 1 ]; then
+    COMPREPLY=( $(compgen -W "setup status start stop restart console screen install-dotnet" -- "$cur") )
+    return
+  fi
+  case ${COMP_WORDS[1]} in
+    start)
+      COMPREPLY=( $(compgen -W "$(_opensim_instances) --simulators" -- "$cur") )
+      ;;
+    stop|restart)
+      COMPREPLY=( $(compgen -W "$([ "$COMP_CWORD" = 2 ] && echo now) $(_opensim_instances) --simulators" -- "$cur") )
+      ;;
+    console|screen)
+      [ "$COMP_CWORD" = 2 ] && COMPREPLY=( $(compgen -W "$(_opensim_instances)" -- "$cur") )
+      ;;
+  esac
+}
+
+complete -F _opensim opensim
