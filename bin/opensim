@@ -39,4 +39,13 @@ if [[ -n "$system_user" && "$(id -un)" != "$system_user" ]]; then
 	}
 	exec sudo -H -u "$system_user" "$self" "$command" "$@"
 fi
+# No system user to act as, and the place of the grids cannot be written by this one: the engine's setup works as root
+if ((EUID != 0)) && [[ "$command" == setup && "$(set --; source "$here/../src/lib/common" && run needs-root 2>/dev/null)" == yes ]]; then
+	self=$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")
+	sudo true 2>/dev/null || {
+		echo "opensim setup needs sudo to write in the folders of the grids: run it with sudo, or as a user allowed to" >&2
+		exit 1
+	}
+	exec sudo -E "$self" "$command" "$@"
+fi
 exec "$libexec/$command" "$@"
