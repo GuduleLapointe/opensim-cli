@@ -191,14 +191,13 @@ function outcome(array $results): int
 $args = array_slice($argv, 1);
 $command = array_shift($args) ?? '';
 // The user the instances run as, empty when the install has none (the commands then run as whoever calls them)
-// Whether the folder the setup writes in (the nearest one that exists) can be written by whoever calls: if not, the setup needs root
-if ($command === 'needs-root') {
-    $existing = \OpenSim\Config\Layout::resolve()->etcRoot();
-    while ($existing !== dirname($existing) && !file_exists($existing)) {
-        $existing = dirname($existing);
-    }
-    echo is_dir($existing) && is_writable($existing) ? "no\n" : "yes\n";
+// Whether this machine has no system layout yet (the engine's SystemLayout), and making it (as root)
+if ($command === 'needs-layout') {
+    echo \OpenSim\Provisioning\SystemLayout::needed(\OpenSim\Config\Layout::resolve()) ? "yes\n" : "no\n";
     exit(0);
+}
+if ($command === 'prepare-layout') {
+    exit((new \OpenSim\Provisioning\SystemLayout(new StdUi()))->prepare(\OpenSim\Config\Layout::resolve()) ? 0 : 1);
 }
 if ($command === 'system-user') {
     echo \OpenSim\Config\Layout::resolve()->systemUser(), "\n";

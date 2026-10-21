@@ -31,3 +31,12 @@ function test_without_sudo_rights_it_stops_at_once_and_says_so() {
     assert_equals 1 "$status"
     assert_contains "needs sudo to act as nobody" "$output"
 }
+
+function test_a_machine_without_the_layout_gets_it_from_the_engine_through_sudo() {
+    printf '#!/bin/sh\necho "sudo $*"\n' >"$WORK/bin/sudo"
+    chmod +x "$WORK/bin/sudo"
+    local output
+    output=$(PATH="$WORK/bin:$PATH" OPENSIM_SYSTEM_USER= OPENSIM_ETC_ROOT=/nonexistent-zz/etc "$OPENSIM" setup 2>&1 </dev/null)
+
+    assert_contains "prepare-layout" "$output"
+}

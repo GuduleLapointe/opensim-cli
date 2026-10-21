@@ -26,6 +26,20 @@ command=${1:-}
 [[ -n "$command" && -x "$libexec/$command" ]] || usage
 shift
 
+# A machine without the system layout gets it from the engine (the account, the folders, opensim.conf), which needs root
+if [[ "$command" == setup && "$(set --; source "$here/../src/lib/common" && run needs-layout 2>/dev/null)" == yes ]]; then
+	sudo=
+	if ((EUID != 0)); then
+		sudo="sudo -E env PATH=$PATH"
+		sudo true 2>/dev/null || {
+			echo "opensim setup needs sudo to make the system layout: run it with sudo, or as a user allowed to" >&2
+			exit 1
+		}
+	fi
+	# shellcheck disable=SC2086
+	$sudo php "$here/../src/php/run.php" prepare-layout || exit 1
+fi
+
 # The files of the grids belong to the user the instances run as: the command runs as that user (checked now, before any question)
 system_user=$(set --; source "$here/../src/lib/common" && run system-user 2>/dev/null)
 if [[ -n "$system_user" && "$(id -un)" != "$system_user" ]]; then
@@ -38,14 +52,5 @@ if [[ -n "$system_user" && "$(id -un)" != "$system_user" ]]; then
 		exit 1
 	}
 	exec sudo -H -u "$system_user" "$self" "$command" "$@"
-fi
-# No system user to act as, and the place of the grids cannot be written by this one: the engine's setup works as root
-if ((EUID != 0)) && [[ "$command" == setup && "$(set --; source "$here/../src/lib/common" && run needs-root 2>/dev/null)" == yes ]]; then
-	self=$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")
-	sudo true 2>/dev/null || {
-		echo "opensim setup needs sudo to write in the folders of the grids: run it with sudo, or as a user allowed to" >&2
-		exit 1
-	}
-	exec sudo -E "$self" "$command" "$@"
 fi
 exec "$libexec/$command" "$@"
