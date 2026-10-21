@@ -2,12 +2,16 @@
 
 The command line to set up and manage OpenSimulator, in bash. It asks the questions and shows the results; the rules and the work are the [OpenSim engine](https://github.com/GuduleLapointe/opensim-engine)'s. It needs nothing else of the OpenSim ecosystem: not the core, not the helpers, not the modules.
 
-**Under construction.** The quick setup asks what to set up and a few answers, checks them with the engine and shows the setup they stand for. Besides it: status, start, stop, restart, console and install-dotnet. `dev/build.sh` makes the Debian package and the zip into `dist/`.
+**Under construction.** The quick setup asks what to set up and a few answers, checks them with the engine and shows the setup they stand for. Besides it: status, start, stop, restart, console and install-dotnet. `dev/build.sh` makes the Debian package and the zip into `dist/`. The package installs the bash completion (`share/bash-completion/opensim`).
 
 ## Requirements
 
 - bash 5, `jq`, `php-cli` and `dialog` (`brew install dialog`, `apt install dialog`)
 - the dependencies, installed with `composer install`: [bash-tools](https://github.com/magicoli/bash-tools) and the [engine](https://github.com/GuduleLapointe/opensim-engine) (the packages link them in `vendor/magicoli/` instead)
+
+## Rights
+
+The files of the grids belong to the user the instances run as (`SystemUser` of `opensim.conf`). When it is not you, every command runs as that user with `sudo -u`, checked before the first question: you need to be allowed to.
 
 ## Features
 
