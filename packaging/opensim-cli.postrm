@@ -1,0 +1,16 @@
+#!/bin/sh
+# postrm of opensim-cli: on purge, forgets the owner of the folders and removes the cache. Config, data, logs and the opensim
+# account are kept.
+set -e
+
+if [ "$1" = "purge" ]; then
+    rm -rf /var/cache/opensim
+    for dir in /etc/opensim /etc/opensim/grids /etc/opensim/presets /etc/opensim/opensim.d /etc/opensim/robust.d \
+        /var/lib/opensim /var/lib/opensim/data /var/log/opensim /var/cache/opensim; do
+        if dpkg-statoverride --list "$dir" >/dev/null; then
+            dpkg-statoverride --remove "$dir"
+        fi
+    done
+fi
+
+exit 0
