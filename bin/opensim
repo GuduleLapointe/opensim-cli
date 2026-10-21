@@ -40,6 +40,19 @@ if [[ "$command" == setup && "$(set --; source "$here/../src/lib/common" && run 
 	$sudo php "$here/../src/php/run.php" prepare-layout || exit 1
 fi
 
+# The runtime is installed for the whole system: as root, whoever calls
+if [[ "$command" == install-dotnet ]]; then
+	if ((EUID != 0)); then
+		self=$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")
+		sudo true 2>/dev/null || {
+			echo "opensim install-dotnet needs sudo: run it with sudo, or as a user allowed to" >&2
+			exit 1
+		}
+		exec sudo -E env "PATH=$PATH" "$self" "$command" "$@"
+	fi
+	exec "$libexec/$command" "$@"
+fi
+
 # The files of the grids belong to the user the instances run as: the command runs as that user (checked now, before any question)
 system_user=$(set --; source "$here/../src/lib/common" && run system-user 2>/dev/null)
 if [[ -n "$system_user" && "$(id -un)" != "$system_user" ]]; then

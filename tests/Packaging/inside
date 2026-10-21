@@ -7,7 +7,7 @@ apt-get update -qq >/dev/null
 apt-get install -y -qq mariadb-server sudo dialog jq screen procps curl unzip ca-certificates /tmp/debs/*.deb >/tmp/apt.log 2>&1 || { tail -20 /tmp/apt.log; exit 1; }
 
 check "the packages are installed" "dpkg -s opensim-cli opensim-engine opensim-helpers opensim-0.9.3.0 >/dev/null"
-check "nothing of the layout exists yet" "[ ! -e /etc/opensim ] && ! getent passwd opensim >/dev/null"
+check "the packages made the layout: account, folders, opensim.conf" "getent passwd opensim >/dev/null && [ -d /etc/opensim/grids ] && grep -q 'SystemUser = opensim' /etc/opensim/opensim.conf"
 
 # A database server, and a user with sudo
 mkdir -p /run/mysqld && chown mysql:mysql /run/mysqld
@@ -19,7 +19,7 @@ echo 'tester ALL=(ALL) NOPASSWD:ALL' >/etc/sudoers.d/tester
 echo 'Defaults env_keep += "FE_TTY FE_INPUT_FD OPENSIM_SETUP_UI DEBUG"' >/etc/sudoers.d/keep
 
 # The dotnet runtime, as root, by the command
-opensim install-dotnet -y >/tmp/dotnet.log 2>&1
+opensim install-dotnet -y >/tmp/dotnet.log 2>&1 || true; echo "--- dotnet log"; tail -15 /tmp/dotnet.log; echo "--- end"
 check "install-dotnet installs a runtime" "command -v dotnet >/dev/null || [ -x /usr/local/bin/dotnet ]"
 
 # The setup, answered as a script would: grid, avatar and password, the defaults for the rest
