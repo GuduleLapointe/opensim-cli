@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Run inside the clean machine by tests/Packaging/check.
+status=0
+check() { if eval "$2"; then echo "   ok: $1"; else echo "   FAILED: $1"; status=1; fi; }
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq >/dev/null
+apt-get install -y -qq mariadb-server sudo dialog jq screen procps curl unzip ca-certificates /tmp/debs/*.deb >/tmp/apt.log 2>&1 || { tail -20 /tmp/apt.log; exit 1; }
+
+check "the packages are installed" "dpkg -s opensim-cli opensim-engine opensim-helpers opensim-0.9.3.0 >/dev/null"
+check "nothing of the layout exists yet" "[ ! -e /etc/opensim ] && ! getent passwd opensim >/dev/null"
+
+# A database server, and a user with sudo
+mkdir -p /run/mysqld && chown mysql:mysql /run/mysqld
+(mysqld_safe >/tmp/mysql.log 2>&1 &)
+for i in $(seq 30); do mysqladmin ping >/dev/null 2>&1 && break; sleep 1; done
+mysql -e "CREATE USER 'admin'@'localhost' IDENTIFIED BY 'adminpw'; GRANT ALL ON *.* TO 'admin'@'localhost' WITH GRANT OPTION;"
+useradd -m -s /bin/bash tester
+echo 'tester ALL=(ALL) NOPASSWD:ALL' >/etc/sudoers.d/tester
+echo 'Defaults env_keep += "FE_TTY FE_INPUT_FD OPENSIM_SETUP_UI DEBUG"' >/etc/sudoers.d/keep
+
+# The dotnet runtime, as root, by the command
+opensim install-dotnet -y >/tmp/dotnet.log 2>&1
+check "install-dotnet installs a runtime" "command -v dotnet >/dev/null || [ -x /usr/local/bin/dotnet ]"
+
+# The setup, answered as a script would: grid, avatar and password, the defaults for the rest
+ANSWERS=$'1\n3\nTest User\n4\ntestpass123\n5\ntestpass123\n\n\n\n\n\n\n\n\n5\nadmin\n6\nadminpw\n\n\n\n'
+echo "$ANSWERS" | su tester -c 'FE_INPUT_FD=0 FE_TTY=/dev/null OPENSIM_SETUP_UI=plain opensim setup' >/tmp/setup.log 2>&1
+echo "--- setup log"; tail -60 /tmp/setup.log; echo "--- end"
+
+check "the account opensim exists" "getent passwd opensim >/dev/null"
+check "the folders of the layout belong to it" "[ \"\$(stat -c %U /etc/opensim/grids)\" = opensim ] && [ \"\$(stat -c %U /var/lib/opensim/data)\" = opensim ]"
+check "opensim.conf names it" "grep -q 'SystemUser = opensim' /etc/opensim/opensim.conf"
+check "a grid was written" "ls /etc/opensim/grids/*/Robust*.ini >/dev/null 2>&1"
+check "Robust runs as opensim" "ps -eo user,args | grep -i '[R]obust' | grep -q '^opensim'"
+check "the status says so" "su tester -c 'opensim status' | grep -q ' up'"
+exit $status

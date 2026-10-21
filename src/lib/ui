@@ -331,6 +331,9 @@ ui_screen() {
     esac
     # What the engine is about to do takes time: said before it is asked
     _u_text=$(jq -r '.wait // empty' <<<"$_u_screen")
-    [[ $button == next && -n "$_u_text" ]] && printf '%s\n' "$_u_text" >"$([[ $FE_UI == dialog ]] && echo "$FE_SCREEN" || echo /dev/stderr)"
+    if [[ $button == next && -n "$_u_text" ]]; then
+        # The error output as it is: /dev/stderr cannot be reopened by a user who is not the one who owns the terminal (sudo -u)
+        if [[ $FE_UI == dialog ]]; then printf '%s\n' "$_u_text" >"$FE_SCREEN"; else printf '%s\n' "$_u_text" >&2; fi
+    fi
     return 0
 }
