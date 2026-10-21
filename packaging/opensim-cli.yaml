@@ -19,23 +19,13 @@ homepage: https://github.com/GuduleLapointe/opensim-cli
 license: AGPL-3.0-or-later
 
 depends:
-  - adduser
   - bash
   - bash-tools
-  - default-mysql-client | virtual-mysql-client
   - dialog
   - jq
   - opensim-engine
   - opensim-rest-php
   - php-cli (>= 2:8.2)
-  - procps
-  - screen
-  - sudo
-recommends:
-  - default-mysql-server | virtual-mysql-server
-  - opensim-helpers
-suggests:
-  - opensim
 
 contents:
   - src: build/opensim-cli
@@ -55,7 +45,3 @@ contents:
     type: symlink
   - src: share/bash-completion/opensim
     dst: /usr/share/bash-completion/completions/opensim
-
-scripts:
-  postinstall: packaging/opensim-cli.postinst
-  postremove: packaging/opensim-cli.postrm
