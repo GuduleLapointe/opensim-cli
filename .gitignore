@@ -10,3 +10,7 @@ vendor/
 !.env.example
 tests/.env
 .bashunit/
+/build/
+/dist/
+.lerd.yaml
+.node-version
