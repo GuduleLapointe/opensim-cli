@@ -43,6 +43,6 @@
         "bin/opensim"
     ],
     "require-dev": {
-        "magicoli/build-tools": "^0.1.2"
+        "magicoli/build-tools": "^0.1.6"
     }
 }
