@@ -33,7 +33,7 @@ OPENSIM_PACKAGES=(opensim-cli opensim-helpers)
 
 OPENSIM_KIT_DEBS=${OPENSIM_KIT_DEBS:-}
 ASSUME_YES=${ASSUME_YES:-}
-RUN_SETUP=${RUN_SETUP:-yes}
+RUN_SETUP=${RUN_SETUP:-}
 
 # === Define helper functions first ===
 
@@ -101,6 +101,26 @@ install_packages() {
 # The .NET runtime OpenSimulator needs, and libgdiplus, by the command of the tools (it knows what each system has)
 dotnet_runtime() {
 	as_root "$1" install-dotnet -y
+}
+
+# Installation completed, give proper instructions and run opensim setup if RUN_SETUP=yes
+end_installation() {
+	local basedir
+
+	if [ -n "${clone:-}" ]; then
+		basedir=$clone
+	else
+		basedir=$(cd $(dirname $(realpath $(which opensim)))/.. && pwd)
+	fi
+	cat <<-INSTALL_COMPLETED
+		Installation completed, execute:
+		    source ${basedir}/share/bash-completion/opensim
+		    $basedir/bin/opensim setup
+	INSTALL_COMPLETED
+	if [[ "${RUN_SETUP:-}" == "yes" ]]; then
+		$basedir/bin/opensim setup || die Error $? while executing opensim setup
+	fi
+	exit 0
 }
 
 # === Actual business logic starts here ===
@@ -192,8 +212,7 @@ if [ -n "$clone" -a -z "$OPENSIM_KIT_DEBS" ]; then
 		as_root "$clone/bin/opensim" install-dotnet -y
 	fi
 
-	# start_setup "$clone/libexec/setup-frontend.sh" "$clone/bin/opensim" setup
-	"$clone/bin/opensim" setup
+	end_installation
 else
 	###
 	# Install debian packages, from apt repository and/or local .deb files
@@ -234,10 +253,8 @@ else
 
 	if ! command -v dotnet | grep -q .; then
 		say "Install dotnet"
-		as_root opensim install-dotnet -y
+		as_root opensim install-dotnet -y || end $? Error installing dotNet
 	fi
 
-	say "OpenSim setup"
-	opensim setup
-	# start_setup /usr/share/opensim-tools/libexec/setup-frontend.sh opensim setup
+	end_installation
 fi
