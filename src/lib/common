@@ -10,8 +10,8 @@ unset _here
 
 _helpers="$CLI_ROOT/vendor/magicoli/bash-tools/bin/bash-helpers"
 [[ -f "$_helpers" ]] || {
-    echo "${0##*/}: bash-tools is not installed (composer install in $CLI_ROOT)" >&2
-    exit 1
+	echo "${0##*/}: bash-tools is not installed (composer install in $CLI_ROOT)" >&2
+	exit 1
 }
 # shellcheck disable=SC1090
 source "$_helpers"
@@ -23,13 +23,13 @@ require jq
 
 # The rc file, for any script of the ecosystem: it may fix the PATH (which php)
 if [[ -r "$(dirname "$OPENSIM_API")/../lib/rc-helpers" ]]; then
-    # shellcheck disable=SC1091
-    source "$(dirname "$OPENSIM_API")/../lib/rc-helpers" && read_rc
+	# shellcheck disable=SC1091
+	source "$(dirname "$OPENSIM_API")/../lib/rc-helpers" && read_rc
 fi
 
 # Ask the engine: engine POST /setups/quick --data=- < body
 engine() {
-    "$OPENSIM_API" "$@"
+	"$OPENSIM_API" "$@"
 }
 
 # Act on this machine through the engine (src/php/run.php): run COMMAND [ARGUMENTS]; its status is the one of the command

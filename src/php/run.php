@@ -152,9 +152,18 @@ function render(Status $status): string
     $rows = [['INSTANCE', 'TYPE', 'PID', 'USER', '%CPU', '%MEM', 'RSS']];
     foreach ($status->instances as $item) {
         $p = $item->process();
-        $rows[] = $p === null
-            ? [$item->name(), $item->type(), '[down]']
-            : [$item->name(), $item->type(), (string) $p->pid, $p->user, sprintf('%.1f', $p->cpu), sprintf('%.1f', $p->memory), (string) $p->rss];
+        $rows[] =
+            $p === null
+                ? [$item->name(), $item->type(), '[down]']
+                : [
+                    $item->name(),
+                    $item->type(),
+                    (string) $p->pid,
+                    $p->user,
+                    sprintf('%.1f', $p->cpu),
+                    sprintf('%.1f', $p->memory),
+                    (string) $p->rss,
+                ];
     }
     $widths = [];
     foreach ($rows as $row) {
@@ -197,7 +206,7 @@ if ($command === 'needs-layout') {
     exit(0);
 }
 if ($command === 'prepare-layout') {
-    exit((new \OpenSim\Provisioning\SystemLayout(new StdUi()))->prepare(\OpenSim\Config\Layout::resolve()) ? 0 : 1);
+    exit(new \OpenSim\Provisioning\SystemLayout(new StdUi())->prepare(\OpenSim\Config\Layout::resolve()) ? 0 : 1);
 }
 if ($command === 'system-user') {
     echo \OpenSim\Config\Layout::resolve()->systemUser(), "\n";
@@ -205,7 +214,9 @@ if ($command === 'system-user') {
 }
 $simulators = in_array('--simulators', $args, true) || in_array('--sims', $args, true);
 $words = array_values(array_filter($args, static fn(string $a): bool => $a === '' || $a[0] !== '-'));
-$engine = OpenSim::environment(new CliReporter(in_array(strtolower((string) getenv('DEBUG')), ['yes', 'true', '1'], true)));
+$engine = OpenSim::environment(
+    new CliReporter(in_array(strtolower((string) getenv('DEBUG')), ['yes', 'true', '1'], true)),
+);
 $now = ($words[0] ?? '') === 'now';
 $targets = $now ? array_slice($words, 1) : $words;
 
@@ -223,7 +234,9 @@ switch ($command) {
         $name = $words[0] ?? '';
         $instance = $name === '' ? null : OpenSim::instance($engine, $name);
         if ($instance === null) {
-            $engine->reporter->error($name === '' ? 'usage: opensim console <instance>' : "no ini file found for $name");
+            $engine->reporter->error(
+                $name === '' ? 'usage: opensim console <instance>' : "no ini file found for $name",
+            );
             exit(1);
         }
         $screen = $engine->consoles->screen($instance->name());
@@ -263,7 +276,7 @@ switch ($command) {
             exit(2);
         }
         // Every question gets its default: the command asks nothing
-        exit((new DotnetInstaller(new StdUi()))->install((int) $major) ? 0 : 1);
+        exit(new DotnetInstaller(new StdUi())->install((int) $major) ? 0 : 1);
 }
 fwrite(STDERR, "opensim: unknown command $command\n");
 exit(2);
