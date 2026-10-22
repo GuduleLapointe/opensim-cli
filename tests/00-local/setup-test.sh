@@ -4,7 +4,7 @@
 #
 # Run with: composer test
 
-OPENSIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/bin/opensim"
+OPENSIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bin/opensim"
 
 # The screens of the engine, as it gives them
 MENU='{"data":{"attributes":{"action":"screen","kind":"menu","name":"type","title":"OpenSim setup","text":"","notice":"","items":[{"key":"grid","label":"Grid","note":""},{"key":"standalone","label":"Standalone","note":""},{"key":"speculoos","label":"Speculoos","note":"not implemented"}],"value":"","buttons":{"next":"OK","back":"Quit"},"state":"s1"}}}'
@@ -17,7 +17,7 @@ ABORT='{"data":{"attributes":{"action":"abort","error":"Cancelled"}}}'
 function set_up() {
 	WORK="$(mktemp -d)"
 	export HOME="$WORK"
-	export OPENSIM_API="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/fixtures/opensim-api"
+	export OPENSIM_API="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/fixtures/opensim-api"
 	export ENGINE_REPLIES="$WORK/replies" ENGINE_LOG="$WORK/requests"
 	mkdir -p "$ENGINE_REPLIES"
 }

@@ -3,7 +3,7 @@
 #
 # Run with: composer test
 
-OPENSIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/bin/opensim"
+OPENSIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bin/opensim"
 
 function set_up() {
     WORK="$(mktemp -d)"

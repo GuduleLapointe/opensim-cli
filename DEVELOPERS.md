@@ -27,9 +27,10 @@ composer test
 
 For an existing clone, initialize Bashunit with
 `git submodule update --init --recursive`. The submodule is pinned to release
-0.50.1. `composer test` runs the `full` Bashunit suite configured in
-`.bashunitrc`: local application tests, package build, compatibility tests,
-then final container cleanup. Run only compatibility tests with
+0.50.1. `composer test` runs Bashunit's default `tests/` discovery. The numeric
+test directories put local application tests and the package build before the
+`Compatibility` directory; the cleanup test runs last. Run only compatibility
+tests with
 `./lib/bashunit/bashunit tests/Compatibility`; that targeted run leaves its
 containers available for inspection.
 

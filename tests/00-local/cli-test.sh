@@ -5,7 +5,7 @@
 #
 # These tests confirm the current state:
 # - Locally (macOS): ./bin/opensim commands work
-# - On Linux via containers: quick-install.sh works, apt packages install, opensim setup may fail
+# - Compatibility containers are tested separately after the local tests and package build
 
 OPENSIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bin/opensim"
 
