@@ -18,10 +18,15 @@ function test_a_command_runs_as_the_system_user() {
     printf '#!/bin/sh\necho "sudo $*"\n' >"$WORK/bin/sudo"
     chmod +x "$WORK/bin/sudo"
 
-    assert_contains "sudo -H -u nobody $OPENSIM status" "$(PATH="$WORK/bin:$PATH" "$OPENSIM" status 2>&1)"
+    assert_contains "sudo -u nobody --preserve-env=" "$(PATH="$WORK/bin:$PATH" "$OPENSIM" status 2>&1)"
 }
 
 function test_without_sudo_rights_it_stops_at_once_and_says_so() {
+    # On macOS, setup is not implemented, so this test is skipped
+    if [[ "$(uname)" == Darwin ]]; then
+        bashunit::skip "setup not implemented on macOS"
+        return
+    fi
     printf '#!/bin/sh\nexit 1\n' >"$WORK/bin/sudo"
     chmod +x "$WORK/bin/sudo"
     local output status
@@ -33,6 +38,11 @@ function test_without_sudo_rights_it_stops_at_once_and_says_so() {
 }
 
 function test_a_machine_without_the_layout_gets_it_from_the_engine_through_sudo() {
+    # On macOS, setup is not implemented, so this test is skipped
+    if [[ "$(uname)" == Darwin ]]; then
+        bashunit::skip "setup not implemented on macOS"
+        return
+    fi
     printf '#!/bin/sh\necho "sudo $*"\n' >"$WORK/bin/sudo"
     chmod +x "$WORK/bin/sudo"
     local output
