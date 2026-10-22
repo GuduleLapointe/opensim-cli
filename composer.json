@@ -43,7 +43,7 @@
         "bin/opensim"
     ],
     "scripts": {
-        "test": "./lib/bashunit/bashunit"
+        "test": "./lib/bashunit/bashunit tests/elevation-test.sh tests/setup-test.sh tests/Integration/cli-test.sh tests/Packaging/build-test.sh tests/Compatibility"
     },
     "require-dev": {
         "magicoli/build-tools": "^0.1.6"

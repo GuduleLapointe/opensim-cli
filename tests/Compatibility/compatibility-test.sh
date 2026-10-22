@@ -55,7 +55,10 @@ compat_run_step() {
 	case "$step" in
 		created)
 			if ! compat_select_engine; then status=127; else
-				compat_command create --name "$name" --label org.opensim-cli.compatibility=1 \
+				compat_command create --name "$name" \
+					--label org.opensim-cli.compatibility=1 \
+					--label "org.opensim-cli.compatibility.platform=$platform" \
+					--label "org.opensim-cli.compatibility.run=$COMPAT_RUN_ID" \
 					--memory="${MEMORY:-400m}" "$image" sh -c 'while :; do sleep 3600; done' >/dev/null || status=$?
 			fi
 			assert_equals 0 "$status" "$platform create"
@@ -91,19 +94,23 @@ compat_run_step() {
 			assert_equals 0 "$status" "$platform read version"
 			assert_equals "$expected_version" "$actual" "$platform version"
 			;;
-		removed)
-			if [[ "${COMPAT_KEEP:-0}" == 1 ]]; then
-				bashunit::skip "$platform kept for inspection"
-				return
-			fi
-			if ! compat_select_engine || ! compat_command inspect "$name" >/dev/null 2>&1; then
-				bashunit::skip "$platform already absent"
-				return
-			fi
-			compat_command rm --force "$name" >/dev/null || status=$?
-			assert_equals 0 "$status" "$platform remove"
-			;;
 	esac
+}
+
+compat_cleanup_platform() {
+	local platform=$1 name status=0
+	name=$(compat_name "$platform")
+	bashunit::set_test_title "$platform cleanup"
+	if [[ "${COMPAT_KEEP:-0}" == 1 ]]; then
+		bashunit::skip 'containers kept for inspection'
+		return
+	fi
+	if ! compat_select_engine || ! compat_command inspect "$name" >/dev/null 2>&1; then
+		bashunit::skip "$platform not created"
+		return
+	fi
+	compat_command rm --force "$name" >/dev/null || status=$?
+	assert_equals 0 "$status" "$platform cleanup"
 }
 
 function test_00_compatibility_gate() {
@@ -124,7 +131,7 @@ compat_register_platform_tests() {
 	local platform=$1 image=$2 expected_id=$3 expected_version=$4 order=$5 safe fn step_index step definition
 	safe=${platform//[^a-zA-Z0-9_]/_}
 	step_index=0
-	for step in created started running ready id version removed; do
+	for step in created started running ready id version; do
 		step_index=$((step_index + 1))
 		fn=$(printf 'test_%02d_%s_%02d_%s' "$order" "$safe" "$step_index" "$step")
 		printf -v definition 'function %s() { compat_run_step %q %q %q %q %q; }' \
@@ -134,9 +141,23 @@ compat_register_platform_tests() {
 }
 
 compat_platform_order=0
+compat_platforms=()
 while read -r compat_platform compat_image compat_id compat_version; do
 	[[ -z "$compat_platform" || "$compat_platform" == \#* ]] && continue
 	[[ "$compat_platform" =~ ^[a-zA-Z0-9._-]+$ ]] || { printf 'Invalid platform key: %s\n' "$compat_platform" >&2; continue; }
 	compat_platform_order=$((compat_platform_order + 1))
+	compat_platforms[${#compat_platforms[@]}]=$compat_platform
 	compat_register_platform_tests "$compat_platform" "$compat_image" "$compat_id" "$compat_version" "$compat_platform_order"
 done <"$COMPAT_PLATFORMS_FILE"
+
+# Cleanup tests are declared after every platform test so containers remain
+# available in Podman Desktop throughout the full compatibility matrix.
+compat_cleanup_order=0
+for compat_platform in "${compat_platforms[@]}"; do
+	compat_cleanup_order=$((compat_cleanup_order + 1))
+	compat_safe=${compat_platform//[^a-zA-Z0-9_]/_}
+	compat_fn=$(printf 'test_99_%02d_%s_cleanup' "$compat_cleanup_order" "$compat_safe")
+	printf -v compat_definition 'function %s() { compat_cleanup_platform %q; }' \
+		"$compat_fn" "$compat_platform"
+	eval "$compat_definition"
+done
