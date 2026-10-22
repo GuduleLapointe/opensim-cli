@@ -251,7 +251,7 @@ switch ($command) {
             $engine->reporter->error("{$instance->name()} is not running");
             exit(1);
         }
-        $engine->reporter->info("remote console of {$instance->name()}, Ctrl-D to leave it running");
+        $engine->reporter->info("Connection to {$instance->uri()}, Ctrl-D to exit the console safely");
         while (true) {
             echo $session->prompt !== '' ? $session->prompt : '> ';
             $line = fgets(STDIN);
