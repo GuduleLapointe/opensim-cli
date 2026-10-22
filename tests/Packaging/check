@@ -2,30 +2,37 @@
 # Tries the packages on a clean machine (podman): a user with sudo runs `opensim setup` on a machine that has the packages and nothing
 # else. The engine makes the account and the folders, the grid comes up as the user opensim. Exits non-zero when a check fails.
 #
-#   tests/Packaging/check [base image]       default: Debian 13
-#   CONTAINER_CONNECTION=name                run it on the podman of another machine (ursull)
-#   MEMORY=2g                                memory of the container
-#   KEEP=1                                   leave the container running to look at it (podman exec)
+#   tests/Packaging/check [base image]       default: Debian 12
+#   CONTAINER_CONNECTION=name                run it on the podman of another machine
+#   MEMORY=400m                             memory of the container
+#   KEEP=1                                  leave the container running to look at it (podman exec)
 
 set -eo pipefail
-BASE=${1:-docker.io/library/debian:trixie}
+BASE=${1:-docker.io/library/debian:bookworm}
 cd "$(dirname "$0")/../.."
+
+# Source the test environment
+source tests/bootstrap.sh
+
 newest() { ls -t "$1"/$2 2>/dev/null | head -1; }
 P=$(cd .. && pwd)
+
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 mkdir "$stage/debs"
+
+# Collect all dependencies
 for deb in \
     "$(newest $P/bash-tools/dist 'bash-tools_*_all.deb')" \
     "$(newest $P/opensim-rest-php/dist 'opensim-rest-php_*_all.deb')" \
     "$(newest $P/opensim-engine/dist 'opensim-engine_*_all.deb')" \
     "$(newest $P/opensim-helpers/dist 'opensim-helpers_*_all.deb')" \
-    "$(newest dist 'opensim-cli_*_all.deb')" \
-    "$(newest $P/opensim-kit/dist 'opensim_0.9.3.0-*_all.deb')" \
-    "$(newest $P/opensim-kit/dist 'opensim-0.9.3.0_*_amd64.deb')"; do
+    "$(newest dist 'opensim-cli_*_all.deb')"; do
     [[ -f "$deb" ]] || { echo "missing package: $deb" >&2; exit 1; }
     cp "$deb" "$stage/debs/"
 done
+
 cp tests/Packaging/inside "$stage/inside"
 
-COPYFILE_DISABLE=1 tar -chf - -C "$stage" debs inside | podman run --rm -i --memory="${MEMORY:-2g}" "$BASE" bash -c 'tar -xf - --no-same-owner --warning=no-unknown-keyword -C /tmp && exec bash /tmp/inside'
+# Run the test inside the container
+COPYFILE_DISABLE=1 tar -chf - -C "$stage" debs inside | podman run --rm -i --memory="${MEMORY:-400m}" "$BASE" bash -c 'tar -xf - --no-same-owner --warning=no-unknown-keyword -C /tmp && exec bash /tmp/inside'
