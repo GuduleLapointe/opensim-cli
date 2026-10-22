@@ -29,9 +29,9 @@ For an existing clone, initialize Bashunit with
 `git submodule update --init --recursive`. The submodule is pinned to release
 0.50.1. `composer test` runs Bashunit's default `tests/` discovery. The numeric
 test directories put local application tests and the package build before the
-`Compatibility` directory; the cleanup test runs last. Run only compatibility
+`Deploy` directory; the cleanup test runs last. Run only deployment
 tests with
-`./lib/bashunit/bashunit tests/Compatibility`; that targeted run leaves its
+`./lib/bashunit/bashunit tests/20-Deploy`; that targeted run leaves its
 containers available for inspection.
 
 The person is a file of answers (`FE_INPUT_FD`); dialog is a fake that logs its arguments and answers from a file, as in the kit.
