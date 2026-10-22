@@ -1,0 +1,3 @@
+# The wrapper tree controls the full-suite stages without changing the Bashunit distribution.
+BASHUNIT_DEFAULT_PATH=tests/Ordered
+BASHUNIT_BOOTSTRAP=tests/bootstrap.sh
