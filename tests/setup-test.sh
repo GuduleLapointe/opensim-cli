@@ -2,7 +2,7 @@
 # opensim setup, with a stand-in for the engine (tests/fixtures/opensim-api) that replays screens: the loop draws a screen, sends it back
 # filled with the button pressed, and does the action it gets. What the screens say is the engine's business, tested there.
 #
-# Run with: tests/lib/bashunit tests/
+# Run with: composer test
 
 OPENSIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/bin/opensim"
 

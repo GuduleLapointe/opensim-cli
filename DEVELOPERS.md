@@ -4,6 +4,7 @@
 
 - `bin/opensim`: the dispatcher, `opensim COMMAND`; the commands are the executables of `libexec/`
 - `libexec/setup`: the quick setup
+- `lib/bashunit`: Bashunit test runner, pinned as a Git submodule
 - `src/lib/common`: what the commands share (bash-tools and the engine from `vendor/magicoli/`, the rc file); `src/lib/ui`: the questions (`ui_menu`, `ui_form`), dialog or plain, ported from `libexec/setup-frontend.sh` of the kit with the same conventions (`OPENSIM_SETUP_UI`, `FE_TTY`, `FE_INPUT_FD`, `FE_SCREEN`, Back and Quit)
 - `tests/`: bashunit tests, with a stand-in for the engine (`tests/fixtures/opensim-api`)
 
@@ -19,9 +20,14 @@
 ## Tests
 
 ```bash
+git clone --recurse-submodules https://github.com/GuduleLapointe/opensim-cli.git
 composer install
-tests/lib/bashunit tests/
+composer test
 ```
+
+For an existing clone, initialize Bashunit with
+`git submodule update --init --recursive`. The submodule is pinned to release 0.50.1. Run only the
+compatibility suite with `./lib/bashunit tests/Compatibility`.
 
 The person is a file of answers (`FE_INPUT_FD`); dialog is a fake that logs its arguments and answers from a file, as in the kit.
 

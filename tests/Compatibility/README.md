@@ -3,15 +3,15 @@
 Run the tests through Bashunit, using its normal recursive test discovery:
 
 ```sh
-./tests/lib/bashunit
-./tests/lib/bashunit tests/Compatibility
+composer test
+./lib/bashunit tests/Compatibility
 ```
 
 The first command runs the full suite; the second runs only the compatibility
-tests. The project `.bashunitrc` uses ordered wrappers for local tests, package
-build, then compatibility; wrappers source the existing test files. Bashunit
-loads `tests/bootstrap.sh` for both commands, keeping environment setup in one
-place.
+tests. `composer test` invokes the Bashunit submodule under `lib/bashunit`. The
+project `.bashunitrc` uses ordered wrappers for local tests, package build, then
+compatibility; wrappers source the existing test files. Bashunit loads
+`tests/bootstrap.sh` for both commands, keeping environment setup in one place.
 
 The platform matrix lives in `platforms.tsv`: one row per platform, with its
 container image and expected `/etc/os-release` ID and version. Add a row there

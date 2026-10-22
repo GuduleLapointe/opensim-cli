@@ -1,0 +1,3 @@
+[submodule "bashunit"]
+	path = lib/bashunit
+	url = https://github.com/TypedDevs/bashunit.git

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Integration tests for opensim-cli
 #
-# Run with: tests/lib/bashunit tests/
+# Run with: composer test
 #
 # These tests confirm the current state:
 # - Locally (macOS): ./bin/opensim commands work

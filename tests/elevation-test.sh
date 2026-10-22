@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The commands run as the user the instances run as (SystemUser), checked before any question; sudo is a stand-in.
 #
-# Run with: tests/lib/bashunit tests/
+# Run with: composer test
 
 OPENSIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/bin/opensim"
 

@@ -8,5 +8,6 @@
 /.lerd.yaml
 /DEVELOPERS.md
 /dev
+/lib/bashunit
 /packaging
 /tests

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build test for opensim-cli
 #
-# Run with: tests/lib/bashunit tests/
+# Run with: composer test
 #
 # Confirms that dev/build.sh works and produces valid packages
 
