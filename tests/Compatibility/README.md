@@ -1,27 +1,53 @@
 # Compatibility tests
 
-Run the tests through Bashunit, using its normal recursive test discovery:
+Run the full test suite through the project test command:
 
 ```sh
 composer test
+```
+
+It runs local application tests, then the package build, then compatibility,
+stopping before a dependent phase when an earlier phase fails. Containers are
+removed by the final cleanup phase, after all test groups have finished. The
+full suite invokes Bashunit separately for each phase so their dependency order
+is explicit.
+
+To run only compatibility tests:
+
+```sh
 ./lib/bashunit/bashunit tests/Compatibility
 ```
 
-The first command runs the full suite in local, build, then compatibility
-order; the second runs only the compatibility tests. `composer test` invokes
-the Bashunit executable from its submodule under `lib/bashunit`. A direct run
-without paths discovers all files below `tests/`. Bashunit loads
-`tests/bootstrap.sh` for both commands, keeping environment setup in one place.
+`composer test` invokes the Bashunit executable from its submodule under
+`lib/bashunit`. A direct run without paths discovers all files below `tests/`.
+Bashunit loads `tests/bootstrap.sh` for each invocation, keeping environment
+setup in one place.
 
-The platform matrix lives in `platforms.tsv`: one row per platform, with its
-container image and expected `/etc/os-release` ID and version. Add a row there
-to repeat this same suite on another platform. Set `COMPAT_PLATFORMS_FILE` to
-use a different matrix file.
+Each platform has its own Bashunit file, so it can also be selected directly:
+
+```sh
+./lib/bashunit/bashunit tests/Compatibility/debian-12-test.sh
+./lib/bashunit/bashunit tests/Compatibility/debian-13-test.sh
+./lib/bashunit/bashunit tests/Compatibility/ubuntu-24.04-test.sh
+./lib/bashunit/bashunit tests/Compatibility/ubuntu-26.04-test.sh
+```
+
+A targeted run leaves its container running for inspection. The full suite's
+cleanup runs only after the local, build, and compatibility groups have all
+finished. `COMPAT_KEEP=1` skips that final cleanup.
+
+The platform data lives in `platforms.tsv`: one row per platform, with its
+container image and expected `/etc/os-release` ID and version. A platform also
+has a corresponding `*-test.sh` entry point that declares the shared tests from
+`compatibility-test-helpers.sh`. Add both to extend the matrix. Set
+`COMPAT_PLATFORMS_FILE` to use a different data file with the same platform
+keys.
 
 Bashunit reports each operation as a separate test, grouped by platform:
 create, start, check that the container is running, check shell readiness, and
 verify the operating system ID and version. Containers stay running while the
-rest of the matrix is tested, then each is removed in a final cleanup test.
+rest of the matrix is tested, then each is removed by the final full-suite
+cleanup test in `tests/zz-cleanup-test.sh`.
 They are labelled with the platform and run ID in Podman Desktop. Titles stay
 short (for example, `debian-12 created`). If local tests or the build failed,
 the compatibility gate skips container work. If a platform's creation or
