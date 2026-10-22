@@ -27,10 +27,11 @@ composer test
 
 For an existing clone, initialize Bashunit with
 `git submodule update --init --recursive`. The submodule is pinned to release
-0.50.1. `composer test` is the ordered full-suite entry point: local application
-tests, package build, compatibility tests, then final container cleanup. Run
-only compatibility tests with `./lib/bashunit/bashunit tests/Compatibility`;
-that targeted run leaves its containers available for inspection.
+0.50.1. `composer test` runs the `full` Bashunit suite configured in
+`.bashunitrc`: local application tests, package build, compatibility tests,
+then final container cleanup. Run only compatibility tests with
+`./lib/bashunit/bashunit tests/Compatibility`; that targeted run leaves its
+containers available for inspection.
 
 The person is a file of answers (`FE_INPUT_FD`); dialog is a fake that logs its arguments and answers from a file, as in the kit.
 

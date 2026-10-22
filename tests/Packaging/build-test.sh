@@ -16,6 +16,11 @@ function tear_down() {
 }
 
 function test_build_sh_produces_deb_and_zip() {
+	if [[ -s "${FAILURES_OUTPUT_PATH:-}" ]]; then
+		bashunit::skip 'local application tests failed'
+		return
+	fi
+
 	cd "$OPENSIM_ROOT"
 	local output status
 

@@ -1,3 +1,6 @@
 # Discover the test files under the project's test directory.
 BASHUNIT_DEFAULT_PATH=tests
 BASHUNIT_BOOTSTRAP=tests/bootstrap.sh
+
+[suite:full]
+paths = tests/elevation-test.sh tests/setup-test.sh tests/Integration/cli-test.sh tests/Packaging/build-test.sh tests/Compatibility tests/zz-cleanup-test.sh

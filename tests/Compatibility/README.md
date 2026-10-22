@@ -6,11 +6,12 @@ Run the full test suite through the project test command:
 composer test
 ```
 
-It runs local application tests, then the package build, then compatibility,
-stopping before a dependent phase when an earlier phase fails. Containers are
-removed by the final cleanup phase, after all test groups have finished. The
-full suite invokes Bashunit separately for each phase so their dependency order
-is explicit.
+It runs local application tests, then the package build, then compatibility.
+Bashunit marks dependent build and compatibility tests as skipped when an
+earlier check fails. Containers are removed by the final cleanup phase, after
+all test groups have finished. The full suite is one Bashunit run using the
+ordered `full` named suite in `.bashunitrc`; platform files remain grouped by
+operating system.
 
 To run only compatibility tests:
 
