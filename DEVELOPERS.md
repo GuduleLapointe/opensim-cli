@@ -24,3 +24,54 @@ tests/lib/bashunit tests/
 ```
 
 The person is a file of answers (`FE_INPUT_FD`); dialog is a fake that logs its arguments and answers from a file, as in the kit.
+
+## Commit message format
+
+```
+type (scope): short subject
+
+- detail
+- detail
+
+Optional additional context.
+```
+
+- **type**: lowercase, no trailing period, type of change (e.g. `feature`, `fix`, `update`, `refactor`, `test`, `doc`)
+- **scope**: area of the change — e.g. `api`, `lsl`, `build`, `tests`, `config`
+- **subject**: imperative, lowercase, no trailing period
+- **details**: bullet list with `-`, one item per logical change
+- Omit details for trivial single-change commits
+- Prefix with `(untested)` when the change has not been verified yet; reword after a successful test
+
+## Version releases
+
+Tag: 1.2.3 (no v prefix).
+
+Changelog:
+
+```
+### 1.2.3 Main change if applicable
+- new ...
+- new ...
+- fix ...
+- update ...
+```
+
+Commit message and tag message strictly identical to changelog, with the version prefixed with "v" (needed by some parsing tools)
+
+```
+v1.2.3 Main change if applicable
+- new ...
+- new ...
+- fix ...
+- update ...
+```
+
+- **subject** first line begins exactly with "v" + the version number to allow automated workflows and maintenance scripts. An option description of the main change might be added if relevant
+- **details** a list of the main changes since the previous version release commit
+- create a version release only when the version is fully tested and approved: bumping the version number in files does not mean the version must be released yet
+- Be concise, full explanation can be found in git history
+- Omit small patches and fixes, focus on essential features
+- Make sure to update all relevant files (.version, README.md, composer.json... ) and update CHANGELOG.md with the exact same description
+- Replace `dev-dev` requires with released constraints (e.g. `^1.0`) and run `composer update` so that `composer.lock` no longer points to local paths, otherwise the release cannot be installed on another machine. Switch back to `dev-dev` after the release
+- after commit, add a tag named with the bare version number ("1.2.3"), with the exact same message as the commit (starting with "v1.2.3")
