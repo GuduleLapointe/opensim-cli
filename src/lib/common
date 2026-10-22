@@ -34,5 +34,51 @@ engine() {
 
 # Act on this machine through the engine (src/php/run.php): run COMMAND [ARGUMENTS]; its status is the one of the command
 run() {
-    php "$CLI_ROOT/src/php/run.php" "$@"
+	php "$CLI_ROOT/src/php/run.php" "$@"
+}
+
+say() { printf '%s\n' "$*"; }
+debug_log() {
+	[ -n "${DEBUG}" ] || return 0
+	[ "$DEBUG" = "yes" ] || return 0
+	say "$PGM: [DEBUG] $*" >&2
+}
+error() {
+	say "$PGM: [ERROR] $*" >&2
+}
+die() {
+	error "$*"
+	exit 1
+}
+
+# A question for the person at the terminal, even when this script comes from a pipe; yes when nobody can answer
+ask() {
+	[[ -n "$ASSUME_YES" ]] && return 0
+	[[ -r /dev/tty ]] || return 0
+	local answer
+	read -r -p "$1 [Y/n] " answer </dev/tty
+	[[ ! $answer =~ ^[Nn] ]]
+}
+
+as_root() {
+	if [[ $(id -u) -eq 0 ]]; then
+		"$@"
+	elif command -v sudo >/dev/null 2>&1; then
+		sudo --preserve-env=${PRESERVE_ENV:-} "$@"
+	else
+		die "this needs administrator rights: run it as root, or install sudo"
+	fi
+}
+
+as_system_user() {
+	system_user=${system_user:-}
+	if [[ -z "$system_user" || "$(id -un)" == "$system_user" ]]; then
+		"$@"
+	# elif [[ $(id -u) -eq 0 ]]; then
+	# 	runuser -u "$system_user" -- "$@"
+	elif command -v sudo >/dev/null 2>&1; then
+		sudo -u ${system_user} --preserve-env=${PRESERVE_ENV:-} "$@"
+	else
+		die "this needs administrator rights: run it as root, or install sudo"
+	fi
 }

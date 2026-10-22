@@ -5,9 +5,9 @@ set -e
 here=$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 libexec=$(cd "$here/../libexec" && pwd)
 
-usage() {
-	cat >&2 <<USAGE
-usage: opensim COMMAND [ARGUMENTS]
+COMMANDOPTS=setup,status,start,stop,restart,console,screen,install-dotnet
+HELP=$(
+	cat <<USAGE
 
   setup           make a grid, a standalone or a simulator that joins a grid
   status          the instances of this machine, running or not
@@ -16,54 +16,58 @@ usage: opensim COMMAND [ARGUMENTS]
   restart         stop, then start grids and simulators
   console|screen  attach to the console of a running instance
   install-dotnet  install the .NET runtime OpenSimulator needs
-
-Type 'opensim COMMAND --help' for the help of a command.
 USAGE
-	exit 2
-}
+)
+export PRESERVE_ENV=PATH,CONTAINER_CONNECTION,DEFAULT_OWNER_NAME,DEFAULT_OWNER_PASSWORD,DOTNET_SYSTEM_NET_DISABLEIPV6,OPENSIM_DB_ADMIN_PASS,OPENSIM_DB_ADMIN_USER,OPENSIM_DB_HOST,OPENSIM_DB_NAME,OPENSIM_DB_PASS,OPENSIM_DB_PORT,OPENSIM_DB_USER,OPENSIM_KIT_DEBS
 
-command=${1:-}
-[[ -n "$command" && -x "$libexec/$command" ]] || usage
-shift
+# $COMMAND and other runtime values are detected by lib/common
+. "$here/../src/lib/common" || die could not source opensim common helpers
 
-# A machine without the system layout gets it from the engine (the account, the folders, opensim.conf), which needs root
-if [[ "$command" == setup && "$(set --; source "$here/../src/lib/common" && run needs-layout 2>/dev/null)" == yes ]]; then
-	sudo=
-	if ((EUID != 0)); then
-		sudo="sudo -E env PATH=$PATH"
-		sudo true 2>/dev/null || {
-			echo "opensim setup needs sudo to make the system layout: run it with sudo, or as a user allowed to" >&2
-			exit 1
-		}
+system_user=$(run system-user 2>/dev/null)
+debug_log system_user $system_user
+
+case ${COMMAND:-} in
+'')
+	help
+	end
+	;;
+
+setup)
+	# A machine without the system layout gets it from the engine (the account, the folders, opensim.conf), which needs root
+	if [[ "$(run needs-layout 2>/dev/null)" == "yes" ]]; then
+		os=$(uname -s)
+		case $os in
+		Linux)
+			debug_log prepare-layout as root
+			as_root php "$here/../src/php/run.php" prepare-layout || exit 1
+			;;
+		Darwin)
+			end $COMMAND not implemented for macOS
+			;;
+		*)
+			end 1 $os operating system not supported
+			;;
+		esac
+	else
+		debug_log "prepare-layout not needed"
 	fi
-	# shellcheck disable=SC2086
-	$sudo php "$here/../src/php/run.php" prepare-layout || exit 1
-fi
+	# "$libexec/$COMMAND" "$@"
+	as_system_user "$libexec/$COMMAND" "$@"
+	# as_root "$libexec/$COMMAND" "$@"
+	;;
 
-# The runtime is installed for the whole system: as root, whoever calls
-if [[ "$command" == install-dotnet ]]; then
-	if ((EUID != 0)); then
-		self=$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")
-		sudo true 2>/dev/null || {
-			echo "opensim install-dotnet needs sudo: run it with sudo, or as a user allowed to" >&2
-			exit 1
-		}
-		exec sudo -E env "PATH=$PATH" "$self" "$command" "$@"
-	fi
-	exec "$libexec/$command" "$@"
-fi
+install-dotnet)
+	log install-dotnet as root
+	# The runtime is installed for the whole system: as root, whoever calls
+	as_root "$libexec/$COMMAND" "$@"
+	;;
 
-# The files of the grids belong to the user the instances run as: the command runs as that user (checked now, before any question)
-system_user=$(set --; source "$here/../src/lib/common" && run system-user 2>/dev/null)
-if [[ -n "$system_user" && "$(id -un)" != "$system_user" ]]; then
-	self=$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")
-	if ((EUID == 0)); then
-		exec runuser -u "$system_user" -- "$self" "$command" "$@"
+*)
+	if [ -e "$libexec/$COMMAND" ]; then
+		as_system_user "$libexec/$COMMAND" "$@"
+		# as_root "$libexec/$COMMAND" "$@"
+	else
+		die "Unrecognized command $COMMAND"
 	fi
-	sudo -u "$system_user" true 2>/dev/null || {
-		echo "opensim $command needs sudo to act as $system_user, which owns the files of the grids: run it with sudo, or as a user allowed to run commands as $system_user" >&2
-		exit 1
-	}
-	exec sudo -H -u "$system_user" "$self" "$command" "$@"
-fi
-exec "$libexec/$command" "$@"
+	;;
+esac
