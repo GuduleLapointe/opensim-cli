@@ -4,7 +4,7 @@ Run the tests through Bashunit, using its normal recursive test discovery:
 
 ```sh
 composer test
-./lib/bashunit tests/Compatibility
+./lib/bashunit/bashunit tests/Compatibility
 ```
 
 The first command runs the full suite; the second runs only the compatibility

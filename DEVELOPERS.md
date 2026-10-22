@@ -27,7 +27,7 @@ composer test
 
 For an existing clone, initialize Bashunit with
 `git submodule update --init --recursive`. The submodule is pinned to release 0.50.1. Run only the
-compatibility suite with `./lib/bashunit tests/Compatibility`.
+compatibility suite with `./lib/bashunit/bashunit tests/Compatibility`.
 
 The person is a file of answers (`FE_INPUT_FD`); dialog is a fake that logs its arguments and answers from a file, as in the kit.
 
