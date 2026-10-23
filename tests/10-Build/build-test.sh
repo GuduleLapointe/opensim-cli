@@ -68,4 +68,5 @@ function test_build_sh_produces_deb_and_zip() {
 	assert_exec "test -s '$DEPLOY_STAGE/debs/opensim-cli_'*.deb" "opensim-cli package is staged for deployment"
 	assert_exec "test \$(find '$DEPLOY_STAGE/debs' -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ') -eq 5" "all five current packages are staged"
 	(cd "$DEPLOY_STAGE/debs" && shasum -a 256 ./*.deb >SHA256SUMS)
+	(cd "$DEPLOY_STAGE" && shasum -a 256 quick-install.sh debs/*.deb >MANIFEST)
 }

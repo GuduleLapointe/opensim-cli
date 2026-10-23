@@ -224,7 +224,7 @@ else
 		debs=$(cd "$OPENSIM_KIT_DEBS" && pwd) || die "$OPENSIM_KIT_DEBS is not a folder"
 		say "Use local packages from ${OPENSIM_KIT_DEBS}"
 		cd $debs
-		if ! ls -rt | tail -1 | grep Packages.gz; then
+		if [[ ! -s Packages.gz ]] || find . -maxdepth 1 -type f -name '*.deb' -newer Packages.gz -print -quit | grep -q .; then
 			say "A scan of the directory is required"
 			if ! command -v dpkg-scanpackages >/dev/null 2>&1; then
 				install_packages dpkg-dev ||

@@ -6,7 +6,7 @@
 #
 #   CONTAINER_CONNECTION  the podman connection every container of the tests goes to, the machine that has the CPU and not the
 #                         one the tests are started from. Every podman command that follows goes there, whoever runs it.
-#   MEMORY                the memory of the container of a scenario
+#   MEMORY                optional memory limit for a container; unset means no limit
 #
 # The .env of the project, then tests/.env, are read; what the caller already set (MEMORY=1g tests/Packaging/run) is kept.
 #

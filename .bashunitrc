@@ -1,3 +1,4 @@
 # Discover the test files under the project's test directory.
 BASHUNIT_DEFAULT_PATH=tests
 BASHUNIT_BOOTSTRAP=tests/bootstrap.sh
+BASHUNIT_PROFILE=true

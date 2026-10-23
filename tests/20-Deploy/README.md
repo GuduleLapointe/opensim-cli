@@ -45,42 +45,47 @@ has a corresponding `*-test.sh` entry point that declares the shared tests from
 `DEPLOY_PLATFORMS_FILE` to use a different data file with the same platform
 keys.
 
-Bashunit reports each operation as a separate test, grouped by platform:
-prepare the shared package volume, create and start the container, check that it
-is running and shell-ready, and verify the operating system ID and version.
-The build stage verifies the current source hashes for `bash-tools`,
-`opensim-engine`, `opensim-rest-php`,
-and `opensim-helpers`, then stages those packages beside the fresh
-`opensim-cli` package under Bashunit's temporary run directory. The five `.deb`
-files and `quick-install.sh` are streamed once into a named volume on the
-container host, then that volume is mounted into each platform. This also shares
-`Packages.gz`: `quick-install.sh` rebuilds it only when a package is newer. A
-checksum test confirms the initial copy before the script runs with
-`OPENSIM_KIT_DEBS` pointing to the shared package directory. The suite stops
-after verifying that the five packages are installed; it does not run
-`opensim setup` or exercise service commands.
+Bashunit reports each operation as a separate test. A shared `package builder`
+group first creates or reuses a named package volume and a visible, persistent
+Debian 12 builder container. It installs `dpkg-scanpackages` once, streams the
+current package set only when its manifest changes, and creates `Packages.gz`
+in the shared volume. Each enabled platform then creates and starts its own
+container, checks readiness and OS identity, verifies the shared package set,
+and runs `quick-install.sh` with `OPENSIM_KIT_DEBS`. The five `.deb` files are
+staged by the local build after verifying the current source hashes for
+`bash-tools`, `opensim-engine`, `opensim-rest-php`, and `opensim-helpers`. The
+suite stops after verifying installation; it does not run `opensim setup` or
+exercise service commands. `BASHUNIT_PROFILE=true` reports slowest tests at the
+end, including duration for a failed long-running step.
 
-Containers stay running while the rest of the matrix is tested, then each is
-removed by the final full-suite cleanup test in `tests/zz-cleanup-test.sh`,
-which also removes the shared package volume. They are labelled with the
-platform and run ID in Podman Desktop. Titles stay
-short (for example, `debian-12 created`). If local tests or the build failed,
-the deployment gate skips container work. If a platform's creation or
-startup fails, its dependent checks are skipped and the other platforms
+Platform containers stay running while the matrix runs, then the final
+full-suite cleanup removes them. The package builder and its named volume stay
+running and persist across test runs so subsequent runs avoid re-indexing and
+package transfer. They can be inspected in Podman Desktop and removed manually
+when no longer needed: `podman rm -f opensim-cli-test-build` followed by
+`podman volume rm opensim-cli-test-packages` (use the configured engine and
+Podman connection). Platform containers are labelled by OS and run ID. Titles
+stay short (for example, `debian-12 created`). If local tests, the build, or
+shared builder setup fails, dependent deployment tests are skipped. A platform
+creation or installation failure skips only that platform; other platforms
 continue.
 
 Podman is preferred and Docker is the fallback. To select an engine explicitly,
 set `DEPLOY_ENGINE=podman` or `DEPLOY_ENGINE=docker` in the caller's environment
-or `tests/.env`. `CONTAINER_CONNECTION` and `MEMORY` are also read by the
-existing `tests/bootstrap.sh`.
+or `tests/.env`. `CONTAINER_CONNECTION` and optional `MEMORY` are also read by the
+existing `tests/bootstrap.sh`. No memory cap is applied unless `MEMORY` is set
+in the environment or `tests/.env`. `DEPLOY_QUICK_INSTALL_TIMEOUT` sets the
+per-platform install timeout in seconds (default: 900).
 
-Set `DEPLOY_KEEP=1` in `tests/.env` to leave containers running after the
-deployment matrix finishes. By default, the final cleanup tests remove them.
-During the matrix, you can inspect, stop, or remove a container in Podman
+Set `DEPLOY_KEEP=1` in `tests/.env` to leave platform containers running after
+the deployment matrix finishes. By default, the final cleanup tests remove
+only those platform containers. During the matrix, you can inspect, stop, or remove a container in Podman
 Desktop; if you stop or remove one, later checks for that platform will report
 the resulting state.
 
-The default matrix covers Debian 12 and 13, plus Ubuntu 24.04 and 26.04. All
-tests use the shared `tests/bootstrap.sh` environment initialization.
+The enabled matrix is listed in `platforms.tsv` (currently Debian 12 and
+Ubuntu 26.04); commented rows are not discovered or reported as tests. Add a
+platform row and matching test file to extend it. All tests use the shared
+`tests/bootstrap.sh` environment initialization.
 
 Source-clone mode remains out of scope.
