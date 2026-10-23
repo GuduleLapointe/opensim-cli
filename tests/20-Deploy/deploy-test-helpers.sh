@@ -264,7 +264,14 @@ deploy_run_step() {
 				return
 			fi
 			mkdir -p "$log_dir" || status=$?
-			if ((status == 0)); then deploy_command exec "$name" sh -c 'timeout --signal=TERM --kill-after=30s "'"${DEPLOY_QUICK_INSTALL_TIMEOUT}"'s" env DEBUG=yes OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh --no-setup' >"$log_file" 2>&1 || status=$?; fi
+			if ((status == 0)); then
+				local container_log="/tmp/$name/quick-install.log"
+				deploy_command exec "$name" bash -c '
+					set -o pipefail
+					log_file=$1
+					timeout --signal=TERM --kill-after=30s "${2}s" env DEBUG=yes OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh --no-setup 2>&1 | tee "$log_file"
+				' bash "$container_log" "$DEPLOY_QUICK_INSTALL_TIMEOUT" >"$log_file" 2>&1 || status=$?
+			fi
 			if ((status == 124)); then printf '%s quick-install timed out after %ss (log: %s)\n' "$DEPLOY_PLATFORM" "$DEPLOY_QUICK_INSTALL_TIMEOUT" "$log_file" >&2; fi
 			if ((status != 0)); then
 				printf 'Full quick-install log: %s\n' "$log_file" >&2
