@@ -1,26 +1,35 @@
 #!/usr/bin/env bash
 
-# OpenSim Install script: gets this machine ready, then starts `opensim setup`, which asks about your grid.
+# OpenSim Install script: installs OpenSim and optionally starts `opensim setup`.
 #
 #   One command, from the web (Debian or Ubuntu):
-#     curl -fsSL https://raw.githubusercontent.com/GuduleLapointe/opensim-kit/refs/heads/master/setup.sh | sudo bash
+#     curl -fsSL https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/dev/quick-install.sh | sudo bash
 #
 #   Or from a clone of the repository:
-#     git clone https://github.com/GuduleLapointe/opensim-kit.git && cd opensim-kit && ./setup.sh
+#     git clone https://github.com/GuduleLapointe/opensim-cli.git && cd opensim-cli && ./quick-install.sh
 #
-#   Or with the packages only:  sudo apt install opensim-kit && opensim setup
+#   Or with the packages only:  sudo apt install opensim-cli opensim-helpers && opensim setup
 #
-# From the web it installs the packages of the Magiiic repository (opensim-kit and what it needs, the .NET runtime
-# included). From a clone it runs the tools of the clone: its PHP libraries come from composer.
+# From a clone it runs the tools of the clone; its PHP libraries come from Composer.
 #
-# Options:  -y, --yes   do not ask before installing
-#           --no-setup  prepare the machine, do not start `opensim setup`
-#           --step NAME run all steps, or only `opensim` or `dotnet`
+# Setup is not started unless requested with --setup or RUN_SETUP=yes.
+# Options:  -y, --yes             do not ask before installing
+#           --setup               run `opensim setup` after the full or OpenSim install
+#           --dependencies        install quick-install's own dependencies
+#           --mariadb | --mysql   install/configure the requested SQL server
+#           --dotnet              install the .NET runtime
+#           --opensim             install OpenSim packages (or prepare the clone)
 # Environment: OPENSIM_KIT_DEBS=folder  install the packages (*.deb) of that folder instead of the Magiiic repository
 
 set -euo pipefail
 
-for file in "${1:+$1/.env}" "${OPENSIM_RC:-${HOME:-}/.opensimrc}"; do
+INSTALLER_HOME=${HOME:-/root}
+if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != root ]] && command -v getent >/dev/null 2>&1; then
+	INSTALLER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+fi
+OPENSIM_RC_PATH=${OPENSIM_RC:-$INSTALLER_HOME/.opensimrc}
+
+for file in "${1:+$1/.env}" "$OPENSIM_RC_PATH"; do
 	# shellcheck disable=SC1090
 	[[ -n "$file" && -r "$file" ]] && source "$file"
 done
@@ -29,14 +38,17 @@ MAGIIIC_KEY=https://apt.magiiic.com/magiiic-packaging.asc
 MAGIIIC_REPOSITORY="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com stable main"
 # What the tools need on a machine that does not have the packages (a clone): the same as the package opensim-tools
 PHP_PACKAGES=(php-cli php-curl php-intl php-mbstring php-mysql php-xml)
-TOOL_PACKAGES=(ca-certificates curl git unzip screen sudo default-mysql-client)
 OPENSIM_PACKAGES=(opensim-cli opensim-helpers)
 
 OPENSIM_KIT_DEBS=${OPENSIM_KIT_DEBS:-}
 ASSUME_YES=${ASSUME_YES:-}
 RUN_SETUP=${RUN_SETUP:-}
 DPKG_CONFIGURED=no
-INSTALL_STEP=all
+APT_UPDATED=no
+PACKAGE_SOURCES_READY=no
+INSTALL_PHASE=all
+DATABASE_CHOICE=mariadb
+PHASE_SELECTED=no
 
 # === Define helper functions first ===
 
@@ -103,11 +115,18 @@ recover_dpkg_configuration() {
 	return 0
 }
 
+apt_update() {
+	if [[ "$APT_UPDATED" != yes ]]; then
+		as_root apt-get update -qq || return $?
+		APT_UPDATED=yes
+	fi
+}
+
 install_packages() {
 	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu (see INSTALLATION.md for the others)"
 	export DEBIAN_FRONTEND=noninteractive
 	recover_dpkg_configuration || return $?
-	as_root apt-get update -qq || return $?
+	apt_update || return $?
 	as_root apt-get install -y -qq "$@" || return $?
 }
 
@@ -121,9 +140,126 @@ database_server_installed() {
 	return 1
 }
 
-# The .NET runtime OpenSimulator needs, and libgdiplus, by the command of the tools (it knows what each system has)
-dotnet_runtime() {
-	as_root "$1" install-dotnet -y
+configure_package_sources() {
+	[[ "$PACKAGE_SOURCES_READY" == yes ]] && return 0
+	[[ $(uname -s) == Linux ]] || die "packages are for Debian and Ubuntu"
+	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu"
+	install_packages ca-certificates curl gpg openssl || return $?
+
+	if [[ -n "$OPENSIM_KIT_DEBS" ]]; then
+		local debs
+		debs=$(cd "$OPENSIM_KIT_DEBS" && pwd) || die "$OPENSIM_KIT_DEBS is not a folder"
+		say "Use local packages from $debs"
+		if [[ ! -s "$debs/Packages.gz" ]]; then
+			die "Packages.gz is missing from $debs; build the local package index first"
+		fi
+		if ! grep -Fq "file:$debs" /etc/apt/sources.list.d/magiiic.list 2>/dev/null; then
+			printf 'deb [trusted=yes] file:%s ./\n' "$debs" | as_root tee /etc/apt/sources.list.d/magiiic.list >/dev/null || return $?
+		fi
+	else
+		if [[ ! -f /etc/apt/sources.list.d/magiiic.list ]]; then
+			curl -fsSL "$MAGIIIC_KEY" | as_root gpg --dearmor --yes -o /usr/share/keyrings/magiiic-packaging.gpg || return $?
+			printf '%s\n' "$MAGIIIC_REPOSITORY" | as_root tee /etc/apt/sources.list.d/magiiic.list >/dev/null || return $?
+		fi
+	fi
+	APT_UPDATED=no
+	apt_update || return $?
+	PACKAGE_SOURCES_READY=yes
+}
+
+phase_dependencies() {
+	if [[ -n "$clone" ]]; then
+		if [[ $(uname -s) == Darwin ]]; then
+			command -v brew >/dev/null 2>&1 || die "Homebrew is needed on macOS: https://brew.sh"
+			for tool in php composer screen; do command -v "$tool" >/dev/null 2>&1 || brew install "$tool" || return $?; done
+		else
+			local missing=()
+			command -v php >/dev/null 2>&1 || missing+=("${PHP_PACKAGES[@]}")
+			command -v composer >/dev/null 2>&1 || missing+=(composer)
+			for tool in curl git unzip screen; do command -v "$tool" >/dev/null 2>&1 || missing+=("$tool"); done
+			command -v mysql >/dev/null 2>&1 || command -v mariadb >/dev/null 2>&1 || missing+=(default-mysql-client)
+			if ((${#missing[@]})); then
+				say "This machine needs: ${missing[*]}"
+				ask "Install them?" || die cancelled
+				install_packages "${missing[@]}" || return $?
+			fi
+		fi
+		php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || die "PHP 8.2 or newer is needed (this is $(php -r 'echo PHP_VERSION;'))"
+		if [[ ! -f "$clone/vendor/autoload.php" ]]; then
+			say "Installing the PHP libraries (composer)..."
+			(cd "$clone" && composer install --no-dev --no-interaction --prefer-dist) || return $?
+		fi
+	else
+		configure_package_sources || return $?
+	fi
+}
+
+opensim_rc_file() {
+	printf '%s\n' "$OPENSIM_RC_PATH"
+}
+
+save_database_credentials() {
+	local rc user_group tmp
+	rc=$(opensim_rc_file)
+	mkdir -p "$(dirname "$rc")" || return $?
+	tmp=$(mktemp "${rc}.XXXXXX") || return $?
+	if [[ -e "$rc" ]]; then
+		grep -Ev '^export OPENSIM_DB_(HOST|ADMIN_USER|ADMIN_PASS|USER|PASS)=' "$rc" >"$tmp" || true
+	fi
+	mv "$tmp" "$rc" || return $?
+	chmod 600 "$rc" || return $?
+	{
+		printf '\n# OpenSim database accounts, created by quick-install.sh\n'
+		printf 'export OPENSIM_DB_HOST=%q\n' "${OPENSIM_DB_HOST:-localhost}"
+		printf 'export OPENSIM_DB_ADMIN_USER=%q\n' "$OPENSIM_DB_ADMIN_USER"
+		printf 'export OPENSIM_DB_ADMIN_PASS=%q\n' "$OPENSIM_DB_ADMIN_PASS"
+		printf 'export OPENSIM_DB_USER=%q\n' "$OPENSIM_DB_USER"
+		printf 'export OPENSIM_DB_PASS=%q\n' "$OPENSIM_DB_PASS"
+	} >>"$rc" || return $?
+	if [[ -n "${SUDO_USER:-}" && ${SUDO_USER} != root ]]; then
+		user_group=$(id -gn "$SUDO_USER")
+		chown "$SUDO_USER:$user_group" "$rc" || return $?
+	fi
+}
+
+phase_database() {
+	[[ $(uname -s) == Linux ]] || die "SQL server installation is available on Debian and Ubuntu"
+		configure_package_sources || return $?
+	if database_server_installed; then
+		say "Keep the installed database server"
+	else
+		local server_package
+		case "$DATABASE_CHOICE" in
+		mariadb) server_package=mariadb-server ;;
+		mysql) server_package=mysql-server ;;
+		esac
+		install_packages "$server_package" || die "could not install $server_package"
+	fi
+	as_root service mariadb start 2>/dev/null || as_root service mysql start 2>/dev/null || die "could not start the SQL server"
+	command -v mysql >/dev/null 2>&1 || command -v mariadb >/dev/null 2>&1 || die "SQL client is unavailable after server installation"
+
+	local had_admin_pass=0 had_app_pass=0
+	[[ -n "${OPENSIM_DB_ADMIN_PASS:-}" ]] && had_admin_pass=1
+	[[ -n "${OPENSIM_DB_PASS:-}" ]] && had_app_pass=1
+	OPENSIM_DB_ADMIN_USER=${OPENSIM_DB_ADMIN_USER:-opensim_admin}
+	OPENSIM_DB_USER=${OPENSIM_DB_USER:-opensim}
+	[[ $OPENSIM_DB_ADMIN_USER =~ ^[a-zA-Z0-9_]+$ && $OPENSIM_DB_USER =~ ^[a-zA-Z0-9_]+$ ]] || die "SQL account names may contain only letters, digits, and underscores"
+	OPENSIM_DB_ADMIN_PASS=${OPENSIM_DB_ADMIN_PASS:-$(openssl rand -hex 32)}
+	OPENSIM_DB_PASS=${OPENSIM_DB_PASS:-$(openssl rand -hex 32)}
+	local admin_exists app_exists sql_client
+	sql_client=$(command -v mariadb || command -v mysql)
+	admin_exists=$(as_root "$sql_client" -Nse "SELECT COUNT(*) FROM mysql.user WHERE User='$OPENSIM_DB_ADMIN_USER' AND Host='localhost'" 2>/dev/null) || die "cannot access the local SQL server as administrator"
+	app_exists=$(as_root "$sql_client" -Nse "SELECT COUNT(*) FROM mysql.user WHERE User='$OPENSIM_DB_USER' AND Host='localhost'" 2>/dev/null) || die "cannot inspect SQL accounts"
+	[[ $admin_exists != 1 || $had_admin_pass == 1 ]] || die "SQL account $OPENSIM_DB_ADMIN_USER already exists; set OPENSIM_DB_ADMIN_PASS in ~/.opensimrc to preserve its password"
+	[[ $app_exists != 1 || $had_app_pass == 1 ]] || die "SQL account $OPENSIM_DB_USER already exists; set OPENSIM_DB_PASS in ~/.opensimrc to preserve its password"
+	if [[ $admin_exists != 1 || $app_exists != 1 ]]; then
+		{
+			[[ $admin_exists == 1 ]] || printf "CREATE USER '%s'@'localhost' IDENTIFIED BY '%s'; GRANT ALL PRIVILEGES ON *.* TO '%s'@'localhost' WITH GRANT OPTION;\n" "$OPENSIM_DB_ADMIN_USER" "$OPENSIM_DB_ADMIN_PASS" "$OPENSIM_DB_ADMIN_USER"
+			[[ $app_exists == 1 ]] || printf "CREATE USER '%s'@'localhost' IDENTIFIED BY '%s'; GRANT ALL PRIVILEGES ON *.* TO '%s'@'localhost';\n" "$OPENSIM_DB_USER" "$OPENSIM_DB_PASS" "$OPENSIM_DB_USER"
+			printf 'FLUSH PRIVILEGES;\n'
+		} | as_root "$sql_client" || die "could not create the OpenSim SQL accounts"
+	fi
+	save_database_credentials || return $?
 }
 
 # Installation completed, give proper instructions and run opensim setup if RUN_SETUP=yes
@@ -141,10 +277,36 @@ end_installation() {
 		    source ${basedir}/share/bash-completion/opensim
 		    $basedir/bin/opensim setup
 	INSTALL_COMPLETED
-	if [[ "${RUN_SETUP:-}" == "yes" ]]; then
+	if [[ "${RUN_SETUP:-}" =~ ^(yes|true|1)$ ]]; then
 		$basedir/bin/opensim setup || die Error $? while executing opensim setup
 	fi
 	exit 0
+}
+
+phase_dotnet() {
+	[[ $(uname -s) == Linux ]] || { say ".NET installation is only run on Linux"; return 0; }
+	recover_dpkg_configuration || die "could not complete package configuration"
+	if [[ -n "$clone" && -z "$OPENSIM_KIT_DEBS" ]]; then
+		[[ -f "$clone/vendor/autoload.php" ]] || phase_dependencies || return $?
+		as_root "$clone/bin/opensim" install-dotnet -y || return $?
+		return
+	fi
+	configure_package_sources || return $?
+	# The engine owns the runtime installer; its package does not install the CLI.
+	install_packages opensim-engine || die "could not install opensim-engine for the .NET installer"
+	as_root php -r 'require "/usr/share/opensim-engine/vendor/autoload.php"; $ui = new OpenSim\Provisioning\NullUi(true); $installer = new OpenSim\Runtime\DotnetInstaller($ui); exit($installer->install(8) ? 0 : 1);' || die "could not install the .NET runtime"
+}
+
+phase_opensim() {
+	if [[ -n "$clone" && -z "$OPENSIM_KIT_DEBS" ]]; then
+		say "Use OpenSim from clone $clone"
+		php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || die "PHP 8.2 or newer is needed"
+		[[ -f "$clone/vendor/autoload.php" ]] || (cd "$clone" && composer install --no-dev --no-interaction --prefer-dist)
+		end_installation
+	fi
+	configure_package_sources || return $?
+	install_packages "${OPENSIM_PACKAGES[@]}" || die "could not install OpenSim packages"
+	end_installation
 }
 
 # === Actual business logic starts here ===
@@ -159,13 +321,18 @@ while (($#)); do
 	shift
 	case "$argument" in
 	-y | --yes) ASSUME_YES=yes ;;
-	--no-setup) RUN_SETUP= ;;
-	--step)
-		(($#)) || die "--step needs one of: all, opensim, dotnet"
-		INSTALL_STEP=$1
-		shift
+	--setup) RUN_SETUP=yes ;;
+	--dependencies | --mariadb | --mysql | --dotnet | --opensim)
+		[[ "$PHASE_SELECTED" == no ]] || die "choose only one installation phase"
+		PHASE_SELECTED=yes
+		case "$argument" in
+		--dependencies) INSTALL_PHASE=dependencies ;;
+		--mariadb) INSTALL_PHASE=mariadb ; DATABASE_CHOICE=mariadb ;;
+		--mysql) INSTALL_PHASE=mysql ; DATABASE_CHOICE=mysql ;;
+		--dotnet) INSTALL_PHASE=dotnet ;;
+		--opensim) INSTALL_PHASE=opensim ;;
+		esac
 		;;
-	--step=*) INSTALL_STEP=${argument#*=} ;;
 	-h | --help)
 		sed -n '2,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 		exit 0
@@ -179,10 +346,11 @@ while (($#)); do
 		;;
 	esac
 done
-case "$INSTALL_STEP" in
-	all | opensim | dotnet) ;;
-	*) die "unknown step $INSTALL_STEP (choose all, opensim, or dotnet)" ;;
+case "$INSTALL_PHASE" in
+	all | dependencies | mariadb | mysql | dotnet | opensim) ;;
+	*) die "invalid installation phase $INSTALL_PHASE" ;;
 esac
+[[ "$INSTALL_PHASE" == all || "$INSTALL_PHASE" == opensim ]] || [[ -z "$RUN_SETUP" ]] || die "--setup is only valid for the full install or --opensim"
 
 # Check if in a clone of the repository
 here=
@@ -194,131 +362,19 @@ clone=
 [[ -n "$here" && -x "$here/bin/opensim" && -f "$here/composer.json" ]] && clone=$here
 log clone $clone
 
-case "$(uname -s)" in
-Linux | Darwin) ;;
-*) die "unsupported system $(uname -s)" ;;
-esac
+case "$(uname -s)" in Linux | Darwin) ;; *) die "unsupported system $(uname -s)" ;; esac
 
-if [ -n "$clone" -a -z "$OPENSIM_KIT_DEBS" ]; then
-	###
-	# A clone: its tools run from the folder, with the PHP libraries of composer
-	###
-	say "Install from the clone in $clone"
-	if [[ "$INSTALL_STEP" == opensim ]]; then
-		die "the opensim step installs Debian packages; this clone is already the OpenSim installation"
-	fi
-	if [[ "$INSTALL_STEP" == dotnet ]]; then
-		[[ -f "$clone/vendor/autoload.php" ]] || die "install the PHP libraries before selecting the dotnet step"
-		[[ $(uname -s) == Linux ]] || die "the dotnet step is only available on Linux"
-		recover_dpkg_configuration || die "could not complete package configuration"
-		as_root "$clone/bin/opensim" install-dotnet -y
-		exit 0
-	fi
-
-	os=$(uname -s)
-	case $os in
-	Darwin)
-		log Darwin detected
-		command -v brew >/dev/null 2>&1 || die "Homebrew is needed on macOS: https://brew.sh"
-		for tool in php composer screen; do
-			command -v "$tool" >/dev/null 2>&1 && continue
-			log Install $tool
-			brew install "$tool"
-		done
-		;;
-
-	Linux)
-		log Linux detected
-		missing=()
-		command -v php >/dev/null 2>&1 || missing+=("${PHP_PACKAGES[@]}")
-		command -v composer >/dev/null 2>&1 || missing+=(composer)
-		for tool in curl git unzip screen; do
-			command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
-		done
-		command -v mysql >/dev/null 2>&1 || command -v mariadb >/dev/null 2>&1 || missing+=(default-mysql-client)
-		if ((${#missing[@]})); then
-			say "This machine needs: ${missing[*]}"
-			ask "Install them?" || die "cancelled"
-			install_packages "${missing[@]}"
-		fi
-		;;
-	*)
-		die "$os operating system not supported"
-		;;
-	esac
-
-	php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || die "PHP 8.2 or newer is needed (this is $(php -r 'echo PHP_VERSION;'))"
-
-	if [[ ! -f "$clone/vendor/autoload.php" ]]; then
-		say "Installing the PHP libraries (composer)..."
-		(cd "$clone" && composer install --no-dev --no-interaction --prefer-dist)
-	fi
-
+case "$INSTALL_PHASE" in
+all)
+	phase_dependencies || die "quick-install dependencies failed"
 	if [[ $(uname -s) == Linux ]]; then
-		recover_dpkg_configuration || die "could not complete package configuration"
-		as_root "$clone/bin/opensim" install-dotnet -y
+		phase_database || die "database phase failed"
+		phase_dotnet || die ".NET phase failed"
 	fi
-
-	end_installation
-else
-	###
-	# Install debian packages, from apt repository and/or local .deb files
-	###
-	[[ $(uname -s) == Linux ]] || die "the packages are for Debian and Ubuntu: on macOS, clone the repository and run ./setup.sh from it"
-	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu (see INSTALLATION.md for the others)"
-
-	if [[ "$INSTALL_STEP" != dotnet && -n "${OPENSIM_KIT_DEBS:-}" ]]; then
-		debs=$(cd "$OPENSIM_KIT_DEBS" && pwd) || die "$OPENSIM_KIT_DEBS is not a folder"
-		say "Use local packages from ${OPENSIM_KIT_DEBS}"
-		cd $debs
-		if [[ ! -s Packages.gz ]] || find . -maxdepth 1 -type f -name '*.deb' -newer Packages.gz -print -quit | grep -q .; then
-			say "A scan of the directory is required"
-			if ! command -v dpkg-scanpackages >/dev/null 2>&1; then
-				install_packages dpkg-dev ||
-					die "no dpkg-scanpackages, could not install dpkg-dev"
-			fi
-			dpkg-scanpackages . /dev/null | gzip -9c >Packages.gz ||
-				die Directory scan failed $?
-		fi
-
-		if ! grep -q "^[^#]*\bfile:$debs\b" /etc/apt/sources.list.d/*.list 2>/dev/null; then
-			say "Add $debs folder to apt sources"
-			echo deb [trusted=yes] file:$debs ./ |
-				as_root tee -a /etc/apt/sources.list.d/magiiic.list
-		fi
-	fi
-
-	if [[ "$INSTALL_STEP" != dotnet && ! -f /etc/apt/sources.list.d/magiiic.list ]]; then
-		log "add official magiiic repository to apt sources"
-		install_packages ca-certificates curl gpg
-		curl -fsSL "$MAGIIIC_KEY" | as_root gpg --dearmor --yes -o /usr/share/keyrings/magiiic-packaging.gpg
-		printf '%s\n' "$MAGIIIC_REPOSITORY" | as_root tee /etc/apt/sources.list.d/magiiic.list >/dev/null
-	fi
-
-	if [[ "$INSTALL_STEP" != dotnet ]]; then
-		say "Install apt packages"
-		packages=("${OPENSIM_PACKAGES[@]}")
-		if database_server_installed; then
-			say "Keep the installed database server"
-		else
-			say "Install MariaDB as the default database server"
-			packages+=(mariadb-server)
-		fi
-		install_packages "${packages[@]}" || die error $?
-	fi
-
-	if [[ "$INSTALL_STEP" != opensim ]]; then
-		command -v opensim >/dev/null 2>&1 || die "install the OpenSim packages before selecting the dotnet step"
-		recover_dpkg_configuration || die "could not complete package configuration"
-	fi
-	if [[ "$INSTALL_STEP" != opensim ]]; then
-		say "Check .NET runtime"
-		as_root opensim install-dotnet -y || die Error $? installing dotNet
-	fi
-	if [[ "$INSTALL_STEP" != all ]]; then
-		say "$INSTALL_STEP step completed"
-		exit 0
-	fi
-
-	end_installation
-fi
+	phase_opensim
+	;;
+dependencies) phase_dependencies || die "quick-install dependencies failed" ;;
+mariadb | mysql) phase_database || die "database phase failed" ;;
+dotnet) phase_dotnet || die ".NET phase failed" ;;
+opensim) phase_opensim ;;
+esac
