@@ -34,6 +34,7 @@ OPENSIM_PACKAGES=(opensim-cli opensim-helpers)
 OPENSIM_KIT_DEBS=${OPENSIM_KIT_DEBS:-}
 ASSUME_YES=${ASSUME_YES:-}
 RUN_SETUP=${RUN_SETUP:-}
+DPKG_CONFIGURED=no
 
 # === Define helper functions first ===
 
@@ -94,6 +95,11 @@ start_setup() { # the library of the questions, then the command to run, which g
 install_packages() {
 	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu (see INSTALLATION.md for the others)"
 	export DEBIAN_FRONTEND=noninteractive
+	if [[ "$DPKG_CONFIGURED" != yes ]]; then
+		say "Complete any interrupted package configuration"
+		as_root dpkg --configure -a || die "could not complete package configuration"
+		DPKG_CONFIGURED=yes
+	fi
 	as_root apt-get update -qq
 	as_root apt-get install -y -qq "$@"
 }
