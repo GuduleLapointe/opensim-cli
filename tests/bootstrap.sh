@@ -21,6 +21,14 @@ fi
 
 __tests_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
+# Keep the caller's environment across ~/.opensimrc, which may define the same
+# settings. Command-line assignments must win over both rc and test .env files.
+declare -A __tests_caller_env=()
+while IFS='=' read -r __tests_name __tests_value; do
+	[[ "$__tests_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+	__tests_caller_env["$__tests_name"]=$__tests_value
+done < <(env)
+
 if [[ ! -f "$__tests_root/tests/.env" && -f "$__tests_root/tests/.env.example" ]]; then
 	cp "$__tests_root/tests/.env.example" "$__tests_root/tests/.env"
 	echo "tests: tests/.env made from tests/.env.example, edit it to run the containers on another machine" >&2
@@ -31,6 +39,9 @@ OPENSIM_RC="${OPENSIM_RC:-${HOME:-}/.opensimrc}"
 if [ -e "${OPENSIM_RC}" ]; then
 	source "${OPENSIM_RC}"
 fi
+for __tests_name in "${!__tests_caller_env[@]}"; do
+	export "$__tests_name=${__tests_caller_env[$__tests_name]}"
+done
 
 for __tests_file in "$__tests_root/.env" "$__tests_root/tests/.env"; do
 	[[ -f "$__tests_file" ]] || continue
@@ -43,10 +54,9 @@ for __tests_file in "$__tests_root/.env" "$__tests_root/tests/.env"; do
 		__tests_value=${__tests_value#\"}
 		__tests_value=${__tests_value%\'}
 		__tests_value=${__tests_value#\'}
-		# What the caller set wins over the files, tests/.env wins over the .env of the project
-		if [[ -z "${!__tests_name+x}" || "${__tests_set:-}" == *" $__tests_name "* ]]; then
+		# Caller environment wins over both files; tests/.env wins over the project .env.
+		if [[ -z "${__tests_caller_env[$__tests_name]+x}" ]]; then
 			export "$__tests_name=$__tests_value"
-			__tests_set="${__tests_set:-} $__tests_name "
 		fi
 	done <"$__tests_file"
 done
@@ -56,5 +66,5 @@ if [[ -n "${CONTAINER_CONNECTION:-}" ]]; then
 	[[ -n "${__tests_said:-}" ]] || echo "tests: podman connection: $CONTAINER_CONNECTION" >&2
 	export __tests_said=1
 fi
-unset __tests_root __tests_file __tests_line __tests_name __tests_value __tests_set
+unset __tests_root __tests_file __tests_line __tests_name __tests_value __tests_caller_env
 true

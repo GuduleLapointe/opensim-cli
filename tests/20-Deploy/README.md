@@ -49,19 +49,21 @@ has a corresponding `*-test.sh` entry point that declares the shared tests from
 keys.
 
 Bashunit reports each operation as a separate test. A shared `package builder`
-group first creates or reuses a visible, persistent Debian 12 builder container.
+group first pulls the Debian 12 image when needed, then creates or reuses a
+visible, persistent builder container.
 It installs `dpkg-scanpackages` once, stores the current package set in its
 container, and creates `Packages.gz` there. Each enabled platform then creates
 and starts its own container, checks readiness and OS identity, copies the
 package set from the builder only when its manifest changes, verifies the local
 copy,
-then runs `quick-install.sh` phases separately by default: dependencies,
+then runs `quick-install.sh` steps separately by default: dependencies,
 MariaDB and SQL account setup, .NET, and OpenSim packages. Set
-`DEPLOY_INSTALL_MODE=full` to run the same full `quick-install.sh` command used
-for a normal installation, followed by separate checks for MariaDB, .NET, and
-OpenSim. This makes a fresh-container timing comparison possible with
-`DEPLOY_EPHEMERAL=1 DEPLOY_INSTALL_MODE=full`; the default `steps` mode remains
-useful for isolating a slow or failing phase. The five `.deb` files are
+`DEPLOY_INSTALL_MODE=single` to run `quick-install.sh` once without a step
+option, as in a normal installation, followed by separate checks for MariaDB,
+.NET, and OpenSim. Use `DEPLOY_INSTALL_MODE=separate` to run each installation
+step as its own command; this is the default and is useful for isolating a slow
+or failing step. A fresh-container timing comparison can use
+`DEPLOY_EPHEMERAL=1 DEPLOY_INSTALL_MODE=single`. The five `.deb` files are
 staged by the local build after verifying the current source hashes for
 `bash-tools`, `opensim-engine`, `opensim-rest-php`, and `opensim-helpers`. A
 setup smoke test then runs the installed `opensim setup` interface with a
@@ -86,6 +88,12 @@ or `tests/.env`. `CONTAINER_CONNECTION` and optional `MEMORY` are also read by t
 existing `tests/bootstrap.sh`. No memory cap is applied unless `MEMORY` is set
 in the environment or `tests/.env`. `DEPLOY_QUICK_INSTALL_TIMEOUT` sets the
 per-platform install timeout in seconds (default: 900).
+
+The platform image is checked explicitly and pulled from its configured source
+if absent on the selected engine. `tests/bootstrap.sh` gives environment values
+from the command line precedence over `~/.opensimrc` and both project `.env`
+files, so `CONTAINER_CONNECTION=hal` targets Hal even when another connection
+is saved elsewhere.
 
 Set `DEPLOY_EPHEMERAL=1` in `tests/.env` to use temporary containers removed by
 the platform file's teardown, even when that file is run on its own.

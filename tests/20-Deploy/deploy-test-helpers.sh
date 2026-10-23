@@ -14,7 +14,7 @@ DEPLOY_PACKAGE_DIR=${DEPLOY_PACKAGE_DIR:-${_BASHUNIT_RUN_OUTPUT_DIR:-}/deploy-pa
 DEPLOY_BUILDER_NAME=${DEPLOY_BUILDER_NAME:-opensim-cli-test-build}
 DEPLOY_BUILDER_IMAGE=${DEPLOY_BUILDER_IMAGE:-docker.io/library/debian:12-slim}
 DEPLOY_QUICK_INSTALL_TIMEOUT=${DEPLOY_QUICK_INSTALL_TIMEOUT:-900}
-DEPLOY_INSTALL_MODE=${DEPLOY_INSTALL_MODE:-steps}
+DEPLOY_INSTALL_MODE=${DEPLOY_INSTALL_MODE:-separate}
 DEPLOY_ENGINE_SELECTED=
 DEPLOY_PLATFORM=
 DEPLOY_IMAGE=
@@ -106,19 +106,35 @@ deploy_installation_is_current() {
 	local name=$1
 	deploy_command exec "$name" sh -c '
 		command -v opensim >/dev/null &&
-		dpkg-query -W -f="${db:Status-Status}" opensim-cli 2>/dev/null | grep -qx installed &&
+		dpkg-query -W -f="\${db:Status-Status}" opensim-cli 2>/dev/null | grep -qx installed &&
 		dotnet --list-runtimes 2>/dev/null | grep -Eq "Microsoft\\.NETCore\\.App [8-9][.]|Microsoft\\.NETCore\\.App [1-9][0-9]+[.]" &&
 		mysqladmin ping --silent
 	' >/dev/null 2>&1
+}
+
+deploy_ensure_image() {
+	local image=$1 log_file=$2 status=0
+	if ! deploy_select_engine; then return 127; fi
+	mkdir -p "$(dirname "$log_file")" || return $?
+	if ! deploy_command image inspect "$image" >/dev/null 2>&1; then
+		deploy_command pull "$image" >"$log_file" 2>&1 || status=$?
+	else
+		printf 'Image already present: %s\n' "$image" >"$log_file"
+	fi
+	if ((status != 0)); then
+		printf 'Could not prepare container image %s (log: %s)\n' "$image" "$log_file" >&2
+		tail -n 40 "$log_file" >&2 || true
+	fi
+	return "$status"
 }
 
 deploy_test_gate() {
 	local failure_file=${FAILURES_OUTPUT_PATH:-$DEPLOY_RUN_DIR/failures}
 	bashunit::set_test_title "$DEPLOY_PLATFORM prerequisites passed"
 	mkdir -p "$DEPLOY_RUN_DIR"
-	if [[ "$DEPLOY_INSTALL_MODE" != steps && "$DEPLOY_INSTALL_MODE" != full ]]; then
+	if [[ "$DEPLOY_INSTALL_MODE" != separate && "$DEPLOY_INSTALL_MODE" != single ]]; then
 		deploy_mark_infra_blocked
-		assert_equals 'steps or full' "$DEPLOY_INSTALL_MODE" 'DEPLOY_INSTALL_MODE'
+		assert_equals 'separate or single' "$DEPLOY_INSTALL_MODE" 'DEPLOY_INSTALL_MODE'
 		return
 	fi
 	if [[ -e "$DEPLOY_GATE_BLOCK_FILE" || -e "$DEPLOY_INFRA_BLOCK_FILE" ]]; then
@@ -155,6 +171,9 @@ deploy_builder_step() {
 		status=127
 	else
 		case "$step" in
+		image)
+			deploy_ensure_image "$DEPLOY_BUILDER_IMAGE" "$DEPLOY_PROJECT_ROOT/tmp/deploy-logs/opensim-cli-test-build/image.log" || status=$?
+			;;
 		created)
 			if ! deploy_command inspect "$builder" >/dev/null 2>&1; then
 				deploy_command create --name "$builder" --label org.opensim-cli.deploy=builder "$DEPLOY_BUILDER_IMAGE" sh -c 'while :; do sleep 3600; done' >/dev/null || status=$?
@@ -273,6 +292,10 @@ deploy_run_step() {
 	fi
 
 	case "$step" in
+	image)
+		deploy_ensure_image "$DEPLOY_IMAGE" "$(deploy_log_dir "$DEPLOY_PLATFORM")/image.log" || status=$?
+		assert_equals 0 "$status" "$DEPLOY_PLATFORM image ready"
+		;;
 	created)
 		if ! deploy_select_engine; then status=127; else
 			local memory_args=()
@@ -357,9 +380,9 @@ deploy_run_step() {
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
 		local log_dir log_file manifest_stamp installed_stamp container_log install_step option execute_install=1
 		install_step=$step
-		if [[ "$DEPLOY_INSTALL_MODE" == full ]]; then
+		if [[ "$DEPLOY_INSTALL_MODE" == single ]]; then
 			case "$step" in
-			dependencies) install_step=full-install; option= ;;
+			dependencies) install_step=single-pass-install; option= ;;
 			mariadb) install_step=sql-server-verification; execute_install=0 ;;
 			dotnet) install_step=dotnet-verification; execute_install=0 ;;
 			opensim) install_step=opensim-verification; execute_install=0 ;;
@@ -375,9 +398,13 @@ deploy_run_step() {
 		log_dir=$(deploy_log_dir "$DEPLOY_PLATFORM")
 		log_file=$log_dir/$install_step.log
 		bashunit::set_test_title "$DEPLOY_PLATFORM $install_step"
-		manifest_stamp=$(cksum <"$DEPLOY_PACKAGE_DIR/MANIFEST" | awk '{print $1 ":" $2}')
-		installed_stamp=$(deploy_command exec "$name" sh -c 'cat /var/tmp/opensim-deploy-package-manifest 2>/dev/null' 2>/dev/null) || installed_stamp=
-		if [[ "$execute_install" == 1 && "$DEPLOY_EPHEMERAL" != 1 && "$installed_stamp" == "$manifest_stamp" ]] && [[ "$step" == opensim || ( "$DEPLOY_INSTALL_MODE" == full && "$step" == dependencies ) ]] && deploy_installation_is_current "$name"; then
+		manifest_stamp=
+		installed_stamp=
+		if [[ "$execute_install" == 1 ]]; then
+			manifest_stamp=$(cksum <"$DEPLOY_PACKAGE_DIR/MANIFEST" | awk '{print $1 ":" $2}')
+			installed_stamp=$(deploy_command exec "$name" sh -c 'cat /var/tmp/opensim-deploy-package-manifest 2>/dev/null' 2>/dev/null) || installed_stamp=
+		fi
+		if [[ "$execute_install" == 1 && "$DEPLOY_EPHEMERAL" != 1 && "$installed_stamp" == "$manifest_stamp" ]] && [[ "$step" == opensim || ( "$DEPLOY_INSTALL_MODE" == single && "$step" == dependencies ) ]] && deploy_installation_is_current "$name"; then
 			bashunit::skip "$DEPLOY_PLATFORM package set already installed"
 			return
 		fi
@@ -404,7 +431,7 @@ deploy_run_step() {
 				deploy_command exec "$name" sh -c 'dotnet --list-runtimes 2>/dev/null | grep -Eq "Microsoft\\.NETCore\\.App [8-9][.]|Microsoft\\.NETCore\\.App [1-9][0-9]+[.]"' >"$log_file" 2>&1 || status=$?
 				;;
 			opensim)
-				deploy_command exec "$name" sh -c 'command -v opensim >/dev/null && dpkg-query -W -f="${db:Status-Status}" opensim-cli 2>/dev/null | grep -qx installed' >"$log_file" 2>&1 || status=$?
+				deploy_command exec "$name" sh -c 'command -v opensim >/dev/null && dpkg-query -W -f="\${db:Status-Status}" opensim-cli 2>/dev/null | grep -qx installed' >"$log_file" 2>&1 || status=$?
 				;;
 			esac
 		fi
@@ -412,7 +439,7 @@ deploy_run_step() {
 		if ((status != 0)); then
 			printf 'Full quick-install log: %s\n' "$log_file" >&2
 			tail -n 40 "$log_file" >&2 || true
-		elif [[ "$step" == opensim || ( "$DEPLOY_INSTALL_MODE" == full && "$step" == dependencies ) ]]; then
+		elif [[ "$step" == opensim || ( "$DEPLOY_INSTALL_MODE" == single && "$step" == dependencies ) ]]; then
 			deploy_command exec "$name" sh -c 'printf "%s\n" "$1" > /var/tmp/opensim-deploy-package-manifest' sh "$manifest_stamp" || status=$?
 		fi
 		if [[ "$execute_install" == 1 ]]; then
