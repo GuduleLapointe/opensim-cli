@@ -212,7 +212,7 @@ configure_package_sources() {
 			if ! command -v dpkg-scanpackages >/dev/null 2>&1; then
 				install_packages dpkg-dev || die "no dpkg-scanpackages, could not install dpkg-dev"
 			fi
-			(cd "$debs" && dpkg-scanpackages . /dev/null | gzip -9c >Packages.gz) || die "local package index refresh failed"
+			(cd "$debs" && dpkg-scanpackages --multiversion . /dev/null | gzip -9c >Packages.gz) || die "local package index refresh failed"
 		fi
 		apt_debs=$(apt_accessible_local_repository "$debs") || return $?
 	fi

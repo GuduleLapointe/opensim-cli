@@ -173,7 +173,7 @@ deploy_builder_step() {
 				else
 					deploy_command exec "$builder" sh -c 'latest=$(ls -rt /tmp/opensim-local-install/debs/*.deb /tmp/opensim-local-install/debs/Packages.gz 2>/dev/null | tail -n 1); test "$latest" = /tmp/opensim-local-install/debs/Packages.gz' >/dev/null 2>&1 || index_stale=1
 				fi
-				if ((status == 0 && index_stale == 1)); then deploy_command exec "$builder" sh -c 'cd /tmp/opensim-local-install/debs && dpkg-scanpackages . /dev/null | gzip -9c >Packages.gz' >/dev/null || status=$?; fi
+				if ((status == 0 && index_stale == 1)); then deploy_command exec "$builder" sh -c 'cd /tmp/opensim-local-install/debs && dpkg-scanpackages --multiversion . /dev/null | gzip -9c >Packages.gz' >/dev/null || status=$?; fi
 				if ((status == 0)); then deploy_command exec "$builder" sh -c 'cd /tmp/opensim-local-install && sha256sum -c MANIFEST >/dev/null && cd debs && sha256sum -c SHA256SUMS >/dev/null' || status=$?; fi
 			fi
 			;;
@@ -224,7 +224,7 @@ deploy_builder_step() {
 					CONTROL
 					dpkg-deb --build "$private_debs/test-package" "$private_debs/local-source-test_1.0_all.deb" >/dev/null
 					rm -rf "$private_debs/test-package"
-					(cd "$private_debs" && dpkg-scanpackages . /dev/null | gzip -9c >Packages.gz)
+					(cd "$private_debs" && dpkg-scanpackages --multiversion . /dev/null | gzip -9c >Packages.gz)
 					chmod 700 "$private_debs"
 					OPENSIM_KIT_DEBS=$private_debs DEBUG=yes bash /tmp/opensim-local-install/quick-install.sh --dependencies
 					grep -Fxq "deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com stable main" /etc/apt/sources.list.d/magiiic.list
