@@ -186,6 +186,22 @@ deploy_builder_step() {
 				if ((status == 0)); then deploy_command exec "$builder" sh -c 'cd /tmp/opensim-local-install && sha256sum -c MANIFEST >/dev/null && cd debs && sha256sum -c SHA256SUMS >/dev/null' || status=$?; fi
 			fi
 			;;
+		index_refresh)
+			local package_deb
+			package_deb=$(deploy_command exec "$builder" sh -c 'find /tmp/opensim-local-install/debs -maxdepth 1 -type f -name "opensim-cli_*.deb" -print -quit') || status=$?
+			if ((status == 0)) && [[ -z "$package_deb" ]]; then status=1; fi
+			if ((status == 0)); then deploy_command exec "$builder" touch "$package_deb" || status=$?; fi
+			if ((status == 0)); then
+				mkdir -p "$(dirname "$DEPLOY_PROJECT_ROOT/tmp/deploy-logs/opensim-cli-test-build/index-refresh.log")"
+				deploy_command exec "$builder" bash -c '
+					set -o pipefail
+					OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs DEBUG=yes bash /tmp/opensim-local-install/quick-install.sh --dependencies
+				' >"$DEPLOY_PROJECT_ROOT/tmp/deploy-logs/opensim-cli-test-build/index-refresh.log" 2>&1 || status=$?
+			fi
+			if ((status == 0)); then deploy_command exec "$builder" sh -c 'test /tmp/opensim-local-install/debs/Packages.gz -nt "$(find /tmp/opensim-local-install/debs -maxdepth 1 -type f -name "opensim-cli_*.deb" -print -quit)" && gzip -dc /tmp/opensim-local-install/debs/Packages.gz | grep -q "^Package: opensim-cli$"' || status=$?; fi
+			assert_equals 0 "$status" "package builder refreshes a stale local package index"
+			if ((status != 0)); then tail -n 40 "$DEPLOY_PROJECT_ROOT/tmp/deploy-logs/opensim-cli-test-build/index-refresh.log" >&2 || true; deploy_mark_infra_blocked; fi
+			;;
 		esac
 	fi
 	assert_equals 0 "$status" "package builder $step"

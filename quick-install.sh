@@ -150,8 +150,12 @@ configure_package_sources() {
 		local debs
 		debs=$(cd "$OPENSIM_KIT_DEBS" && pwd) || die "$OPENSIM_KIT_DEBS is not a folder"
 		say "Use local packages from $debs"
-		if [[ ! -s "$debs/Packages.gz" ]]; then
-			die "Packages.gz is missing from $debs; build the local package index first"
+		if [[ ! -s "$debs/Packages.gz" ]] || find "$debs" -maxdepth 1 -type f -name '*.deb' -newer "$debs/Packages.gz" -print -quit | grep -q .; then
+			say "Refresh the local package index"
+			if ! command -v dpkg-scanpackages >/dev/null 2>&1; then
+				install_packages dpkg-dev || die "no dpkg-scanpackages, could not install dpkg-dev"
+			fi
+			(cd "$debs" && dpkg-scanpackages . /dev/null | gzip -9c >Packages.gz) || die "local package index refresh failed"
 		fi
 		if ! grep -Fq "file:$debs" /etc/apt/sources.list.d/magiiic.list 2>/dev/null; then
 			printf 'deb [trusted=yes] file:%s ./\n' "$debs" | as_root tee /etc/apt/sources.list.d/magiiic.list >/dev/null || return $?

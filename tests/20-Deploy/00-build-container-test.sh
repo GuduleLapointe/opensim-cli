@@ -14,3 +14,4 @@ function test_03_package_builder_started() { deploy_builder_step started; }
 function test_04_package_builder_ready() { deploy_builder_step ready; }
 function test_05_package_indexer_ready() { deploy_builder_step scanner; }
 function test_06_packages_synced_and_indexed() { deploy_builder_step synced; }
+function test_07_stale_local_package_index_is_refreshed() { deploy_builder_step index_refresh; }
