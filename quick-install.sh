@@ -100,8 +100,8 @@ install_packages() {
 		as_root dpkg --configure -a || die "could not complete package configuration"
 		DPKG_CONFIGURED=yes
 	fi
-	as_root apt-get update -qq
-	as_root apt-get install -y -qq "$@"
+	as_root apt-get update -qq || return $?
+	as_root apt-get install -y -qq "$@" || return $?
 }
 
 database_server_installed() {
@@ -121,12 +121,13 @@ dotnet_runtime() {
 
 # Installation completed, give proper instructions and run opensim setup if RUN_SETUP=yes
 end_installation() {
-	local basedir
+	local basedir opensim_path
 
 	if [ -n "${clone:-}" ]; then
 		basedir=$clone
 	else
-		basedir=$(cd $(dirname $(realpath $(which opensim)))/.. && pwd)
+		opensim_path=$(command -v opensim) || die "opensim is not available after installation"
+		basedir=$(cd "$(dirname "$(realpath "$opensim_path")")/.." && pwd) || die "could not locate the opensim installation"
 	fi
 	cat <<-INSTALL_COMPLETED
 		Installation completed, execute:
@@ -274,7 +275,7 @@ else
 	fi
 	install_packages "${packages[@]}" || die error $?
 
-	if ! command -v dotnet | grep -q .; then
+	if ! command -v dotnet >/dev/null 2>&1; then
 		say "Install dotnet"
 		as_root opensim install-dotnet -y || die Error $? installing dotNet
 	fi
