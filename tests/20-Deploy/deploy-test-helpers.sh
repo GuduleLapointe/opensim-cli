@@ -316,7 +316,11 @@ deploy_run_step() {
 	id) bashunit::set_test_title "$DEPLOY_PLATFORM container OS ID is $DEPLOY_EXPECTED_ID" ;;
 	version) bashunit::set_test_title "$DEPLOY_PLATFORM container OS version is $DEPLOY_EXPECTED_VERSION" ;;
 	builder_running) bashunit::set_test_title "$DEPLOY_PLATFORM package builder is running on $location" ;;
-	synced) bashunit::set_test_title "$DEPLOY_PLATFORM package bundle matches the current build" ;;
+	sync_current) bashunit::set_test_title "$DEPLOY_PLATFORM package manifest is available in the builder" ;;
+	sync_archive) bashunit::set_test_title "$DEPLOY_PLATFORM package bundle archive is created" ;;
+	sync_clear) bashunit::set_test_title "$DEPLOY_PLATFORM previous package bundle is cleared" ;;
+	sync_extract) bashunit::set_test_title "$DEPLOY_PLATFORM package bundle is extracted" ;;
+	synced) bashunit::set_test_title "$DEPLOY_PLATFORM package bundle checksums match the build" ;;
 	dependencies) bashunit::set_test_title "$DEPLOY_PLATFORM quick-install dependencies succeed" ;;
 	mariadb) bashunit::set_test_title "$DEPLOY_PLATFORM SQL server is available" ;;
 	accounts) bashunit::set_test_title "$DEPLOY_PLATFORM SQL accounts are created" ;;
@@ -414,46 +418,62 @@ deploy_run_step() {
 		assert_exec "$builder_command" --stdout true
 		return
 		;;
-	synced)
+	sync_current | sync_archive | sync_clear | sync_extract | synced)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		local builder archive expected_manifest current_manifest package_mount failed_operation
+		local builder archive sync_state expected_manifest current_manifest
 		builder=$(deploy_builder_name)
-		failed_operation='read the package manifest from the builder'
-		expected_manifest=$(deploy_command exec "$builder" sh -c 'cat /tmp/opensim-local-install/MANIFEST') || status=$?
-		current_manifest=$(deploy_command exec "$name" sh -c 'cat /tmp/opensim-local-install/MANIFEST 2>/dev/null') || current_manifest=
-		if ((status == 0)) && { [[ "$current_manifest" != "$expected_manifest" ]] || ! deploy_command exec "$name" sh -c 'test -s /tmp/opensim-local-install/debs/Packages.gz' >/dev/null 2>&1; }; then
-			package_mount=$(deploy_command inspect --format '{{range .Mounts}}{{if eq .Destination "/tmp/opensim-local-install"}}{{.Source}}{{end}}{{end}}' "$name" 2>/dev/null) || package_mount=
-			if [[ -z "$package_mount" ]]; then
-				mkdir -p "$DEPLOY_RUN_DIR" || status=$?
-				archive=$(mktemp "$DEPLOY_RUN_DIR/$DEPLOY_PLATFORM-packages.XXXXXX.tar") || status=$?
-				if ((status == 0)); then
-					failed_operation='archive the package bundle from the builder'
-					deploy_command exec "$builder" tar -C /tmp/opensim-local-install -cf - . >"$archive" || status=$?
-				fi
-				if ((status == 0)); then
-					failed_operation='clear the old package bundle from the platform container'
-					deploy_command exec "$name" sh -c 'mkdir -p /tmp/opensim-local-install && find /tmp/opensim-local-install -mindepth 1 -maxdepth 1 -exec rm -rf {} +' || status=$?
-				fi
-				if ((status == 0)); then
-					failed_operation='extract the package bundle into the platform container'
-					deploy_command exec -i "$name" sh -c 'tar -xf - --no-same-owner -C /tmp/opensim-local-install' <"$archive" || status=$?
-				fi
-			fi
-			rm -f "${archive:-}"
-		fi
-		if ((status == 0)); then
-			failed_operation='verify package manifest and checksums in the platform container'
-			local verify_command
-			printf -v verify_command 'deploy_command exec %q sh -c %q' "$name" 'test -s /tmp/opensim-local-install/MANIFEST && test -s /tmp/opensim-local-install/debs/Packages.gz && cd /tmp/opensim-local-install && sha256sum -c MANIFEST'
-			if deploy_command exec "$name" sh -c 'test -s /tmp/opensim-local-install/MANIFEST && test -s /tmp/opensim-local-install/debs/Packages.gz && cd /tmp/opensim-local-install && sha256sum -c MANIFEST' >/dev/null 2>&1; then
-				assert_exec "$verify_command"
+		sync_state="$DEPLOY_RUN_DIR/$DEPLOY_PLATFORM-package-sync-needed"
+		archive="$DEPLOY_RUN_DIR/$DEPLOY_PLATFORM-packages.tar"
+		case "$step" in
+		sync_current)
+			mkdir -p "$DEPLOY_RUN_DIR"
+			printf -v command 'deploy_command exec %q sh -c %q' "$builder" 'test -s /tmp/opensim-local-install/MANIFEST && test -s /tmp/opensim-local-install/debs/Packages.gz && cat /tmp/opensim-local-install/MANIFEST'
+			assert_exec "$command"
+			if ! deploy_command exec "$builder" test -s /tmp/opensim-local-install/MANIFEST; then
+				deploy_mark_platform_blocked "$DEPLOY_PLATFORM"
 				return
 			fi
-			deploy_mark_platform_blocked "$DEPLOY_PLATFORM"
-			assert_exec "$verify_command"
+			expected_manifest=$(deploy_command exec "$builder" cat /tmp/opensim-local-install/MANIFEST) || {
+				deploy_mark_platform_blocked "$DEPLOY_PLATFORM"
+				return
+			}
+			current_manifest=$(deploy_command exec "$name" cat /tmp/opensim-local-install/MANIFEST 2>/dev/null) || current_manifest=
+			if [[ "$current_manifest" == "$expected_manifest" ]] && deploy_command exec "$name" test -s /tmp/opensim-local-install/debs/Packages.gz; then
+				rm -f "$sync_state"
+				bashunit::skip 'package bundle is already current'
+				return
+			fi
+			: >"$sync_state"
 			return
-		fi
-		assert_equals 0 "$status" "$DEPLOY_PLATFORM $failed_operation"
+			;;
+		sync_archive)
+			if [[ ! -e "$sync_state" ]]; then bashunit::skip 'package bundle is already current'; return; fi
+			mkdir -p "$DEPLOY_RUN_DIR"
+			printf -v command 'deploy_command exec %q tar -C /tmp/opensim-local-install -cf - .' "$builder"
+			assert_exec "$command >$(printf %q "$archive")"
+			return
+			;;
+		sync_clear)
+			if [[ ! -e "$sync_state" ]]; then bashunit::skip 'package bundle is already current'; return; fi
+			if [[ ! -s "$archive" ]]; then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; bashunit::skip 'package archive was not created'; return; fi
+			printf -v command 'deploy_command exec %q sh -c %q' "$name" 'mkdir -p /tmp/opensim-local-install && find /tmp/opensim-local-install -mindepth 1 -maxdepth 1 -exec rm -rf {} +'
+			assert_exec "$command"
+			return
+			;;
+		sync_extract)
+			if [[ ! -e "$sync_state" ]]; then bashunit::skip 'package bundle is already current'; return; fi
+			if [[ ! -s "$archive" ]]; then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; bashunit::skip 'package archive was not created'; return; fi
+			printf -v command 'deploy_command exec -i %q sh -c %q' "$name" 'mkdir -p /tmp/opensim-local-install && tar -xf - --no-same-owner -C /tmp/opensim-local-install'
+			assert_exec "$command <$(printf %q "$archive")"
+			return
+			;;
+		synced)
+			printf -v command 'deploy_command exec %q sh -c %q' "$name" 'test -s /tmp/opensim-local-install/MANIFEST && test -s /tmp/opensim-local-install/debs/Packages.gz && cd /tmp/opensim-local-install && sha256sum -c MANIFEST'
+			assert_exec "$command"
+			rm -f "$sync_state" "$archive"
+			return
+			;;
+		esac
 		;;
 	dependencies | mariadb | dotnet | opensim)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
@@ -529,21 +549,18 @@ deploy_run_step() {
 		;;
 	accounts)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		actual=$(deploy_command exec "$name" sh -c 'mysql -Nse "SELECT COUNT(*) FROM mysql.user WHERE User IN (0x6f70656e73696d5f61646d696e,0x6f70656e73696d) AND Host=0x6c6f63616c686f7374"' 2>/dev/null) || status=$?
-		[[ "$actual" == 2 ]] || status=1
-		assert_equals 2 "$actual" "$DEPLOY_PLATFORM SQL accounts"
+		printf -v command 'deploy_command exec %q sh -c %q' "$name" 'mysql -Nse "SELECT COUNT(*) FROM mysql.user WHERE User IN (0x6f70656e73696d5f61646d696e,0x6f70656e73696d) AND Host=0x6c6f63616c686f7374"'
+		assert_exec "$command" --stdout 2
 		;;
 	credentials)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		actual=$(deploy_command exec "$name" sh -c 'grep -Ec "^export OPENSIM_DB_(HOST|ADMIN_USER|ADMIN_PASS|USER|PASS)=" /root/.opensimrc' 2>/dev/null) || status=$?
-		[[ "$actual" == 5 ]] || status=1
-		assert_equals 5 "$actual" "$DEPLOY_PLATFORM saved SQL settings"
+		printf -v command 'deploy_command exec %q sh -c %q' "$name" 'grep -Ec "^export OPENSIM_DB_(HOST|ADMIN_USER|ADMIN_PASS|USER|PASS)=" /root/.opensimrc'
+		assert_exec "$command" --stdout 5
 		;;
 	packages)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		actual=$(deploy_command exec "$name" sh -c 'dpkg-query -W -f="\${db:Status-Status}\\n" bash-tools opensim-cli opensim-engine opensim-helpers opensim-rest-php' 2>/dev/null) || status=$?
-		if [[ "$actual" != $'installed\ninstalled\ninstalled\ninstalled\ninstalled' ]]; then status=1; fi
-		assert_equals 0 "$status" "$DEPLOY_PLATFORM packages installed"
+		printf -v command 'deploy_command exec %q sh -c %q' "$name" 'dpkg-query -W -f="${db:Status-Status}\n" bash-tools opensim-cli opensim-engine opensim-helpers opensim-rest-php | grep -Ec "^installed$"'
+		assert_exec "$command" --stdout 5
 		;;
 	setup_credentials)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi

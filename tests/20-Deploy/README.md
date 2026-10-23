@@ -55,10 +55,11 @@ platform tests. A platform file selected by itself expects this shared builder
 to be running; it reports that prerequisite separately before attempting sync.
 It installs `dpkg-scanpackages` once, stores the current package set in its
 container, and creates `Packages.gz` there. Each enabled platform then creates
-and starts its own container, checks readiness and OS identity, copies the
-package set from the builder only when its manifest changes, verifies the local
-copy,
-then runs `quick-install.sh` steps separately by default: dependencies,
+and starts its own container, checks readiness and OS identity, then syncs the
+package set from the builder when its manifest changes. Manifest availability,
+archive creation, cleanup of an old copy, extraction, and checksum verification
+each have a separate Bashunit result. It then runs `quick-install.sh` steps
+separately by default: dependencies,
 MariaDB and SQL account setup, .NET, and OpenSim packages. Set
 `DEPLOY_INSTALL_MODE=single` to run `quick-install.sh` once without a step
 option, as in a normal installation, followed by separate checks for MariaDB,
