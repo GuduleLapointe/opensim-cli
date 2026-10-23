@@ -198,6 +198,11 @@ opensim_rc_file() {
 	printf '%s\n' "$OPENSIM_RC_PATH"
 }
 
+shell_quote() {
+	local value=${1//\'/\'\\\'\'}
+	printf "'%s'" "$value"
+}
+
 save_database_credentials() {
 	local rc user_group tmp
 	rc=$(opensim_rc_file)
@@ -208,14 +213,14 @@ save_database_credentials() {
 	fi
 	mv "$tmp" "$rc" || return $?
 	chmod 600 "$rc" || return $?
-	{
-		printf '\n# OpenSim database accounts, created by quick-install.sh\n'
-		printf 'export OPENSIM_DB_HOST=%q\n' "${OPENSIM_DB_HOST:-localhost}"
-		printf 'export OPENSIM_DB_ADMIN_USER=%q\n' "$OPENSIM_DB_ADMIN_USER"
-		printf 'export OPENSIM_DB_ADMIN_PASS=%q\n' "$OPENSIM_DB_ADMIN_PASS"
-		printf 'export OPENSIM_DB_USER=%q\n' "$OPENSIM_DB_USER"
-		printf 'export OPENSIM_DB_PASS=%q\n' "$OPENSIM_DB_PASS"
-	} >>"$rc" || return $?
+	cat <<-OPENSIM_RC >>"$rc" || return $?
+		# OpenSim database accounts, created by quick-install.sh
+		export OPENSIM_DB_HOST=$(shell_quote "${OPENSIM_DB_HOST:-localhost}")
+		export OPENSIM_DB_ADMIN_USER=$(shell_quote "$OPENSIM_DB_ADMIN_USER")
+		export OPENSIM_DB_ADMIN_PASS=$(shell_quote "$OPENSIM_DB_ADMIN_PASS")
+		export OPENSIM_DB_USER=$(shell_quote "$OPENSIM_DB_USER")
+		export OPENSIM_DB_PASS=$(shell_quote "$OPENSIM_DB_PASS")
+	OPENSIM_RC
 	if [[ -n "${SUDO_USER:-}" && ${SUDO_USER} != root ]]; then
 		user_group=$(id -gn "$SUDO_USER")
 		chown "$SUDO_USER:$user_group" "$rc" || return $?
