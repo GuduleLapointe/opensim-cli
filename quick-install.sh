@@ -14,6 +14,7 @@
 #
 # Setup is not started unless requested with --setup or RUN_SETUP=yes.
 # Options:  -y, --yes             do not ask before installing
+#           --cleanup             remove an existing OpenSim installation first (asks for confirmation)
 #           --setup               run `opensim setup` after the full or OpenSim install
 #           --dependencies        install quick-install's own dependencies
 #           --mariadb | --mysql   install/configure the requested SQL server
@@ -49,6 +50,7 @@ PACKAGE_SOURCES_READY=no
 INSTALL_PHASE=all
 DATABASE_CHOICE=mariadb
 PHASE_SELECTED=no
+RUN_CLEANUP=no
 
 # === Define helper functions first ===
 
@@ -364,6 +366,46 @@ phase_dotnet() {
 	dotnet_runtime_installed || die "no .NET 8 or newer runtime is available after installation"
 }
 
+phase_cleanup() {
+	local -a packages=() folders=() databases=()
+	local path sql_client db escaped_db answer prefix package_rows database_rows status package
+
+	package_rows=$(dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' 'opensim-*' 2>/dev/null) || package_rows=
+	while read -r status package; do
+		if [[ "$status" == ii* ]]; then packages+=("$package"); fi
+	done <<<"$package_rows"
+	for path in /etc/opensim /var/lib/opensim /usr/share/opensim*; do
+		if [[ -e "$path" || -L "$path" ]]; then folders+=("$path"); fi
+	done
+	if database_server_installed; then
+		sql_client=$(command -v mariadb || command -v mysql) || die "SQL client is unavailable; cannot inspect OpenSim databases"
+		prefix=$(hostname -s)
+		database_rows=$(as_root "$sql_client" -Nse 'SHOW DATABASES' 2>/dev/null) || die "cannot inspect SQL databases for cleanup"
+		while IFS= read -r db; do
+			if [[ "$db" == "$prefix"* ]]; then databases+=("$db"); fi
+		done <<<"$database_rows"
+	fi
+	if ((${#packages[@]} + ${#folders[@]} + ${#databases[@]} == 0)); then
+		say "No existing OpenSim packages, folders, or databases to clean up"
+		return 0
+	fi
+	say "Cleanup will remove:"
+	for package in "${packages[@]}"; do say "  package $package"; done
+	for path in "${folders[@]}"; do say "  folder $path"; done
+	for db in "${databases[@]}"; do say "  database $db"; done
+	if [[ "$ASSUME_YES" != yes ]]; then
+		[[ -r /dev/tty ]] || die "--cleanup needs an interactive confirmation (or pass --yes)"
+		read -r -p 'Proceed with this cleanup? [y/N] ' answer </dev/tty || die 'cleanup cancelled'
+		[[ "$answer" =~ ^[Yy]([Ee][Ss])?$ ]] || die 'cleanup cancelled'
+	fi
+	if ((${#packages[@]})); then as_root apt-get remove --purge -y "${packages[@]}" || die "could not remove existing OpenSim packages"; fi
+	if ((${#folders[@]})); then as_root rm -rf -- "${folders[@]}" || die "could not remove existing OpenSim folders"; fi
+	for db in "${databases[@]}"; do
+		escaped_db=${db//\`/\`\`}
+		as_root "$sql_client" -e "DROP DATABASE \`$escaped_db\`" || die "could not drop database $db"
+	done
+}
+
 phase_opensim() {
 	if [[ -n "$clone" && -z "$OPENSIM_KIT_DEBS" ]]; then
 		say "Use OpenSim from clone $clone"
@@ -387,7 +429,8 @@ while (($#)); do
 	argument=$1
 	shift
 	case "$argument" in
-	-y | --yes) ASSUME_YES=yes ;;
+		-y | --yes) ASSUME_YES=yes ;;
+		--cleanup) RUN_CLEANUP=yes ;;
 	--setup) RUN_SETUP=yes ;;
 	--dependencies | --mariadb | --mysql | --dotnet | --opensim)
 		[[ "$PHASE_SELECTED" == no ]] || die "choose only one installation phase"
@@ -430,6 +473,11 @@ clone=
 log clone $clone
 
 case "$(uname -s)" in Linux | Darwin) ;; *) die "unsupported system $(uname -s)" ;; esac
+
+if [[ "$RUN_CLEANUP" == yes ]]; then
+	[[ $(uname -s) == Linux ]] || die "cleanup is available on Debian and Ubuntu only"
+	phase_cleanup
+fi
 
 case "$INSTALL_PHASE" in
 all)
