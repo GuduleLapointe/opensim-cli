@@ -180,11 +180,23 @@ deploy_builder_step() {
 					if ((status == 0)); then COPYFILE_DISABLE=1 tar -chf - -C "$DEPLOY_PACKAGE_DIR" . | deploy_command exec -i "$builder" sh -c 'tar -xf - --no-same-owner -C /tmp/opensim-local-install' || status=$?; fi
 					index_stale=1
 				else
-					deploy_command exec "$builder" sh -c 'cd /tmp/opensim-local-install/debs && { test -s Packages.gz && ! find . -maxdepth 1 -type f -name "*.deb" -newer Packages.gz -print -quit | grep -q .; }' >/dev/null 2>&1 || index_stale=1
+					deploy_command exec "$builder" sh -c 'latest=$(ls -rt /tmp/opensim-local-install/debs/*.deb /tmp/opensim-local-install/debs/Packages.gz 2>/dev/null | tail -n 1); test "$latest" = /tmp/opensim-local-install/debs/Packages.gz' >/dev/null 2>&1 || index_stale=1
 				fi
 				if ((status == 0 && index_stale == 1)); then deploy_command exec "$builder" sh -c 'cd /tmp/opensim-local-install/debs && dpkg-scanpackages . /dev/null | gzip -9c >Packages.gz' >/dev/null || status=$?; fi
 				if ((status == 0)); then deploy_command exec "$builder" sh -c 'cd /tmp/opensim-local-install && sha256sum -c MANIFEST >/dev/null && cd debs && sha256sum -c SHA256SUMS >/dev/null' || status=$?; fi
 			fi
+			;;
+		index_unchanged)
+			local log_file
+			log_file=$DEPLOY_PROJECT_ROOT/tmp/deploy-logs/opensim-cli-test-build/index-unchanged.log
+			mkdir -p "$(dirname "$log_file")"
+			deploy_command exec "$builder" bash -c '
+				set -o pipefail
+				OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs DEBUG=yes bash /tmp/opensim-local-install/quick-install.sh --dependencies
+			' >"$log_file" 2>&1 || status=$?
+			if ((status == 0)) && grep -q 'Refresh the local package index' "$log_file"; then status=1; fi
+			assert_equals 0 "$status" "package builder leaves a current local package index alone"
+			if ((status != 0)); then tail -n 40 "$log_file" >&2 || true; deploy_mark_infra_blocked; fi
 			;;
 		index_refresh)
 			local package_deb
@@ -198,7 +210,7 @@ deploy_builder_step() {
 					OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs DEBUG=yes bash /tmp/opensim-local-install/quick-install.sh --dependencies
 				' >"$DEPLOY_PROJECT_ROOT/tmp/deploy-logs/opensim-cli-test-build/index-refresh.log" 2>&1 || status=$?
 			fi
-			if ((status == 0)); then deploy_command exec "$builder" sh -c 'test /tmp/opensim-local-install/debs/Packages.gz -nt "$(find /tmp/opensim-local-install/debs -maxdepth 1 -type f -name "opensim-cli_*.deb" -print -quit)" && gzip -dc /tmp/opensim-local-install/debs/Packages.gz | grep -q "^Package: opensim-cli$"' || status=$?; fi
+			if ((status == 0)); then deploy_command exec "$builder" sh -c 'test "$(ls -rt /tmp/opensim-local-install/debs/*.deb /tmp/opensim-local-install/debs/Packages.gz 2>/dev/null | tail -n 1)" = /tmp/opensim-local-install/debs/Packages.gz && gzip -dc /tmp/opensim-local-install/debs/Packages.gz | grep -q "^Package: opensim-cli$"' || status=$?; fi
 			assert_equals 0 "$status" "package builder refreshes a stale local package index"
 			if ((status != 0)); then tail -n 40 "$DEPLOY_PROJECT_ROOT/tmp/deploy-logs/opensim-cli-test-build/index-refresh.log" >&2 || true; deploy_mark_infra_blocked; fi
 			;;

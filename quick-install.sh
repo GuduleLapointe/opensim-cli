@@ -150,7 +150,7 @@ configure_package_sources() {
 		local debs
 		debs=$(cd "$OPENSIM_KIT_DEBS" && pwd) || die "$OPENSIM_KIT_DEBS is not a folder"
 		say "Use local packages from $debs"
-		if [[ ! -s "$debs/Packages.gz" ]] || find "$debs" -maxdepth 1 -type f -name '*.deb' -newer "$debs/Packages.gz" -print -quit | grep -q .; then
+		if [[ ! -s "$debs/Packages.gz" ]] || [[ $(ls -rt "$debs"/*.deb "$debs/Packages.gz" 2>/dev/null | tail -n 1) != "$debs/Packages.gz" ]]; then
 			say "Refresh the local package index"
 			if ! command -v dpkg-scanpackages >/dev/null 2>&1; then
 				install_packages dpkg-dev || die "no dpkg-scanpackages, could not install dpkg-dev"
