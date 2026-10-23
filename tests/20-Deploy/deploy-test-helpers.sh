@@ -231,10 +231,10 @@ deploy_run_step() {
 			;;
 		installed)
 			if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-			deploy_command exec "$name" sh -c 'timeout --signal=TERM --kill-after=30s "'"${DEPLOY_QUICK_INSTALL_TIMEOUT}"'s" env DEBUG=yes OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh --no-setup >/tmp/opensim-local-install/quick-install.log 2>&1' || status=$?
+			deploy_command exec "$name" sh -c 'timeout --signal=TERM --kill-after=30s "'"${DEPLOY_QUICK_INSTALL_TIMEOUT}"'s" env DEBUG=yes OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh --no-setup >/tmp/quick-install.log 2>&1' || status=$?
 			if ((status == 124)); then printf '%s\n' "$DEPLOY_PLATFORM quick-install timed out after ${DEPLOY_QUICK_INSTALL_TIMEOUT}s" >&2; fi
 			if ((status != 0)); then
-				deploy_command exec "$name" sh -c 'tail -n 40 /tmp/opensim-local-install/quick-install.log' >&2 || true
+				deploy_command exec "$name" sh -c 'tail -n 40 /tmp/quick-install.log' >&2 || true
 			fi
 			assert_equals 0 "$status" "$DEPLOY_PLATFORM quick-install"
 			;;
