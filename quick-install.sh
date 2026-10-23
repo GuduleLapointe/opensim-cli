@@ -164,6 +164,32 @@ database_server_installed() {
 	return 1
 }
 
+apt_accessible_local_repository() {
+	local source=$1 mirror_root=/var/cache/opensim-cli/local-repositories mirror_key mirror
+	local -a packages
+	if command -v runuser >/dev/null 2>&1 && as_root runuser -u _apt -- test -r "$source/Packages.gz"; then
+		printf '%s\n' "$source"
+		return 0
+	fi
+
+	mirror_key=$(printf '%s' "$source" | cksum | awk '{print $1}') || return $?
+	mirror=$mirror_root/$mirror_key
+	if ! cmp -s "$source/Packages.gz" "$mirror/Packages.gz"; then
+		packages=("$source"/*.deb)
+		[[ -e "${packages[0]}" ]] || die "no .deb packages found in $source"
+		say "Copy local packages to APT-accessible cache $mirror" >&2
+		as_root install -d -m 755 "$mirror" || return $?
+		as_root find "$mirror" -mindepth 1 -maxdepth 1 -type f -name '*.deb' -delete || return $?
+		as_root cp -f "${packages[@]}" "$mirror/" || return $?
+		as_root cp -f "$source/Packages.gz" "$mirror/Packages.gz" || return $?
+		as_root chmod 644 "$mirror"/*.deb "$mirror/Packages.gz" || return $?
+	fi
+	if command -v runuser >/dev/null 2>&1 && ! as_root runuser -u _apt -- test -r "$mirror/Packages.gz"; then
+		die "could not make the local package cache readable by APT"
+	fi
+	printf '%s\n' "$mirror"
+}
+
 configure_package_sources() {
 	[[ "$PACKAGE_SOURCES_READY" == yes ]] && return 0
 	[[ $(uname -s) == Linux ]] || die "packages are for Debian and Ubuntu"
@@ -176,6 +202,7 @@ configure_package_sources() {
 	fi
 	install_packages ca-certificates curl gpg openssl || return $?
 
+	local apt_debs=
 	if [[ -n "$OPENSIM_KIT_DEBS" ]]; then
 		local debs
 		debs=$(cd "$OPENSIM_KIT_DEBS" && pwd) || die "$OPENSIM_KIT_DEBS is not a folder"
@@ -187,18 +214,15 @@ configure_package_sources() {
 			fi
 			(cd "$debs" && dpkg-scanpackages . /dev/null | gzip -9c >Packages.gz) || die "local package index refresh failed"
 		fi
-		if command -v runuser >/dev/null 2>&1 && ! as_root runuser -u _apt -- test -r "$debs/Packages.gz"; then
-			die "local package repository $debs is not readable by APT's _apt user; move it to an accessible directory (for example, /opt/opensim/dist)"
-		fi
-		if ! grep -Fq "file:$debs" /etc/apt/sources.list.d/magiiic.list 2>/dev/null; then
-			printf 'deb [trusted=yes] file:%s ./\n' "$debs" | as_root tee /etc/apt/sources.list.d/magiiic.list >/dev/null || return $?
-		fi
-	else
-		if [[ ! -f /etc/apt/sources.list.d/magiiic.list ]]; then
-			curl -fsSL "$MAGIIIC_KEY" | as_root gpg --dearmor --yes -o /usr/share/keyrings/magiiic-packaging.gpg || return $?
-			printf '%s\n' "$MAGIIIC_REPOSITORY" | as_root tee /etc/apt/sources.list.d/magiiic.list >/dev/null || return $?
-		fi
+		apt_debs=$(apt_accessible_local_repository "$debs") || return $?
 	fi
+	if [[ ! -s /usr/share/keyrings/magiiic-packaging.gpg ]]; then
+		curl -fsSL "$MAGIIIC_KEY" | as_root gpg --dearmor --yes -o /usr/share/keyrings/magiiic-packaging.gpg || return $?
+	fi
+	{
+		printf '%s\n' "$MAGIIIC_REPOSITORY"
+		[[ -z "$apt_debs" ]] || printf 'deb [trusted=yes] file:%s ./\n' "$apt_debs"
+	} | as_root tee /etc/apt/sources.list.d/magiiic.list >/dev/null || return $?
 	APT_UPDATED=no
 	apt_update || return $?
 	PACKAGE_SOURCES_READY=yes
