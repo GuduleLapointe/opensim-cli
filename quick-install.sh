@@ -119,8 +119,10 @@ recover_dpkg_configuration() {
 
 apt_update() {
 	if [[ "$APT_UPDATED" != yes ]]; then
+		local started=$SECONDS
 		as_root apt-get update -qq || return $?
 		APT_UPDATED=yes
+		log "apt-get update completed in $((SECONDS - started))s"
 	fi
 }
 
@@ -147,11 +149,14 @@ apt_has_candidate() {
 }
 
 install_packages() {
+	local started
 	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu (see INSTALLATION.md for the others)"
 	export DEBIAN_FRONTEND=noninteractive
 	recover_dpkg_configuration || return $?
 	apt_update || return $?
+	started=$SECONDS
 	as_root apt-get install -y -qq "$@" || return $?
+	log "apt-get install ($*) completed in $((SECONDS - started))s"
 }
 
 database_server_installed() {
