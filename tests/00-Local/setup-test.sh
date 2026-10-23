@@ -18,7 +18,7 @@ DATABASE_FORM='{"data":{"attributes":{"action":"screen","kind":"form","title":"D
 function set_up() {
 	WORK="$(mktemp -d)"
 	export HOME="$WORK"
-	unset OPENSIM_RC OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
+	unset OPENSIM_RC OPENSIM_DB_HOST OPENSIM_DB_USER OPENSIM_DB_PASS OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
 	local fixtures
 	fixtures="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/fixtures"
 	mkdir -p "$WORK/engine/bin" "$WORK/engine/lib"
@@ -139,6 +139,9 @@ function test_form_passwords_are_hidden() {
 function test_saved_database_admin_credentials_are_sent_to_the_engine() {
 	local out
 	cat <<-OPENSIM_RC >"$HOME/.opensimrc"
+		export OPENSIM_DB_HOST=localhost
+		export OPENSIM_DB_USER=opensim
+		export OPENSIM_DB_PASS=app-secret
 		export OPENSIM_DB_ADMIN_USER=opensim_admin
 		export OPENSIM_DB_ADMIN_PASS=saved-secret
 	OPENSIM_RC
@@ -155,11 +158,17 @@ function test_saved_database_admin_credentials_are_sent_to_the_engine() {
 function test_saved_database_admin_credentials_are_sent_with_review_confirmation() {
 	local out
 	cat <<-OPENSIM_RC >"$HOME/.opensimrc"
+		export OPENSIM_DB_HOST=localhost
+		export OPENSIM_DB_USER=opensim
+		export OPENSIM_DB_PASS=app-secret
 		export OPENSIM_DB_ADMIN_USER=opensim_admin
 		export OPENSIM_DB_ADMIN_PASS=saved-secret
 	OPENSIM_RC
 	engine_says "$MENU" "$FORM" "$CHECKS" "$REVIEW" "$QUIT"
 	out=$(setup_with 1 "" no yes "")
+	assert_equals "localhost" "$(request 5 '.answers.database_host')"
+	assert_equals "opensim" "$(request 5 '.answers.database_user')"
+	assert_equals "app-secret" "$(request 5 '.answers.database_password')"
 	assert_equals "opensim_admin" "$(request 5 '.answers.admin_user')"
 	assert_equals "saved-secret" "$(request 5 '.answers.admin_password')"
 	assert_not_contains "saved-secret" "$out"

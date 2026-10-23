@@ -336,8 +336,14 @@ ui_screen() {
 		;;
 	review)
 		ui_review "$_u_title" "$_u_text" "$(jq -r '.rows[] | [.section, .label, .value] | join("\u001f")' <<<"$_u_screen")" || _u_status=$?
-		if ((_u_status == 0)) && [[ -n ${OPENSIM_DB_ADMIN_USER:-} ]]; then
-			answers=$(jq -cn --arg user "$OPENSIM_DB_ADMIN_USER" --arg password "${OPENSIM_DB_ADMIN_PASS:-}" '{admin_user:$user,admin_password:$password}')
+		if ((_u_status == 0)); then
+			answers=$(jq -cn \
+				--arg host "${OPENSIM_DB_HOST:-}" \
+				--arg user "${OPENSIM_DB_USER:-}" \
+				--arg password "${OPENSIM_DB_PASS:-}" \
+				--arg admin_user "${OPENSIM_DB_ADMIN_USER:-}" \
+				--arg admin_password "${OPENSIM_DB_ADMIN_PASS:-}" \
+				'{database_host:$host,database_user:$user,database_password:$password,admin_user:$admin_user,admin_password:$admin_password} | with_entries(select(.value != ""))')
 		fi
 		;;
 	*) die "The engine shows a screen this command does not know: $_u_kind" ;;
