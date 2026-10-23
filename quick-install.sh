@@ -168,6 +168,12 @@ configure_package_sources() {
 	[[ "$PACKAGE_SOURCES_READY" == yes ]] && return 0
 	[[ $(uname -s) == Linux ]] || die "packages are for Debian and Ubuntu"
 	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu"
+	# A local repository from an earlier run may point at a different path.
+	# Remove it before install_packages runs apt-get update; the source for this
+	# run is configured below, after the local index has been checked.
+	if grep -Eq '^[[:space:]]*deb([[:space:]]|\[).*file:' /etc/apt/sources.list.d/magiiic.list 2>/dev/null; then
+		as_root rm -f /etc/apt/sources.list.d/magiiic.list || return $?
+	fi
 	install_packages ca-certificates curl gpg openssl || return $?
 
 	if [[ -n "$OPENSIM_KIT_DEBS" ]]; then

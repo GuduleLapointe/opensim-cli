@@ -15,3 +15,4 @@ function test_04_package_indexer_ready() { deploy_builder_step scanner; }
 function test_05_packages_synced_and_indexed() { deploy_builder_step synced; }
 function test_06_current_local_package_index_is_left_alone() { deploy_builder_step index_unchanged; }
 function test_07_stale_local_package_index_is_refreshed() { deploy_builder_step index_refresh; }
+function test_08_stale_local_package_source_is_replaced() { deploy_builder_step source_refresh; }

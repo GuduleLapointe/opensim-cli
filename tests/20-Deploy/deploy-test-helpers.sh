@@ -205,6 +205,22 @@ deploy_builder_step() {
 			assert_equals 0 "$status" "package builder refreshes a stale local package index"
 			if ((status != 0)); then tail -n 40 "$DEPLOY_PROJECT_ROOT/tmp/deploy-logs/opensim-cli-test-build/index-refresh.log" >&2 || true; deploy_mark_infra_blocked; fi
 			;;
+		source_refresh)
+			local log_file current_source
+			log_file=$DEPLOY_PROJECT_ROOT/tmp/deploy-logs/opensim-cli-test-build/source-refresh.log
+			mkdir -p "$(dirname "$log_file")"
+			deploy_command exec "$builder" sh -c 'printf "%s\\n" "deb [trusted=yes] file:/tmp/opensim-stale-repository ./" >/etc/apt/sources.list.d/magiiic.list' || status=$?
+			if ((status == 0)); then
+				deploy_command exec "$builder" bash -c '
+					set -o pipefail
+					OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs DEBUG=yes bash /tmp/opensim-local-install/quick-install.sh --dependencies
+				' >"$log_file" 2>&1 || status=$?
+			fi
+			current_source=$(deploy_command exec "$builder" cat /etc/apt/sources.list.d/magiiic.list 2>/dev/null) || status=$?
+			[[ "$current_source" == 'deb [trusted=yes] file:/tmp/opensim-local-install/debs ./' ]] || status=1
+			assert_equals 'deb [trusted=yes] file:/tmp/opensim-local-install/debs ./' "$current_source" "package builder replaces a stale local APT source"
+			if ((status != 0)); then tail -n 40 "$log_file" >&2 || true; deploy_mark_infra_blocked; fi
+			;;
 		esac
 	fi
 	assert_equals 0 "$status" "package builder $step"
