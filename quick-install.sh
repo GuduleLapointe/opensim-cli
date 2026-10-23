@@ -104,6 +104,16 @@ install_packages() {
 	as_root apt-get install -y -qq "$@"
 }
 
+database_server_installed() {
+	local package
+	for package in mariadb-server mysql-server mysql-server-8.0 mysql-community-server default-mysql-server percona-server-server percona-server-server-8.0; do
+		if dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null | grep -qx installed; then
+			return 0
+		fi
+	done
+	return 1
+}
+
 # The .NET runtime OpenSimulator needs, and libgdiplus, by the command of the tools (it knows what each system has)
 dotnet_runtime() {
 	as_root "$1" install-dotnet -y
@@ -255,8 +265,14 @@ else
 	fi
 
 	say "Install apt packages"
-	# Ask APT for MariaDB in the same transaction; the CLI package also recommends a default MySQL server.
-	install_packages "${OPENSIM_PACKAGES[@]}" mariadb-server || die error $?
+	local packages=("${OPENSIM_PACKAGES[@]}")
+	if database_server_installed; then
+		say "Keep the installed database server"
+	else
+		say "Install MariaDB as the default database server"
+		packages+=(mariadb-server)
+	fi
+	install_packages "${packages[@]}" || die error $?
 
 	if ! command -v dotnet | grep -q .; then
 		say "Install dotnet"
