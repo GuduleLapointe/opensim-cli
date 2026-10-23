@@ -45,7 +45,11 @@ unset OPENSIM_KIT_APT_SUITE_WAS_SET OPENSIM_KIT_APT_SUITE_FROM_ENV
 
 MAGIIIC_KEY=https://apt.magiiic.com/magiiic-packaging.asc
 OPENSIM_KIT_APT_SUITE=${OPENSIM_KIT_APT_SUITE:-stable}
-MAGIIIC_REPOSITORY="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $OPENSIM_KIT_APT_SUITE main"
+if [[ "$OPENSIM_KIT_APT_SUITE" == tests ]]; then
+	MAGIIIC_REPOSITORY='deb [trusted=yes] https://apt.magiiic.com tests main'
+else
+	MAGIIIC_REPOSITORY="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $OPENSIM_KIT_APT_SUITE main"
+fi
 # What the tools need on a machine that does not have the packages (a clone): the same as the package opensim-tools
 PHP_PACKAGES=(php-cli php-curl php-intl php-mbstring php-mysql php-xml)
 OPENSIM_PACKAGES=(opensim opensim-cli opensim-helpers)
@@ -231,7 +235,7 @@ configure_package_sources() {
 		fi
 		apt_debs=$(apt_accessible_local_repository "$debs") || return $?
 	fi
-	if [[ ! -s /usr/share/keyrings/magiiic-packaging.gpg ]]; then
+	if [[ "$OPENSIM_KIT_APT_SUITE" != tests && ! -s /usr/share/keyrings/magiiic-packaging.gpg ]]; then
 		curl -fsSL "$MAGIIIC_KEY" | as_root gpg --dearmor --yes -o /usr/share/keyrings/magiiic-packaging.gpg || return $?
 	fi
 	{

@@ -214,9 +214,14 @@ deploy_run_step() {
 	case "$step" in
 	apt_source)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		local failures_before failures_after
+		local failures_before failures_after source
+		if [[ "$DEPLOY_APT_SUITE" == tests ]]; then
+			source='deb [trusted=yes] https://apt.magiiic.com tests main'
+		else
+			source="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $DEPLOY_APT_SUITE main"
+		fi
 		printf -v command 'deploy_command exec %q grep -Fx %q /etc/apt/sources.list.d/magiiic.list' \
-			"$name" "deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $DEPLOY_APT_SUITE main"
+			"$name" "$source"
 		failures_before=$(bashunit::state::get_assertions_failed)
 		assert_exec "$command"
 		failures_after=$(bashunit::state::get_assertions_failed)

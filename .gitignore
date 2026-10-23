@@ -14,3 +14,4 @@ tests/.env
 /dist/
 .lerd.yaml
 .node-version
+*.log

@@ -113,7 +113,9 @@ repository. Set `DEPLOY_APT_SUITE=tests` to select the test suite; it defaults
 to `stable`. Test packages can be published from the local build with
 `DEPLOY_PUBLISH_TEST_PACKAGES=1` and a local repository clone configured as
 `APT_REPO_DIR` in `tests/.env`. No local `.deb` files are copied into the OS
-containers. `CONTAINER_CONNECTION` applies to platform containers and never
+containers. The `tests` suite is unsigned and the installer trusts it
+explicitly; `stable` and `unstable` continue to use the repository signing key.
+`CONTAINER_CONNECTION` applies to platform containers and never
 redirects the local build. The remote image and container availability checks
 use Bashunit's one-retry annotation. A check that only passes on retry is
 marked as flaky; package mutations and installation tests are not retried.
