@@ -341,7 +341,7 @@ deploy_run_step() {
 	name=$(deploy_name "$DEPLOY_PLATFORM")
 	location=$(deploy_execution_location)
 	case "$step" in
-	image) bashunit::set_test_title "$DEPLOY_PLATFORM container image $DEPLOY_IMAGE is available" ;;
+	image) bashunit::set_test_title "$DEPLOY_PLATFORM container image is available" ;;
 	created) bashunit::set_test_title "$DEPLOY_PLATFORM container is created on $location" ;;
 	started) bashunit::set_test_title "$DEPLOY_PLATFORM container start succeeds" ;;
 	running) bashunit::set_test_title "$DEPLOY_PLATFORM container reports running" ;;
@@ -597,12 +597,12 @@ deploy_run_step() {
 		;;
 	credentials)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		printf -v command 'deploy_command exec %q sh -c %q' "$name" 'grep -Ec "^export OPENSIM_DB_(HOST|ADMIN_USER|ADMIN_PASS|USER|PASS)=" /root/.opensimrc'
-		assert_exec "$command" --stdout 5
+		printf -v command 'deploy_command exec %q sh -c %q' "$name" 'count=$(grep -Ec "^export OPENSIM_DB_(HOST|ADMIN_USER|ADMIN_PASS|USER|PASS)=" /root/.opensimrc); printf "saved database setting count: %s\n" "$count"; test "$count" -eq 5'
+		assert_exec "$command" --stdout-contains 'saved database setting count: 5'
 		;;
 	packages)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		printf -v command 'deploy_command exec %q sh -c %q' "$name" 'dpkg-query -W -f="${db:Status-Status}\n" bash-tools opensim-cli opensim-engine opensim-helpers opensim-rest-php | grep -Ec "^installed$"'
+		printf -v command 'deploy_command exec %q sh -c %q' "$name" 'dpkg-query -W -f="\${db:Status-Status}\n" bash-tools opensim-cli opensim-engine opensim-helpers opensim-rest-php | grep -Ec "^installed$"'
 		assert_exec "$command" --stdout 5
 		;;
 	setup_credentials)
