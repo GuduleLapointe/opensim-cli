@@ -3,6 +3,9 @@
 DEPLOY_PLATFORMS_FILE=${DEPLOY_PLATFORMS_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/platforms.tsv}
 DEPLOY_RUN_DIR=${_BASHUNIT_RUN_OUTPUT_DIR:-${TMPDIR:-/tmp}/bashunit/deploy-$$}
 DEPLOY_RUN_ID=${DEPLOY_RUN_ID:-${DEPLOY_RUN_DIR##*/}}
+DEPLOY_HOST_SLUG=${DEPLOY_HOST_SLUG:-$(hostname -s 2>/dev/null || hostname)}
+DEPLOY_USER_SLUG=${DEPLOY_USER_SLUG:-$(id -un 2>/dev/null || printf user)}
+DEPLOY_EPHEMERAL=${DEPLOY_EPHEMERAL:-0}
 DEPLOY_GATE_BLOCK_FILE=$DEPLOY_RUN_DIR/deployment-blocked
 DEPLOY_GATE_READY_FILE=$DEPLOY_RUN_DIR/deployment-ready
 DEPLOY_INFRA_BLOCK_FILE=$DEPLOY_RUN_DIR/deployment-infra-blocked
@@ -34,7 +37,18 @@ deploy_command() {
 }
 
 deploy_name() {
-	printf 'opensim-deploy-%s-%s' "$1" "$DEPLOY_RUN_ID"
+	local identity
+	identity=$(deploy_slug "${DEPLOY_HOST_SLUG}-${DEPLOY_USER_SLUG}-$1")
+	if [[ "$DEPLOY_EPHEMERAL" == 1 ]]; then identity+="-$(deploy_slug "$DEPLOY_RUN_ID")"; fi
+	printf 'opensim-deploy-%s' "$identity"
+}
+
+deploy_slug() {
+	printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_-]+/-/g; s/^-+//; s/-+$//'
+}
+
+deploy_log_dir() {
+	printf '%s/logs/%s' "$DEPLOY_RUN_DIR" "$(deploy_slug "${DEPLOY_HOST_SLUG}-${DEPLOY_USER_SLUG}-$1")"
 }
 
 deploy_volume_name() {
@@ -184,13 +198,19 @@ deploy_run_step() {
 				local memory_args=()
 				volume=$(deploy_volume_name)
 				[[ -n "${MEMORY:-}" ]] && memory_args=(--memory "$MEMORY")
-				deploy_command create --name "$name" \
+				if deploy_command inspect "$name" >/dev/null 2>&1; then
+					status=0
+				else deploy_command create --name "$name" \
 					--label org.opensim-cli.deploy=1 \
 					--label "org.opensim-cli.deploy.platform=$DEPLOY_PLATFORM" \
+					--label "org.opensim-cli.deploy.host=$DEPLOY_HOST_SLUG" \
+					--label "org.opensim-cli.deploy.user=$DEPLOY_USER_SLUG" \
+					--label "org.opensim-cli.deploy.ephemeral=$DEPLOY_EPHEMERAL" \
 					--label "org.opensim-cli.deploy.run=$DEPLOY_RUN_ID" \
 					"${memory_args[@]}" \
 					--volume "$volume:/tmp/opensim-local-install" \
 					"$DEPLOY_IMAGE" sh -c 'while :; do sleep 3600; done' >/dev/null || status=$?
+				fi
 			fi
 			assert_equals 0 "$status" "$DEPLOY_PLATFORM create"
 			;;
@@ -199,7 +219,9 @@ deploy_run_step() {
 				bashunit::skip "$DEPLOY_PLATFORM not created"
 				return
 			fi
-			deploy_command start "$name" >/dev/null || status=$?
+			local running
+			running=$(deploy_command inspect --format '{{.State.Running}}' "$name") || status=$?
+			if [[ "$running" != true ]] && ((status == 0)); then deploy_command start "$name" >/dev/null || status=$?; fi
 			assert_equals 0 "$status" "$DEPLOY_PLATFORM start"
 			;;
 		running)
@@ -231,10 +253,20 @@ deploy_run_step() {
 			;;
 		installed)
 			if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-			deploy_command exec "$name" sh -c 'timeout --signal=TERM --kill-after=30s "'"${DEPLOY_QUICK_INSTALL_TIMEOUT}"'s" env DEBUG=yes OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh --no-setup >/tmp/quick-install.log 2>&1' || status=$?
-			if ((status == 124)); then printf '%s\n' "$DEPLOY_PLATFORM quick-install timed out after ${DEPLOY_QUICK_INSTALL_TIMEOUT}s" >&2; fi
-			if ((status != 0)); then
-				deploy_command exec "$name" sh -c 'tail -n 40 /tmp/quick-install.log' >&2 || true
+			local log_dir log_file manifest_stamp installed_stamp
+			log_dir=$(deploy_log_dir "$DEPLOY_PLATFORM")
+			log_file=$log_dir/quick-install.log
+			manifest_stamp=$(cksum <"$DEPLOY_PACKAGE_DIR/MANIFEST" | awk '{print $1 ":" $2}')
+			installed_stamp=$(deploy_command exec "$name" sh -c 'cat /var/tmp/opensim-deploy-package-manifest 2>/dev/null' 2>/dev/null) || installed_stamp=
+			if [[ "$DEPLOY_EPHEMERAL" != 1 && "$installed_stamp" == "$manifest_stamp" ]] && deploy_command exec "$name" sh -c 'command -v opensim >/dev/null && dpkg-query -W -f="${db:Status-Status}" opensim-cli 2>/dev/null | grep -qx installed'; then
+				bashunit::skip "$DEPLOY_PLATFORM package set already installed"
+				return
+			fi
+			mkdir -p "$log_dir" || status=$?
+			if ((status == 0)); then deploy_command exec "$name" sh -c 'timeout --signal=TERM --kill-after=30s "'"${DEPLOY_QUICK_INSTALL_TIMEOUT}"'s" env DEBUG=yes OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh --no-setup' >"$log_file" 2>&1 || status=$?; fi
+			if ((status == 124)); then printf '%s quick-install timed out after %ss (log: %s)\n' "$DEPLOY_PLATFORM" "$DEPLOY_QUICK_INSTALL_TIMEOUT" "$log_file" >&2; fi
+			if ((status != 0)); then tail -n 40 "$log_file" >&2 || true
+			else deploy_command exec "$name" sh -c 'printf "%s\n" "$1" > /var/tmp/opensim-deploy-package-manifest' sh "$manifest_stamp" || status=$?
 			fi
 			assert_equals 0 "$status" "$DEPLOY_PLATFORM quick-install"
 			;;
@@ -252,8 +284,8 @@ deploy_cleanup_platform() {
 	local platform=$1 name status=0
 	name=$(deploy_name "$platform")
 	bashunit::set_test_title "$platform cleanup"
-	if [[ "${DEPLOY_KEEP:-0}" == 1 ]]; then
-		bashunit::skip 'containers kept for inspection'
+	if [[ "$DEPLOY_EPHEMERAL" != 1 ]]; then
+		bashunit::skip 'persistent container retained'
 		return
 	fi
 	if ! deploy_select_engine || ! deploy_command inspect "$name" >/dev/null 2>&1; then

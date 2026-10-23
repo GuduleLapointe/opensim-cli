@@ -8,7 +8,7 @@ composer test
 
 It runs local application tests, then the package build, then deployment.
 Bashunit marks dependent build and deployment tests as skipped when an
-earlier check fails. Containers are removed by the final cleanup phase, after
+earlier check fails. Ephemeral containers are removed by the final cleanup phase, after
 all test groups have finished. The full suite uses Bashunit's default
 alphabetical discovery. The numbered directories put local application tests
 and the package build before deployment, and cleanup sorts last; platform
@@ -34,9 +34,10 @@ Each platform has its own Bashunit file, so it can also be selected directly:
 ./lib/bashunit/bashunit tests/20-Deploy/ubuntu-26.04-test.sh
 ```
 
-A targeted run leaves its container and shared package volume for inspection. The full suite's
-cleanup runs only after the local, build, and deployment groups have all
-finished. `DEPLOY_KEEP=1` skips that final cleanup.
+A targeted run leaves its container and shared package volume for inspection. Platform containers
+are persistent by default and are reused on later runs. Their names include the launching machine,
+user, and OS version. Set `DEPLOY_EPHEMERAL=1` to use randomly named containers; those are removed
+by the final cleanup, and persistent containers are left untouched.
 
 The platform data lives in `platforms.tsv`: one row per platform, with its
 container image and expected `/etc/os-release` ID and version. A platform also
@@ -58,13 +59,12 @@ suite stops after verifying installation; it does not run `opensim setup` or
 exercise service commands. `BASHUNIT_PROFILE=true` reports slowest tests at the
 end, including duration for a failed long-running step.
 
-Platform containers stay running while the matrix runs, then the final
-full-suite cleanup removes them. The package builder and its named volume stay
+Platform containers stay running after the matrix by default. The package builder and its named volume stay
 running and persist across test runs so subsequent runs avoid re-indexing and
 package transfer. They can be inspected in Podman Desktop and removed manually
 when no longer needed: `podman rm -f opensim-cli-test-build` followed by
 `podman volume rm opensim-cli-test-packages` (use the configured engine and
-Podman connection). Platform containers are labelled by OS and run ID. Titles
+Podman connection). Platform containers are labelled by OS, machine, and user. Titles
 stay short (for example, `debian-12 created`). If local tests, the build, or
 shared builder setup fails, dependent deployment tests are skipped. A platform
 creation or installation failure skips only that platform; other platforms
@@ -77,9 +77,10 @@ existing `tests/bootstrap.sh`. No memory cap is applied unless `MEMORY` is set
 in the environment or `tests/.env`. `DEPLOY_QUICK_INSTALL_TIMEOUT` sets the
 per-platform install timeout in seconds (default: 900).
 
-Set `DEPLOY_KEEP=1` in `tests/.env` to leave platform containers running after
-the deployment matrix finishes. By default, the final cleanup tests remove
-only those platform containers. During the matrix, you can inspect, stop, or remove a container in Podman
+Set `DEPLOY_EPHEMERAL=1` in `tests/.env` to use temporary containers that the final cleanup removes.
+By default, deployment containers persist and are reused, so a successful installation is not repeated
+when the staged package manifest is unchanged. Full quick-install output is saved under a separate
+`logs/<machine-user-platform>` directory in Bashunit's temporary run directory. During the matrix, you can inspect, stop, or remove a container in Podman
 Desktop; if you stop or remove one, later checks for that platform will report
 the resulting state.
 
