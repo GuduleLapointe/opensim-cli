@@ -253,7 +253,7 @@ else
 
 	if ! command -v dotnet | grep -q .; then
 		say "Install dotnet"
-		as_root opensim install-dotnet -y || end $? Error installing dotNet
+		as_root opensim install-dotnet -y || die Error $? installing dotNet
 	fi
 
 	end_installation

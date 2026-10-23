@@ -4,6 +4,7 @@ DEPLOY_PLATFORMS_FILE=${DEPLOY_PLATFORMS_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]
 DEPLOY_RUN_DIR=${_BASHUNIT_RUN_OUTPUT_DIR:-${TMPDIR:-/tmp}/bashunit/deploy-$$}
 DEPLOY_RUN_ID=${DEPLOY_RUN_ID:-${DEPLOY_RUN_DIR##*/}}
 DEPLOY_GATE_BLOCK_FILE=$DEPLOY_RUN_DIR/deployment-blocked
+DEPLOY_PACKAGE_DIR=${_BASHUNIT_RUN_OUTPUT_DIR:-}/deploy-packages
 DEPLOY_ENGINE_SELECTED=
 DEPLOY_PLATFORM=
 DEPLOY_IMAGE=
@@ -28,6 +29,19 @@ deploy_command() {
 
 deploy_name() {
 	printf 'opensim-deploy-%s-%s' "$1" "$DEPLOY_RUN_ID"
+}
+
+deploy_volume_name() {
+	printf 'opensim-deploy-packages-%s' "$DEPLOY_RUN_ID"
+}
+
+deploy_platform_block_file() {
+	printf '%s/%s-blocked' "$DEPLOY_RUN_DIR" "$1"
+}
+
+deploy_mark_platform_blocked() {
+	mkdir -p "$DEPLOY_RUN_DIR"
+	: >"$(deploy_platform_block_file "$1")"
 }
 
 deploy_load_platform() {
@@ -88,15 +102,34 @@ deploy_run_step() {
 		bashunit::skip 'local tests or package build failed'
 		return
 	fi
+	if [[ -e "$(deploy_platform_block_file "$DEPLOY_PLATFORM")" ]]; then
+		bashunit::skip "$DEPLOY_PLATFORM prerequisite failed"
+		return
+	fi
 
 	case "$step" in
+		volume)
+			local volume
+			volume=$(deploy_volume_name)
+			bashunit::set_test_title "$DEPLOY_PLATFORM package volume"
+			if ! deploy_select_engine; then
+				status=127
+			elif ! deploy_command volume inspect "$volume" >/dev/null 2>&1; then
+				deploy_command volume create "$volume" >/dev/null || status=$?
+			fi
+			assert_equals 0 "$status" "$DEPLOY_PLATFORM package volume ready"
+			;;
 		created)
 			if ! deploy_select_engine; then status=127; else
+				local volume
+				volume=$(deploy_volume_name)
 				deploy_command create --name "$name" \
 					--label org.opensim-cli.deploy=1 \
 					--label "org.opensim-cli.deploy.platform=$DEPLOY_PLATFORM" \
 					--label "org.opensim-cli.deploy.run=$DEPLOY_RUN_ID" \
-					--memory="${MEMORY:-400m}" "$DEPLOY_IMAGE" sh -c 'while :; do sleep 3600; done' >/dev/null || status=$?
+					--memory="${MEMORY:-400m}" \
+					--volume "$volume:/tmp/opensim-local-install" \
+					"$DEPLOY_IMAGE" sh -c 'while :; do sleep 3600; done' >/dev/null || status=$?
 			fi
 			assert_equals 0 "$status" "$DEPLOY_PLATFORM create"
 			;;
@@ -121,14 +154,49 @@ deploy_run_step() {
 		id)
 			if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
 			actual=$(deploy_command exec "$name" sh -c '. /etc/os-release; printf "%s" "$ID"') || status=$?
+			[[ "$actual" == "$DEPLOY_EXPECTED_ID" ]] || status=1
 			assert_equals "$DEPLOY_EXPECTED_ID" "$actual" "$DEPLOY_PLATFORM ID"
 			;;
 		version)
 			if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
 			actual=$(deploy_command exec "$name" sh -c '. /etc/os-release; printf "%s" "$VERSION_ID"') || status=$?
+			[[ "$actual" == "$DEPLOY_EXPECTED_VERSION" ]] || status=1
 			assert_equals "$DEPLOY_EXPECTED_VERSION" "$actual" "$DEPLOY_PLATFORM version"
 			;;
+		synced)
+			if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+			if [[ ! -s "$DEPLOY_PACKAGE_DIR/debs/SHA256SUMS" || ! -s "$DEPLOY_PACKAGE_DIR/quick-install.sh" ]]; then
+				status=1
+			else
+				if ! deploy_command exec "$name" sh -c 'test -s /tmp/opensim-local-install/debs/SHA256SUMS && test -x /tmp/opensim-local-install/quick-install.sh' >/dev/null 2>&1; then
+					deploy_command exec "$name" sh -c 'rm -rf /tmp/opensim-local-install/* /tmp/opensim-local-install/.[!.]* /tmp/opensim-local-install/..?*' || status=$?
+					if ((status == 0)); then
+						COPYFILE_DISABLE=1 tar -chf - -C "$DEPLOY_PACKAGE_DIR" . |
+							deploy_command exec -i "$name" sh -c 'tar -xf - --no-same-owner --warning=no-unknown-keyword -C /tmp/opensim-local-install' || status=$?
+					fi
+				fi
+				if ((status == 0)); then
+					deploy_command exec "$name" sh -c 'test -x /tmp/opensim-local-install/quick-install.sh && cd /tmp/opensim-local-install/debs && sha256sum -c SHA256SUMS' >/dev/null || status=$?
+				fi
+			fi
+			assert_equals 0 "$status" "$DEPLOY_PLATFORM package sync"
+			;;
+		installed)
+			if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+			deploy_command exec "$name" sh -c 'OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh --no-setup >/tmp/opensim-local-install/quick-install.log 2>&1' || status=$?
+			if ((status != 0)); then
+				deploy_command exec "$name" sh -c 'tail -n 40 /tmp/opensim-local-install/quick-install.log' >&2 || true
+			fi
+			assert_equals 0 "$status" "$DEPLOY_PLATFORM quick-install"
+			;;
+		packages)
+			if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+			actual=$(deploy_command exec "$name" sh -c 'dpkg-query -W -f="${db:Status-Status}\\n" bash-tools opensim-cli opensim-engine opensim-helpers opensim-rest-php' 2>/dev/null) || status=$?
+			if [[ "$actual" != $'installed\ninstalled\ninstalled\ninstalled\ninstalled' ]]; then status=1; fi
+			assert_equals 0 "$status" "$DEPLOY_PLATFORM packages installed"
+			;;
 	esac
+	if ((status != 0)); then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
 }
 
 deploy_cleanup_platform() {
@@ -145,4 +213,20 @@ deploy_cleanup_platform() {
 	fi
 	deploy_command rm --force "$name" >/dev/null || status=$?
 	assert_equals 0 "$status" "$platform cleanup"
+}
+
+deploy_cleanup_volume() {
+	local volume status=0
+	volume=$(deploy_volume_name)
+	bashunit::set_test_title 'shared package volume cleanup'
+	if [[ "${DEPLOY_KEEP:-0}" == 1 ]]; then
+		bashunit::skip 'shared package volume kept for inspection'
+		return
+	fi
+	if ! deploy_select_engine || ! deploy_command volume inspect "$volume" >/dev/null 2>&1; then
+		bashunit::skip 'shared package volume not created'
+		return
+	fi
+	deploy_command volume rm "$volume" >/dev/null || status=$?
+	assert_equals 0 "$status" 'shared package volume cleanup'
 }
