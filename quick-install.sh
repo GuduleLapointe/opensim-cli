@@ -20,7 +20,8 @@
 #           --mariadb | --mysql   install/configure the requested SQL server
 #           --dotnet              install the .NET runtime without OpenSim packages
 #           --opensim             install OpenSimulator and its management packages (or prepare the clone)
-# Environment: OPENSIM_KIT_DEBS=folder  install the packages (*.deb) of that folder instead of the Magiiic repository
+# Environment: OPENSIM_KIT_DEBS=folder       install packages (*.deb) from a local folder
+#             OPENSIM_KIT_APT_SUITE=tests     use another suite of the official APT repository
 
 set -euo pipefail
 
@@ -29,14 +30,22 @@ if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != root ]] && command -v getent >/dev/
 	INSTALLER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
 fi
 OPENSIM_RC_PATH=${OPENSIM_RC:-$INSTALLER_HOME/.opensimrc}
+OPENSIM_KIT_APT_SUITE_WAS_SET=${OPENSIM_KIT_APT_SUITE+x}
+OPENSIM_KIT_APT_SUITE_FROM_ENV=${OPENSIM_KIT_APT_SUITE:-}
 
 for file in "${1:+$1/.env}" "$OPENSIM_RC_PATH"; do
 	# shellcheck disable=SC1090
 	[[ -n "$file" && -r "$file" ]] && source "$file"
 done
 
+if [[ "$OPENSIM_KIT_APT_SUITE_WAS_SET" == x ]]; then
+	OPENSIM_KIT_APT_SUITE=$OPENSIM_KIT_APT_SUITE_FROM_ENV
+fi
+unset OPENSIM_KIT_APT_SUITE_WAS_SET OPENSIM_KIT_APT_SUITE_FROM_ENV
+
 MAGIIIC_KEY=https://apt.magiiic.com/magiiic-packaging.asc
-MAGIIIC_REPOSITORY="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com stable main"
+OPENSIM_KIT_APT_SUITE=${OPENSIM_KIT_APT_SUITE:-stable}
+MAGIIIC_REPOSITORY="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $OPENSIM_KIT_APT_SUITE main"
 # What the tools need on a machine that does not have the packages (a clone): the same as the package opensim-tools
 PHP_PACKAGES=(php-cli php-curl php-intl php-mbstring php-mysql php-xml)
 OPENSIM_PACKAGES=(opensim opensim-cli opensim-helpers)
@@ -208,6 +217,7 @@ configure_package_sources() {
 	install_packages ca-certificates curl gpg openssl || return $?
 
 	local apt_debs=
+	[[ "$OPENSIM_KIT_APT_SUITE" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid OPENSIM_KIT_APT_SUITE: $OPENSIM_KIT_APT_SUITE"
 	if [[ -n "$OPENSIM_KIT_DEBS" ]]; then
 		local debs
 		debs=$(cd "$OPENSIM_KIT_DEBS" && pwd) || die "$OPENSIM_KIT_DEBS is not a folder"
