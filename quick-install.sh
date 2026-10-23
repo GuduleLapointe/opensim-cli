@@ -15,6 +15,7 @@
 #
 # Options:  -y, --yes   do not ask before installing
 #           --no-setup  prepare the machine, do not start `opensim setup`
+#           --step NAME run all steps, or only `opensim` or `dotnet`
 # Environment: OPENSIM_KIT_DEBS=folder  install the packages (*.deb) of that folder instead of the Magiiic repository
 
 set -euo pipefail
@@ -35,6 +36,7 @@ OPENSIM_KIT_DEBS=${OPENSIM_KIT_DEBS:-}
 ASSUME_YES=${ASSUME_YES:-}
 RUN_SETUP=${RUN_SETUP:-}
 DPKG_CONFIGURED=no
+INSTALL_STEP=all
 
 # === Define helper functions first ===
 
@@ -92,14 +94,19 @@ start_setup() { # the library of the questions, then the command to run, which g
 	exec "$@"
 }
 
+recover_dpkg_configuration() {
+	if [[ "$DPKG_CONFIGURED" != yes ]]; then
+		say "Complete any interrupted package configuration"
+		as_root dpkg --configure -a || return $?
+		DPKG_CONFIGURED=yes
+	fi
+	return 0
+}
+
 install_packages() {
 	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu (see INSTALLATION.md for the others)"
 	export DEBIAN_FRONTEND=noninteractive
-	if [[ "$DPKG_CONFIGURED" != yes ]]; then
-		say "Complete any interrupted package configuration"
-		as_root dpkg --configure -a || die "could not complete package configuration"
-		DPKG_CONFIGURED=yes
-	fi
+	recover_dpkg_configuration || return $?
 	as_root apt-get update -qq || return $?
 	as_root apt-get install -y -qq "$@" || return $?
 }
@@ -147,10 +154,18 @@ TMP=/tmp/$PGM.$$
 DEBUG=${DEBUG:-}
 trap "rm -rf $TMP $TMP.$$" EXIT
 
-for argument in "$@"; do
+while (($#)); do
+	argument=$1
+	shift
 	case "$argument" in
 	-y | --yes) ASSUME_YES=yes ;;
 	--no-setup) RUN_SETUP= ;;
+	--step)
+		(($#)) || die "--step needs one of: all, opensim, dotnet"
+		INSTALL_STEP=$1
+		shift
+		;;
+	--step=*) INSTALL_STEP=${argument#*=} ;;
 	-h | --help)
 		sed -n '2,/^$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 		exit 0
@@ -164,6 +179,10 @@ for argument in "$@"; do
 		;;
 	esac
 done
+case "$INSTALL_STEP" in
+	all | opensim | dotnet) ;;
+	*) die "unknown step $INSTALL_STEP (choose all, opensim, or dotnet)" ;;
+esac
 
 # Check if in a clone of the repository
 here=
@@ -185,6 +204,16 @@ if [ -n "$clone" -a -z "$OPENSIM_KIT_DEBS" ]; then
 	# A clone: its tools run from the folder, with the PHP libraries of composer
 	###
 	say "Install from the clone in $clone"
+	if [[ "$INSTALL_STEP" == opensim ]]; then
+		die "the opensim step installs Debian packages; this clone is already the OpenSim installation"
+	fi
+	if [[ "$INSTALL_STEP" == dotnet ]]; then
+		[[ -f "$clone/vendor/autoload.php" ]] || die "install the PHP libraries before selecting the dotnet step"
+		[[ $(uname -s) == Linux ]] || die "the dotnet step is only available on Linux"
+		recover_dpkg_configuration || die "could not complete package configuration"
+		as_root "$clone/bin/opensim" install-dotnet -y
+		exit 0
+	fi
 
 	os=$(uname -s)
 	case $os in
@@ -226,6 +255,7 @@ if [ -n "$clone" -a -z "$OPENSIM_KIT_DEBS" ]; then
 	fi
 
 	if [[ $(uname -s) == Linux ]]; then
+		recover_dpkg_configuration || die "could not complete package configuration"
 		as_root "$clone/bin/opensim" install-dotnet -y
 	fi
 
@@ -237,7 +267,7 @@ else
 	[[ $(uname -s) == Linux ]] || die "the packages are for Debian and Ubuntu: on macOS, clone the repository and run ./setup.sh from it"
 	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu (see INSTALLATION.md for the others)"
 
-	if [[ -n "${OPENSIM_KIT_DEBS:-}" ]]; then
+	if [[ "$INSTALL_STEP" != dotnet && -n "${OPENSIM_KIT_DEBS:-}" ]]; then
 		debs=$(cd "$OPENSIM_KIT_DEBS" && pwd) || die "$OPENSIM_KIT_DEBS is not a folder"
 		say "Use local packages from ${OPENSIM_KIT_DEBS}"
 		cd $debs
@@ -258,26 +288,36 @@ else
 		fi
 	fi
 
-	if [[ ! -f /etc/apt/sources.list.d/magiiic.list ]]; then
+	if [[ "$INSTALL_STEP" != dotnet && ! -f /etc/apt/sources.list.d/magiiic.list ]]; then
 		log "add official magiiic repository to apt sources"
 		install_packages ca-certificates curl gpg
 		curl -fsSL "$MAGIIIC_KEY" | as_root gpg --dearmor --yes -o /usr/share/keyrings/magiiic-packaging.gpg
 		printf '%s\n' "$MAGIIIC_REPOSITORY" | as_root tee /etc/apt/sources.list.d/magiiic.list >/dev/null
 	fi
 
-	say "Install apt packages"
-	local packages=("${OPENSIM_PACKAGES[@]}")
-	if database_server_installed; then
-		say "Keep the installed database server"
-	else
-		say "Install MariaDB as the default database server"
-		packages+=(mariadb-server)
+	if [[ "$INSTALL_STEP" != dotnet ]]; then
+		say "Install apt packages"
+		packages=("${OPENSIM_PACKAGES[@]}")
+		if database_server_installed; then
+			say "Keep the installed database server"
+		else
+			say "Install MariaDB as the default database server"
+			packages+=(mariadb-server)
+		fi
+		install_packages "${packages[@]}" || die error $?
 	fi
-	install_packages "${packages[@]}" || die error $?
 
-	if ! command -v dotnet >/dev/null 2>&1; then
-		say "Install dotnet"
+	if [[ "$INSTALL_STEP" != opensim ]]; then
+		command -v opensim >/dev/null 2>&1 || die "install the OpenSim packages before selecting the dotnet step"
+		recover_dpkg_configuration || die "could not complete package configuration"
+	fi
+	if [[ "$INSTALL_STEP" != opensim ]]; then
+		say "Check .NET runtime"
 		as_root opensim install-dotnet -y || die Error $? installing dotNet
+	fi
+	if [[ "$INSTALL_STEP" != all ]]; then
+		say "$INSTALL_STEP step completed"
+		exit 0
 	fi
 
 	end_installation

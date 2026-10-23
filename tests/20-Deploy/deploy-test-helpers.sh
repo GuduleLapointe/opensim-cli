@@ -252,34 +252,36 @@ deploy_run_step() {
 			deploy_command exec "$name" sh -c 'test -s /tmp/opensim-local-install/MANIFEST && test -s /tmp/opensim-local-install/debs/Packages.gz && cd /tmp/opensim-local-install && sha256sum -c MANIFEST' >/dev/null || status=$?
 			assert_equals 0 "$status" "$DEPLOY_PLATFORM package sync"
 			;;
-		installed)
+		opensim | dotnet)
 			if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-			local log_dir log_file manifest_stamp installed_stamp
+			local log_dir log_file manifest_stamp installed_stamp container_log install_step
+			install_step=$step
 			log_dir=$(deploy_log_dir "$DEPLOY_PLATFORM")
-			log_file=$log_dir/quick-install.log
+			log_file=$log_dir/$install_step.log
 			manifest_stamp=$(cksum <"$DEPLOY_PACKAGE_DIR/MANIFEST" | awk '{print $1 ":" $2}')
 			installed_stamp=$(deploy_command exec "$name" sh -c 'cat /var/tmp/opensim-deploy-package-manifest 2>/dev/null' 2>/dev/null) || installed_stamp=
-			if [[ "$DEPLOY_EPHEMERAL" != 1 && "$installed_stamp" == "$manifest_stamp" ]] && deploy_command exec "$name" sh -c 'command -v opensim >/dev/null && dpkg-query -W -f="${db:Status-Status}" opensim-cli 2>/dev/null | grep -qx installed'; then
+			if [[ "$step" == opensim && "$DEPLOY_EPHEMERAL" != 1 && "$installed_stamp" == "$manifest_stamp" ]] && deploy_command exec "$name" sh -c 'command -v opensim >/dev/null && dpkg-query -W -f="${db:Status-Status}" opensim-cli 2>/dev/null | grep -qx installed'; then
 				bashunit::skip "$DEPLOY_PLATFORM package set already installed"
 				return
 			fi
 			mkdir -p "$log_dir" || status=$?
 			if ((status == 0)); then
-				local container_log="/tmp/$name/quick-install.log"
+				container_log="/tmp/$name/$install_step.log"
 				deploy_command exec "$name" bash -c '
-					set -o pipefail
-					log_file=$1
-					mkdir -p "$(dirname "$log_file")"
-					timeout --signal=TERM --kill-after=30s "${2}s" env DEBUG=yes OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh --no-setup 2>&1 | tee "$log_file"
-				' bash "$container_log" "$DEPLOY_QUICK_INSTALL_TIMEOUT" >"$log_file" 2>&1 || status=$?
+						set -o pipefail
+						log_file=$1
+						mkdir -p "$(dirname "$log_file")"
+						timeout --signal=TERM --kill-after=30s "${2}s" env DEBUG=yes OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh --no-setup --step "$3" 2>&1 | tee "$log_file"
+					' bash "$container_log" "$DEPLOY_QUICK_INSTALL_TIMEOUT" "$install_step" >"$log_file" 2>&1 || status=$?
 			fi
 			if ((status == 124)); then printf '%s quick-install timed out after %ss (log: %s)\n' "$DEPLOY_PLATFORM" "$DEPLOY_QUICK_INSTALL_TIMEOUT" "$log_file" >&2; fi
 			if ((status != 0)); then
 				printf 'Full quick-install log: %s\n' "$log_file" >&2
 				tail -n 40 "$log_file" >&2 || true
-			else deploy_command exec "$name" sh -c 'printf "%s\n" "$1" > /var/tmp/opensim-deploy-package-manifest' sh "$manifest_stamp" || status=$?
+			elif [[ "$step" == dotnet ]]; then
+				deploy_command exec "$name" sh -c 'printf "%s\n" "$1" > /var/tmp/opensim-deploy-package-manifest' sh "$manifest_stamp" || status=$?
 			fi
-			assert_equals 0 "$status" "$DEPLOY_PLATFORM quick-install"
+			assert_equals 0 "$status" "$DEPLOY_PLATFORM $install_step step"
 			;;
 		packages)
 			if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
