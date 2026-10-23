@@ -20,3 +20,7 @@ if deploy_load_platform debian-12; then
 	function test_14_packages_installed() { deploy_run_step packages; }
 	function test_15_setup_works_with_or_without_opensimrc() { deploy_run_step setup_credentials; }
 fi
+
+function tear_down_after_script() {
+	deploy_cleanup_platform "$DEPLOY_PLATFORM"
+}

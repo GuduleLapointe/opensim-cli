@@ -416,17 +416,10 @@ deploy_run_step() {
 }
 
 deploy_cleanup_platform() {
-	local platform=$1 name status=0
+	local platform=$1 name
 	name=$(deploy_name "$platform")
-	bashunit::set_test_title "$platform cleanup"
-	if [[ "$DEPLOY_EPHEMERAL" != 1 ]]; then
-		bashunit::skip 'persistent container retained'
-		return
-	fi
-	if ! deploy_select_engine || ! deploy_command inspect "$name" >/dev/null 2>&1; then
-		bashunit::skip "$platform not created"
-		return
-	fi
-	deploy_command rm --force "$name" >/dev/null || status=$?
-	assert_equals 0 "$status" "$platform cleanup"
+	[[ "$DEPLOY_EPHEMERAL" == 1 ]] || return 0
+	deploy_select_engine || return 1
+	deploy_command inspect "$name" >/dev/null 2>&1 || return 0
+	deploy_command rm --force "$name" >/dev/null
 }

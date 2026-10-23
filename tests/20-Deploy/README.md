@@ -8,11 +8,12 @@ composer test
 
 It runs local application tests, then the package build, then deployment.
 Bashunit marks dependent build and deployment tests as skipped when an
-earlier check fails. Ephemeral containers are removed by the final cleanup phase, after
-all test groups have finished. The full suite uses Bashunit's default
+earlier check fails. Each platform file removes its ephemeral container in
+Bashunit's `tear_down_after_script` hook, including when the file is selected
+directly. The full suite uses Bashunit's default
 alphabetical discovery. The numbered directories put local application tests
-and the package build before deployment, and cleanup sorts last; platform
-files remain grouped by operating system.
+and the package build before deployment; platform files remain grouped by
+operating system.
 
 To run only deployment tests:
 
@@ -34,10 +35,11 @@ Each platform has its own Bashunit file, so it can also be selected directly:
 ./lib/bashunit/bashunit tests/20-Deploy/ubuntu-26.04-test.sh
 ```
 
-A targeted run leaves its containers for inspection. Platform containers
-are persistent by default and are reused on later runs. Their names include the launching machine,
-user, and OS version. Set `DEPLOY_EPHEMERAL=1` to use randomly named containers; those are removed
-by the final cleanup, and persistent containers are left untouched.
+A targeted run retains persistent containers for inspection. Platform
+containers are persistent by default and are reused on later runs. Their names
+include the launching machine, user, and OS version. Set `DEPLOY_EPHEMERAL=1`
+to use randomly named containers; the platform file's teardown removes them,
+and persistent containers are left untouched.
 
 The platform data lives in `platforms.tsv`: one row per platform, with its
 container image and expected `/etc/os-release` ID and version. A platform also
@@ -80,7 +82,8 @@ existing `tests/bootstrap.sh`. No memory cap is applied unless `MEMORY` is set
 in the environment or `tests/.env`. `DEPLOY_QUICK_INSTALL_TIMEOUT` sets the
 per-platform install timeout in seconds (default: 900).
 
-Set `DEPLOY_EPHEMERAL=1` in `tests/.env` to use temporary containers that the final cleanup removes.
+Set `DEPLOY_EPHEMERAL=1` in `tests/.env` to use temporary containers removed by
+the platform file's teardown, even when that file is run on its own.
 By default, deployment containers persist and are reused, so a successful installation is not repeated
 when the staged package manifest is unchanged. Each quick-install phase is logged
 under `tmp/deploy-logs/<container-name>/<phase>.log` on the test machine and

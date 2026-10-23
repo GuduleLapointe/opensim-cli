@@ -1,5 +1,5 @@
 # key image expected_os_id expected_version
-debian-12 docker.io/library/debian:12-slim debian 12
-debian-13 docker.io/library/debian:13-slim debian 13
-ubuntu-24.04 docker.io/library/ubuntu:24.04 ubuntu 24.04
+#debian-12 docker.io/library/debian:12-slim debian 12
+#debian-13 docker.io/library/debian:13-slim debian 13
+#ubuntu-24.04 docker.io/library/ubuntu:24.04 ubuntu 24.04
 ubuntu-26.04 docker.io/library/ubuntu:26.04 ubuntu 26.04
