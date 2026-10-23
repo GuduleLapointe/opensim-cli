@@ -303,7 +303,7 @@ deploy_run_step() {
 			;;
 		packages)
 			if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-			actual=$(deploy_command exec "$name" sh -c 'dpkg-query -W -f="${db:Status-Status}\\n" bash-tools opensim-cli opensim-engine opensim-helpers opensim-rest-php' 2>/dev/null) || status=$?
+			actual=$(deploy_command exec "$name" sh -c 'dpkg-query -W -f="\${db:Status-Status}\\n" bash-tools opensim-cli opensim-engine opensim-helpers opensim-rest-php' 2>/dev/null) || status=$?
 			if [[ "$actual" != $'installed\ninstalled\ninstalled\ninstalled\ninstalled' ]]; then status=1; fi
 			assert_equals 0 "$status" "$DEPLOY_PLATFORM packages installed"
 			;;
