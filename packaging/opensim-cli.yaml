@@ -11,37 +11,52 @@ section: utils
 priority: optional
 maintainer: Gudule Lapointe <gudule@speculoos.world>
 description: |-
-  Command line to set up and manage OpenSimulator
-  The opensim command: setup of a grid, a standalone or a simulator, status,
-  start, stop, restart, console and the installation of the .NET runtime.
-  The rules and the work are the engine's.
+    Command line to set up and manage OpenSimulator
+    The opensim command: setup of a grid, a standalone or a simulator, status,
+    start, stop, restart, console and the installation of the .NET runtime.
+    The rules and the work are the engine's.
 homepage: https://github.com/GuduleLapointe/opensim-cli
 license: AGPL-3.0-or-later
 
 depends:
-  - bash
-  - bash-tools
-  - dialog
-  - jq
-  - opensim-engine
-  - opensim-rest-php
-  - php-cli (>= 2:8.2)
+    - bash
+    - bash-tools
+    - bsdextrautils | bsdmainutils
+    - curl
+    - dialog
+    - default-mysql-client | virtual-mysql-client
+    - jq
+    - opensim-engine
+    - opensim-rest-php
+    - php-cli (>= 2:8.2)
+    - php-curl
+    - php-intl
+    - php-mbstring
+    - php-mysql
+    - php-xml
+    - sudo
+
+recommends:
+    - default-mysql-server | virtual-mysql-server
+    - uuid-runtime
+suggests:
+    - opensim
 
 contents:
-  - src: build/opensim-cli
-    dst: /usr/share/opensim-cli
-    type: tree
-  - src: /usr/share/bash-tools
-    dst: /usr/share/opensim-cli/vendor/magicoli/bash-tools
-    type: symlink
-  - src: /usr/share/opensim-engine
-    dst: /usr/share/opensim-cli/vendor/magicoli/opensim-engine
-    type: symlink
-  - src: /usr/share/opensim-rest-php
-    dst: /usr/share/opensim-cli/vendor/magicoli/opensim-rest-php
-    type: symlink
-  - src: /usr/share/opensim-cli/bin/opensim
-    dst: /usr/bin/opensim
-    type: symlink
-  - src: share/bash-completion/opensim
-    dst: /usr/share/bash-completion/completions/opensim
+    - src: build/opensim-cli
+      dst: /usr/share/opensim-cli
+      type: tree
+    - src: /usr/share/bash-tools
+      dst: /usr/share/opensim-cli/vendor/magicoli/bash-tools
+      type: symlink
+    - src: /usr/share/opensim-engine
+      dst: /usr/share/opensim-cli/vendor/magicoli/opensim-engine
+      type: symlink
+    - src: /usr/share/opensim-rest-php
+      dst: /usr/share/opensim-cli/vendor/magicoli/opensim-rest-php
+      type: symlink
+    - src: /usr/share/opensim-cli/bin/opensim
+      dst: /usr/bin/opensim
+      type: symlink
+    - src: share/bash-completion/opensim
+      dst: /usr/share/bash-completion/completions/opensim
