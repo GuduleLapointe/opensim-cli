@@ -40,6 +40,8 @@ if [ -e "${OPENSIM_RC}" ]; then
 	source "${OPENSIM_RC}"
 fi
 for __tests_name in "${!__tests_caller_env[@]}"; do
+	__tests_declaration=$(declare -p "$__tests_name" 2>/dev/null || true)
+	[[ "$__tests_declaration" =~ ^declare\ -[^[:space:]]*r ]] && continue
 	export "$__tests_name=${__tests_caller_env[$__tests_name]}"
 done
 
@@ -66,5 +68,5 @@ if [[ -n "${CONTAINER_CONNECTION:-}" ]]; then
 	[[ -n "${__tests_said:-}" ]] || echo "tests: podman connection: $CONTAINER_CONNECTION" >&2
 	export __tests_said=1
 fi
-unset __tests_root __tests_file __tests_line __tests_name __tests_value __tests_caller_env
+unset __tests_root __tests_file __tests_line __tests_name __tests_value __tests_declaration __tests_caller_env
 true
