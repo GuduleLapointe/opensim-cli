@@ -206,7 +206,8 @@ if ($command === 'needs-layout') {
     exit(0);
 }
 if ($command === 'prepare-layout') {
-    exit(new \OpenSim\Provisioning\SystemLayout(new StdUi())->prepare(\OpenSim\Config\Layout::resolve()) ? 0 : 1);
+    $layout = new \OpenSim\Provisioning\SystemLayout(new StdUi());
+    exit($layout->prepare(\OpenSim\Config\Layout::resolve()) ? 0 : 1);
 }
 if ($command === 'system-user') {
     echo \OpenSim\Config\Layout::resolve()->systemUser(), "\n";
@@ -276,7 +277,8 @@ switch ($command) {
             exit(2);
         }
         // Every question gets its default: the command asks nothing
-        exit(new DotnetInstaller(new StdUi())->install((int) $major) ? 0 : 1);
+        $installer = new DotnetInstaller(new StdUi());
+        exit($installer->install((int) $major) ? 0 : 1);
 }
 fwrite(STDERR, "opensim: unknown command $command\n");
 exit(2);
