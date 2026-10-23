@@ -18,6 +18,10 @@ FE_SCREEN=${FE_SCREEN:-/dev/tty}
 FE_UI=
 FE_ANSWER=
 
+fe_dialog_fits_terminal() {
+	[[ $1 =~ ^[0-9]+$ ]] && (( $1 >= 78 ))
+}
+
 # The way to ask: dialog for a person at a terminal (it is a dependency: nothing replaces it), plain lines when nobody is there
 # (a script, the tests: the answers come from FE_INPUT_FD or the standard input)
 fe_choose_ui() {
@@ -26,7 +30,12 @@ fe_choose_ui() {
 	FE_UI=plain
 	if [[ -z $FE_INPUT_FD && $FE_TTY == /dev/tty && $FE_SCREEN == /dev/tty && -t 0 && -t 1 ]]; then
 		command -v dialog >/dev/null 2>&1 || die "dialog is required to ask the questions (brew install dialog, apt install dialog)"
-		FE_UI=dialog
+		local terminal_size terminal_columns
+		terminal_size=$(stty size <"$FE_TTY" 2>/dev/null) || terminal_size=
+		terminal_columns=${terminal_size#* }
+		if fe_dialog_fits_terminal "$terminal_columns"; then
+			FE_UI=dialog
+		fi
 	fi
 }
 
@@ -327,6 +336,9 @@ ui_screen() {
 		;;
 	review)
 		ui_review "$_u_title" "$_u_text" "$(jq -r '.rows[] | [.section, .label, .value] | join("\u001f")' <<<"$_u_screen")" || _u_status=$?
+		if ((_u_status == 0)) && [[ -n ${OPENSIM_DB_ADMIN_USER:-} ]]; then
+			answers=$(jq -cn --arg user "$OPENSIM_DB_ADMIN_USER" --arg password "${OPENSIM_DB_ADMIN_PASS:-}" '{admin_user:$user,admin_password:$password}')
+		fi
 		;;
 	*) die "The engine shows a screen this command does not know: $_u_kind" ;;
 	esac

@@ -152,6 +152,26 @@ function test_saved_database_admin_credentials_are_sent_to_the_engine() {
 	assert_not_contains "saved-secret" "$out"
 }
 
+function test_saved_database_admin_credentials_are_sent_with_review_confirmation() {
+	local out
+	cat <<-OPENSIM_RC >"$HOME/.opensimrc"
+		export OPENSIM_DB_ADMIN_USER=opensim_admin
+		export OPENSIM_DB_ADMIN_PASS=saved-secret
+	OPENSIM_RC
+	engine_says "$MENU" "$FORM" "$CHECKS" "$REVIEW" "$QUIT"
+	out=$(setup_with 1 "" no yes "")
+	assert_equals "opensim_admin" "$(request 5 '.answers.admin_user')"
+	assert_equals "saved-secret" "$(request 5 '.answers.admin_password')"
+	assert_not_contains "saved-secret" "$out"
+}
+
+function test_dialog_is_only_selected_when_the_terminal_is_wide_enough() {
+	local ui="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/src/lib/ui"
+	assert_equals 0 "$(bash -c 'source "$1"; fe_dialog_fits_terminal 78; echo $?' _ "$ui")"
+	assert_equals 1 "$(bash -c 'source "$1"; fe_dialog_fits_terminal 37; echo $?' _ "$ui")"
+	assert_equals 1 "$(bash -c 'source "$1"; fe_dialog_fits_terminal unknown; echo $?' _ "$ui")"
+}
+
 function test_database_admin_credentials_can_be_entered_without_opensimrc() {
 	local out
 	engine_says "$DATABASE_FORM" "$QUIT"
