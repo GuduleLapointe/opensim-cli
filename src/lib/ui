@@ -291,6 +291,12 @@ ui_screen() {
 	form)
 		declare -gA LABEL=() SECRET=() READONLY=() ENGINE_NAME=()
 		while IFS=$'\x1f' read -r _u_name _u_label _u_value _u_secret _u_readonly; do
+			if [[ -z $_u_value ]]; then
+				case $_u_name in
+				admin_user) _u_value=${OPENSIM_DB_ADMIN_USER:-} ;;
+				admin_password) _u_value=${OPENSIM_DB_ADMIN_PASS:-} ;;
+				esac
+			fi
 			_u_var=f_$(_ui_var "$_u_name")
 			ENGINE_NAME[$_u_var]=$_u_name
 			LABEL[$_u_var]=$_u_label

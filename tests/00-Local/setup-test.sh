@@ -13,11 +13,17 @@ CHECKS='{"data":{"attributes":{"action":"screen","kind":"checks","title":"Option
 REVIEW='{"data":{"attributes":{"action":"screen","kind":"review","title":"Review","text":"","notice":"","rows":[{"section":"grid","label":"Grid name","value":"Amy"},{"section":"grid","label":"Login URI","value":"http://amy.example.org:8002"},{"section":"options","label":"Hypergrid","value":"yes"}],"buttons":{"next":"Install","back":"Back"},"state":"s4"}}}'
 QUIT='{"data":{"attributes":{"action":"quit","message":"Grid name:  Amy\nWritten in /etc/opensim/grids/amy."}}}'
 ABORT='{"data":{"attributes":{"action":"abort","error":"Cancelled"}}}'
+DATABASE_FORM='{"data":{"attributes":{"action":"screen","kind":"form","title":"Database","text":"","notice":"","fields":[{"name":"database_host","label":"Database host","value":"localhost","secret":false},{"name":"database_name","label":"Database name","value":"opensim","secret":false},{"name":"database_user","label":"Database user","value":"opensim","secret":false},{"name":"database_password","label":"Database password","value":"db-pass","secret":true},{"name":"admin_user","label":"Administrator","value":"","secret":false},{"name":"admin_password","label":"Administrator password","value":"","secret":true}],"buttons":{"next":"OK","back":"Back"},"state":"database-state"}}}'
 
 function set_up() {
 	WORK="$(mktemp -d)"
 	export HOME="$WORK"
-	export OPENSIM_API="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/fixtures/opensim-api"
+	local fixtures
+	fixtures="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/fixtures"
+	mkdir -p "$WORK/engine/bin" "$WORK/engine/lib"
+	ln -s "$fixtures/opensim-api" "$WORK/engine/bin/opensim-api"
+	cp "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../vendor/magicoli/opensim-engine/lib" && pwd)/rc-helpers" "$WORK/engine/lib/rc-helpers"
+	export OPENSIM_API="$WORK/engine/bin/opensim-api"
 	export ENGINE_REPLIES="$WORK/replies" ENGINE_LOG="$WORK/requests"
 	mkdir -p "$ENGINE_REPLIES"
 }
@@ -127,6 +133,22 @@ function test_form_passwords_are_hidden() {
 	out=$(setup_with 1 2 secret123 "") || true
 	assert_not_contains "secret123" "$out"
 	assert_contains "********" "$out"
+}
+
+function test_saved_database_admin_credentials_are_sent_to_the_engine() {
+	local out
+	cat <<-OPENSIM_RC >"$HOME/.opensimrc"
+		export OPENSIM_DB_ADMIN_USER=opensim_admin
+		export OPENSIM_DB_ADMIN_PASS=saved-secret
+	OPENSIM_RC
+	engine_says "$DATABASE_FORM" "$QUIT"
+	out=$(setup_with "")
+	assert_equals "opensim_admin" "$(request 2 '.answers.admin_user')"
+	assert_equals "saved-secret" "$(request 2 '.answers.admin_password')"
+	assert_contains "opensim_admin" "$out"
+	assert_contains "Administrator password" "$out"
+	assert_contains "********" "$out"
+	assert_not_contains "saved-secret" "$out"
 }
 
 function test_button_processing_is_left_to_the_engine_for_processing() {
