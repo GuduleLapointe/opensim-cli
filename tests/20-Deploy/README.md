@@ -116,4 +116,12 @@ Ubuntu 26.04); commented rows are not discovered or reported as tests. Add a
 platform row and matching test file to extend it. All tests use the shared
 `tests/bootstrap.sh` environment initialization.
 
+If the local build test was not selected, the first deployment prerequisite
+builds and stages the same five current packages locally before contacting the
+container engine. `CONTAINER_CONNECTION` applies to both the shared package
+builder and the platform containers; it never redirects the local build.
+The remote image and container availability checks use Bashunit's one-retry
+annotation. A check that only passes on retry is marked as flaky; package
+mutations and installation tests are not retried.
+
 Source-clone mode remains out of scope.

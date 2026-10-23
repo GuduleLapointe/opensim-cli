@@ -140,7 +140,7 @@ deploy_ensure_image() {
 
 deploy_test_gate() {
 	local failure_file=${FAILURES_OUTPUT_PATH:-$DEPLOY_RUN_DIR/failures}
-	bashunit::set_test_title "$DEPLOY_PLATFORM prerequisites passed"
+	bashunit::set_test_title "$DEPLOY_PLATFORM local tests and package set are ready"
 	mkdir -p "$DEPLOY_RUN_DIR"
 	if [[ "$DEPLOY_INSTALL_MODE" != separate && "$DEPLOY_INSTALL_MODE" != single ]]; then
 		deploy_mark_infra_blocked
@@ -156,8 +156,26 @@ deploy_test_gate() {
 		bashunit::skip 'local tests or package build failed'
 		return
 	fi
+	if [[ ! -s "$DEPLOY_PACKAGE_DIR/MANIFEST" ]]; then
+		local build_script artifact_dir
+		build_script=$DEPLOY_PROJECT_ROOT/tests/10-Build/build-packages.sh
+		artifact_dir=${_BASHUNIT_RUN_OUTPUT_DIR:?}/build-artifacts
+		assert_exec "bash $(printf %q "$build_script") $(printf %q "$DEPLOY_PACKAGE_DIR") $(printf %q "$artifact_dir")" \
+			'local package build and staging should succeed'
+	fi
+	assert_exec "test -s $(printf %q "$DEPLOY_PACKAGE_DIR/MANIFEST") && test -s $(printf %q "$DEPLOY_PACKAGE_DIR/debs/SHA256SUMS") && test \$(find $(printf %q "$DEPLOY_PACKAGE_DIR/debs") -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ') -eq 5" \
+		'five locally built packages and their manifests should be available'
+	if [[ ! -s "$DEPLOY_PACKAGE_DIR/MANIFEST" || ! -s "$DEPLOY_PACKAGE_DIR/debs/SHA256SUMS" || ! -s "$DEPLOY_PACKAGE_DIR/quick-install.sh" ]] ||
+		[[ $(find "$DEPLOY_PACKAGE_DIR/debs" -maxdepth 1 -type f -name '*.deb' 2>/dev/null | wc -l | tr -d ' ') != 5 ]]; then
+		: >"$DEPLOY_GATE_BLOCK_FILE"
+		return
+	fi
 	: >"$DEPLOY_GATE_READY_FILE"
-	assert_equals 0 0 'deployment gate is open'
+	assert_exec "cd $(printf %q "$DEPLOY_PACKAGE_DIR") && shasum -a 256 -c MANIFEST >/dev/null && cd debs && shasum -a 256 -c SHA256SUMS >/dev/null" \
+		'local package checksums should match their manifests'
+	if ! (cd "$DEPLOY_PACKAGE_DIR" && shasum -a 256 -c MANIFEST >/dev/null && cd debs && shasum -a 256 -c SHA256SUMS >/dev/null); then
+		: >"$DEPLOY_GATE_BLOCK_FILE"
+	fi
 }
 
 deploy_mark_infra_blocked() {
@@ -166,16 +184,17 @@ deploy_mark_infra_blocked() {
 }
 
 deploy_builder_step() {
-	local step=$1 builder status=0 running manifest remote_manifest index_stale=0
+	local step=$1 builder status=0 running manifest remote_manifest index_stale=0 location
 	builder=$(deploy_builder_name)
+	location=$(deploy_execution_location)
 	case "$step" in
-	image) bashunit::set_test_title "package builder image $DEPLOY_BUILDER_IMAGE is available" ;;
-	created) bashunit::set_test_title "package builder is created" ;;
-	started) bashunit::set_test_title "package builder start succeeds" ;;
-	running) bashunit::set_test_title "package builder reports running" ;;
-	ready) bashunit::set_test_title "package builder is ready" ;;
-	scanner) bashunit::set_test_title "package indexer is available in builder" ;;
-	synced) bashunit::set_test_title "local package set is synced to builder" ;;
+	image) bashunit::set_test_title "package builder image is available on $location" ;;
+	created) bashunit::set_test_title "package builder is created on $location" ;;
+	started) bashunit::set_test_title "package builder start succeeds on $location" ;;
+	running) bashunit::set_test_title "package builder is running on $location" ;;
+	ready) bashunit::set_test_title "package builder is ready on $location" ;;
+	scanner) bashunit::set_test_title "package indexer is available in builder on $location" ;;
+	synced) bashunit::set_test_title "local package set is synced to builder on $location" ;;
 	index_unchanged) bashunit::set_test_title "current package index stays unchanged" ;;
 	index_refresh) bashunit::set_test_title "stale package index is refreshed" ;;
 	source_refresh) bashunit::set_test_title "private packages remain available beside official APT source" ;;
@@ -218,7 +237,7 @@ deploy_builder_step() {
 			;;
 		scanner)
 			if ! deploy_command exec "$builder" sh -c 'command -v dpkg-scanpackages >/dev/null'; then
-				deploy_command exec "$builder" sh -c 'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq dpkg-dev' >/dev/null 2>&1 || status=$?
+				deploy_command exec "$builder" sh -c 'apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y -qq dpkg-dev' >/dev/null 2>&1 || status=$?
 			fi
 			;;
 		synced)
@@ -267,36 +286,49 @@ deploy_builder_step() {
 			if ((status != 0)); then tail -n 40 "$DEPLOY_PROJECT_ROOT/tmp/deploy-logs/opensim-cli-test-build/index-refresh.log" >&2 || true; deploy_mark_infra_blocked; fi
 			;;
 		source_refresh)
-			local log_file
-			log_file=$DEPLOY_PROJECT_ROOT/tmp/deploy-logs/opensim-cli-test-build/source-refresh.log
-			mkdir -p "$(dirname "$log_file")"
-			deploy_command exec "$builder" sh -c 'printf "%s\\n" "deb [trusted=yes] file:/tmp/opensim-stale-repository ./" >/etc/apt/sources.list.d/magiiic.list' || status=$?
-			if ((status == 0)); then
-				deploy_command exec "$builder" bash -c '
-					set -euo pipefail
-					private_debs=/root/opensim-private-debs
-					mkdir -p "$private_debs/test-package/DEBIAN"
-					cat >"$private_debs/test-package/DEBIAN/control" <<-CONTROL
-						Package: local-source-test
-						Version: 1.0
-						Architecture: all
-						Maintainer: OpenSim tests <tests@example.invalid>
-						Description: local APT repository access test
-					CONTROL
-					dpkg-deb --build "$private_debs/test-package" "$private_debs/local-source-test_1.0_all.deb" >/dev/null
-					rm -rf "$private_debs/test-package"
-					(cd "$private_debs" && dpkg-scanpackages --multiversion . /dev/null | gzip -9c >Packages.gz)
-					chmod 700 "$private_debs"
-					OPENSIM_KIT_DEBS=$private_debs DEBUG=yes bash /tmp/opensim-local-install/quick-install.sh --dependencies
-					grep -Fxq "deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com stable main" /etc/apt/sources.list.d/magiiic.list
-					mirror=$(sed -n 's#^deb \[trusted=yes\] file:\(.*\) \.\/$#\1#p' /etc/apt/sources.list.d/magiiic.list)
-					test -n "$mirror" && test "$mirror" != "$private_debs"
-					runuser -u _apt -- test -r "$mirror/Packages.gz"
-					runuser -u _apt -- test -r "$mirror/local-source-test_1.0_all.deb"
-				' >"$log_file" 2>&1 || status=$?
-			fi
-			assert_equals 0 "$status" "package builder serves private local packages to APT and restores the official repository"
-			if ((status != 0)); then tail -n 40 "$log_file" >&2 || true; deploy_mark_infra_blocked; fi
+			local builder_script command failures_before failures_after
+			builder_script=$(cat <<'BUILDER_SOURCE_REFRESH'
+set -euo pipefail
+private_debs=/root/opensim-private-debs
+mkdir -p "$private_debs/test-package/DEBIAN"
+cat >"$private_debs/test-package/DEBIAN/control" <<-CONTROL
+	Package: local-source-test
+	Version: 1.0
+	Architecture: all
+	Maintainer: OpenSim tests <tests@example.invalid>
+	Description: local APT repository access test
+CONTROL
+dpkg-deb --build "$private_debs/test-package" "$private_debs/local-source-test_1.0_all.deb" >/dev/null
+rm -rf "$private_debs/test-package"
+(cd "$private_debs" && dpkg-scanpackages --multiversion . /dev/null | gzip -9c >Packages.gz)
+chmod 700 "$private_debs"
+printf '%s\n' 'deb [trusted=yes] file:/tmp/opensim-stale-repository ./' >/etc/apt/sources.list.d/magiiic.list
+OPENSIM_KIT_DEBS=$private_debs DEBUG=yes bash /tmp/opensim-local-install/quick-install.sh --dependencies
+grep -Fxq 'deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com stable main' /etc/apt/sources.list.d/magiiic.list || {
+	printf 'Official APT source was not restored\n' >&2
+	exit 1
+}
+mirror=$(awk '$1 == "deb" && $3 ~ /^file:/ { sub(/^file:/, "", $3); print $3; exit }' /etc/apt/sources.list.d/magiiic.list)
+test -n "$mirror" && test "$mirror" != "$private_debs" || {
+	printf 'Private package mirror was not copied to a shared APT location\n' >&2
+	exit 1
+}
+runuser -u _apt -- test -r "$mirror/Packages.gz" || {
+	printf 'APT cannot read the copied package index at %s\n' "$mirror/Packages.gz" >&2
+	exit 1
+}
+runuser -u _apt -- test -r "$mirror/local-source-test_1.0_all.deb" || {
+	printf 'APT cannot read the copied local package\n' >&2
+	exit 1
+}
+printf 'DEPLOY_STEP_OK\n'
+BUILDER_SOURCE_REFRESH
+			)
+			printf -v command 'deploy_command exec %q bash -c %q 2>&1' "$builder" "$builder_script"
+			failures_before=$(bashunit::state::get_assertions_failed)
+			assert_exec "$command" --stdout-contains DEPLOY_STEP_OK
+			failures_after=$(bashunit::state::get_assertions_failed)
+			if ((failures_after > failures_before)); then deploy_mark_infra_blocked; fi
 			;;
 		esac
 	fi

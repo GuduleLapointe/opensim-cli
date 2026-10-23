@@ -8,9 +8,13 @@ function test_00_local_and_build_passed() {
 	deploy_test_gate
 }
 
+# @retry 1
 function test_01_package_builder_image_ready() { deploy_builder_step image; }
+# @retry 1
 function test_02_package_builder_created() { deploy_builder_step created; }
+# @retry 1
 function test_03_package_builder_started() { deploy_builder_step started; }
+# @retry 1
 function test_04_package_builder_ready() { deploy_builder_step ready; }
 function test_05_package_indexer_ready() { deploy_builder_step scanner; }
 function test_06_packages_synced_and_indexed() { deploy_builder_step synced; }
