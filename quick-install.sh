@@ -182,7 +182,7 @@ configure_package_sources() {
 			(cd "$debs" && dpkg-scanpackages . /dev/null | gzip -9c >Packages.gz) || die "local package index refresh failed"
 		fi
 		if command -v runuser >/dev/null 2>&1 && ! as_root runuser -u _apt -- test -r "$debs/Packages.gz"; then
-			die "local package repository $debs is not readable by APT; move it outside /root (for example, to /opt/opensim/dist)"
+			die "local package repository $debs is not readable by APT's _apt user; move it to an accessible directory (for example, /opt/opensim/dist)"
 		fi
 		if ! grep -Fq "file:$debs" /etc/apt/sources.list.d/magiiic.list 2>/dev/null; then
 			printf 'deb [trusted=yes] file:%s ./\n' "$debs" | as_root tee /etc/apt/sources.list.d/magiiic.list >/dev/null || return $?
@@ -367,13 +367,30 @@ phase_dotnet() {
 }
 
 phase_cleanup() {
-	local -a packages=() folders=() databases=()
-	local path sql_client db escaped_db answer prefix package_rows database_rows status package
+	local -a packages=() folders=() databases=() duplicate_debs=() groups=() group_debs=()
+	local path sql_client db escaped_db answer prefix package_rows database_rows status package dist_folder archive_folder deb group seen i
 
 	package_rows=$(dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' 'opensim-*' 2>/dev/null) || package_rows=
 	while read -r status package; do
 		if [[ "$status" == ii* ]]; then packages+=("$package"); fi
 	done <<<"$package_rows"
+	dist_folder=${DIST_FOLDER:-/opt/opensim/dist}
+	archive_folder=${ARCHIVE_FOLDER:-$dist_folder/archive}
+	if [[ -d "$dist_folder" ]]; then
+		while IFS= read -r -d '' deb; do
+			group=$(basename "$deb" | sed -E 's#(\.[0-9]+(\+g[a-f0-9]+|\+e[a-f0-9]+(-[0-9]+)?|\+git[a-f0-9\.-]+))?(_[a-z0-9]+)?\.deb##')
+			seen=no
+			for package in "${groups[@]}"; do
+				if [[ "$package" == "$group" ]]; then seen=yes; break; fi
+			done
+			[[ "$seen" == yes ]] || groups+=("$group")
+		done < <(find "$dist_folder" -maxdepth 1 -type f -name '*.deb' -print0)
+		for group in "${groups[@]}"; do
+			group_debs=()
+			while IFS= read -r deb; do group_debs+=("$deb"); done < <(ls -t -- "$dist_folder/$group"*.deb 2>/dev/null || true)
+			for ((i = 1; i < ${#group_debs[@]}; i++)); do duplicate_debs+=("${group_debs[i]}"); done
+		done
+	fi
 	for path in /etc/opensim /var/lib/opensim /usr/share/opensim*; do
 		if [[ -e "$path" || -L "$path" ]]; then folders+=("$path"); fi
 	done
@@ -385,18 +402,23 @@ phase_cleanup() {
 			if [[ "$db" == "$prefix"* ]]; then databases+=("$db"); fi
 		done <<<"$database_rows"
 	fi
-	if ((${#packages[@]} + ${#folders[@]} + ${#databases[@]} == 0)); then
+	if ((${#packages[@]} + ${#folders[@]} + ${#databases[@]} + ${#duplicate_debs[@]} == 0)); then
 		say "No existing OpenSim packages, folders, or databases to clean up"
 		return 0
 	fi
 	say "Cleanup will remove:"
 	for package in "${packages[@]}"; do say "  package $package"; done
-	for path in "${folders[@]}"; do say "  folder $path"; done
+	for path in "${folders[@]}"; do say "  folder $path ($(find "$path" -type f 2>/dev/null | wc -l | tr -d ' ') files)"; done
 	for db in "${databases[@]}"; do say "  database $db"; done
+	for deb in "${duplicate_debs[@]}"; do say "  archive duplicate package $deb -> $archive_folder/"; done
 	if [[ "$ASSUME_YES" != yes ]]; then
 		[[ -r /dev/tty ]] || die "--cleanup needs an interactive confirmation (or pass --yes)"
 		read -r -p 'Proceed with this cleanup? [y/N] ' answer </dev/tty || die 'cleanup cancelled'
 		[[ "$answer" =~ ^[Yy]([Ee][Ss])?$ ]] || die 'cleanup cancelled'
+	fi
+	if ((${#duplicate_debs[@]})); then
+		mkdir -p "$archive_folder" || die "could not create package archive $archive_folder"
+		for deb in "${duplicate_debs[@]}"; do mv -v -- "$deb" "$archive_folder/" || die "could not archive duplicate package $deb"; done
 	fi
 	if ((${#packages[@]})); then as_root apt-get remove --purge -y "${packages[@]}" || die "could not remove existing OpenSim packages"; fi
 	if ((${#folders[@]})); then as_root rm -rf -- "${folders[@]}" || die "could not remove existing OpenSim folders"; fi
