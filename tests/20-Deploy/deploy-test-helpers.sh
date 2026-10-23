@@ -14,6 +14,7 @@ DEPLOY_PACKAGE_DIR=${DEPLOY_PACKAGE_DIR:-${_BASHUNIT_RUN_OUTPUT_DIR:-}/deploy-pa
 DEPLOY_BUILDER_NAME=${DEPLOY_BUILDER_NAME:-opensim-cli-test-build}
 DEPLOY_BUILDER_IMAGE=${DEPLOY_BUILDER_IMAGE:-docker.io/library/debian:12-slim}
 DEPLOY_QUICK_INSTALL_TIMEOUT=${DEPLOY_QUICK_INSTALL_TIMEOUT:-900}
+DEPLOY_INSTALL_MODE=${DEPLOY_INSTALL_MODE:-steps}
 DEPLOY_ENGINE_SELECTED=
 DEPLOY_PLATFORM=
 DEPLOY_IMAGE=
@@ -101,10 +102,25 @@ deploy_skip_unless_running() {
 	return 1
 }
 
+deploy_installation_is_current() {
+	local name=$1
+	deploy_command exec "$name" sh -c '
+		command -v opensim >/dev/null &&
+		dpkg-query -W -f="${db:Status-Status}" opensim-cli 2>/dev/null | grep -qx installed &&
+		dotnet --list-runtimes 2>/dev/null | grep -Eq "Microsoft\\.NETCore\\.App [8-9][.]|Microsoft\\.NETCore\\.App [1-9][0-9]+[.]" &&
+		mysqladmin ping --silent
+	' >/dev/null 2>&1
+}
+
 deploy_test_gate() {
 	local failure_file=${FAILURES_OUTPUT_PATH:-$DEPLOY_RUN_DIR/failures}
 	bashunit::set_test_title "$DEPLOY_PLATFORM prerequisites passed"
 	mkdir -p "$DEPLOY_RUN_DIR"
+	if [[ "$DEPLOY_INSTALL_MODE" != steps && "$DEPLOY_INSTALL_MODE" != full ]]; then
+		deploy_mark_infra_blocked
+		assert_equals 'steps or full' "$DEPLOY_INSTALL_MODE" 'DEPLOY_INSTALL_MODE'
+		return
+	fi
 	if [[ -e "$DEPLOY_GATE_BLOCK_FILE" || -e "$DEPLOY_INFRA_BLOCK_FILE" ]]; then
 		bashunit::skip 'local tests, build, or deployment setup failed'
 		return
@@ -339,40 +355,71 @@ deploy_run_step() {
 		;;
 	dependencies | mariadb | dotnet | opensim)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		local log_dir log_file manifest_stamp installed_stamp container_log install_step option
+		local log_dir log_file manifest_stamp installed_stamp container_log install_step option execute_install=1
 		install_step=$step
-		case "$step" in
-		dependencies) option=--dependencies ;;
-		mariadb) option=--mariadb ;;
-		dotnet) option=--dotnet ;;
-		opensim) option=--opensim ;;
-		esac
+		if [[ "$DEPLOY_INSTALL_MODE" == full ]]; then
+			case "$step" in
+			dependencies) install_step=full-install; option= ;;
+			mariadb) install_step=sql-server-verification; execute_install=0 ;;
+			dotnet) install_step=dotnet-verification; execute_install=0 ;;
+			opensim) install_step=opensim-verification; execute_install=0 ;;
+			esac
+		else
+			case "$step" in
+			dependencies) option=--dependencies ;;
+			mariadb) option=--mariadb ;;
+			dotnet) option=--dotnet ;;
+			opensim) option=--opensim ;;
+			esac
+		fi
 		log_dir=$(deploy_log_dir "$DEPLOY_PLATFORM")
 		log_file=$log_dir/$install_step.log
+		bashunit::set_test_title "$DEPLOY_PLATFORM $install_step"
 		manifest_stamp=$(cksum <"$DEPLOY_PACKAGE_DIR/MANIFEST" | awk '{print $1 ":" $2}')
 		installed_stamp=$(deploy_command exec "$name" sh -c 'cat /var/tmp/opensim-deploy-package-manifest 2>/dev/null' 2>/dev/null) || installed_stamp=
-		if [[ "$step" == opensim && "$DEPLOY_EPHEMERAL" != 1 && "$installed_stamp" == "$manifest_stamp" ]] && deploy_command exec "$name" sh -c 'command -v opensim >/dev/null && dpkg-query -W -f="${db:Status-Status}" opensim-cli 2>/dev/null | grep -qx installed'; then
+		if [[ "$execute_install" == 1 && "$DEPLOY_EPHEMERAL" != 1 && "$installed_stamp" == "$manifest_stamp" ]] && [[ "$step" == opensim || ( "$DEPLOY_INSTALL_MODE" == full && "$step" == dependencies ) ]] && deploy_installation_is_current "$name"; then
 			bashunit::skip "$DEPLOY_PLATFORM package set already installed"
 			return
 		fi
 		mkdir -p "$log_dir" || status=$?
-		if ((status == 0)); then
+		if [[ "$execute_install" == 1 ]] && ((status == 0)); then
 			container_log="/tmp/$name/$install_step.log"
 			deploy_command exec "$name" bash -c '
 					set -o pipefail
 					log_file=$1
 					mkdir -p "$(dirname "$log_file")"
-					timeout --signal=TERM --kill-after=30s "${2}s" env DEBUG=yes OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh "$3" 2>&1 | tee "$log_file"
+					if [[ -n "$3" ]]; then
+						timeout --signal=TERM --kill-after=30s "${2}s" env DEBUG=yes OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh "$3" 2>&1 | tee "$log_file"
+					else
+						timeout --signal=TERM --kill-after=30s "${2}s" env DEBUG=yes OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh 2>&1 | tee "$log_file"
+					fi
 				' bash "$container_log" "$DEPLOY_QUICK_INSTALL_TIMEOUT" "$option" >"$log_file" 2>&1 || status=$?
+		fi
+		if [[ "$execute_install" == 0 && "$status" == 0 ]]; then
+			case "$step" in
+			mariadb)
+				deploy_command exec "$name" sh -c 'mysqladmin ping --silent' >"$log_file" 2>&1 || status=$?
+				;;
+			dotnet)
+				deploy_command exec "$name" sh -c 'dotnet --list-runtimes 2>/dev/null | grep -Eq "Microsoft\\.NETCore\\.App [8-9][.]|Microsoft\\.NETCore\\.App [1-9][0-9]+[.]"' >"$log_file" 2>&1 || status=$?
+				;;
+			opensim)
+				deploy_command exec "$name" sh -c 'command -v opensim >/dev/null && dpkg-query -W -f="${db:Status-Status}" opensim-cli 2>/dev/null | grep -qx installed' >"$log_file" 2>&1 || status=$?
+				;;
+			esac
 		fi
 		if ((status == 124)); then printf '%s quick-install timed out after %ss (log: %s)\n' "$DEPLOY_PLATFORM" "$DEPLOY_QUICK_INSTALL_TIMEOUT" "$log_file" >&2; fi
 		if ((status != 0)); then
 			printf 'Full quick-install log: %s\n' "$log_file" >&2
 			tail -n 40 "$log_file" >&2 || true
-		elif [[ "$step" == opensim ]]; then
+		elif [[ "$step" == opensim || ( "$DEPLOY_INSTALL_MODE" == full && "$step" == dependencies ) ]]; then
 			deploy_command exec "$name" sh -c 'printf "%s\n" "$1" > /var/tmp/opensim-deploy-package-manifest' sh "$manifest_stamp" || status=$?
 		fi
-		assert_equals 0 "$status" "$DEPLOY_PLATFORM $install_step step"
+		if [[ "$execute_install" == 1 ]]; then
+			assert_equals 0 "$status" "$DEPLOY_PLATFORM $install_step step"
+		else
+			assert_equals 0 "$status" "$DEPLOY_PLATFORM $install_step passed"
+		fi
 		;;
 	accounts)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi

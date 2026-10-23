@@ -55,8 +55,13 @@ container, and creates `Packages.gz` there. Each enabled platform then creates
 and starts its own container, checks readiness and OS identity, copies the
 package set from the builder only when its manifest changes, verifies the local
 copy,
-then runs `quick-install.sh` phases separately: dependencies, MariaDB and SQL
-account setup, .NET, and OpenSim packages. The five `.deb` files are
+then runs `quick-install.sh` phases separately by default: dependencies,
+MariaDB and SQL account setup, .NET, and OpenSim packages. Set
+`DEPLOY_INSTALL_MODE=full` to run the same full `quick-install.sh` command used
+for a normal installation, followed by separate checks for MariaDB, .NET, and
+OpenSim. This makes a fresh-container timing comparison possible with
+`DEPLOY_EPHEMERAL=1 DEPLOY_INSTALL_MODE=full`; the default `steps` mode remains
+useful for isolating a slow or failing phase. The five `.deb` files are
 staged by the local build after verifying the current source hashes for
 `bash-tools`, `opensim-engine`, `opensim-rest-php`, and `opensim-helpers`. A
 setup smoke test then runs the installed `opensim setup` interface with a
