@@ -574,7 +574,7 @@ deploy_run_step() {
 				deploy_command exec "$name" sh -c 'dotnet --list-runtimes 2>/dev/null | grep -Eq "Microsoft\\.NETCore\\.App [8-9][.]|Microsoft\\.NETCore\\.App [1-9][0-9]+[.]"' >"$log_file" 2>&1 || status=$?
 				;;
 			opensim)
-				deploy_command exec "$name" sh -c 'command -v opensim >/dev/null && dpkg-query -W -f="\${db:Status-Status}" opensim opensim-cli 2>/dev/null | grep -cqx installed' >"$log_file" 2>&1 || status=$?
+				deploy_command exec "$name" sh -c 'command -v opensim >/dev/null && test "$(dpkg-query -W -f="\${db:Status-Status}\n" opensim opensim-cli 2>/dev/null | grep -c "^installed$")" -eq 2' >"$log_file" 2>&1 || status=$?
 				;;
 			esac
 		fi
