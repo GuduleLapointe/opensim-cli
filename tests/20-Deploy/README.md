@@ -79,8 +79,9 @@ per-platform install timeout in seconds (default: 900).
 
 Set `DEPLOY_EPHEMERAL=1` in `tests/.env` to use temporary containers that the final cleanup removes.
 By default, deployment containers persist and are reused, so a successful installation is not repeated
-when the staged package manifest is unchanged. Full quick-install output is saved under a separate
-`logs/<machine-user-platform>` directory in Bashunit's temporary run directory. During the matrix, you can inspect, stop, or remove a container in Podman
+when the staged package manifest is unchanged. Full quick-install output is saved under
+`tmp/deploy-logs/<container-name>/quick-install.log`; the path is printed if installation fails.
+During the matrix, you can inspect, stop, or remove a container in Podman
 Desktop; if you stop or remove one, later checks for that platform will report
 the resulting state.
 

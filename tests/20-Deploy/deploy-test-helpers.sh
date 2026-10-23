@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 DEPLOY_PLATFORMS_FILE=${DEPLOY_PLATFORMS_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/platforms.tsv}
+DEPLOY_PROJECT_ROOT=${DEPLOY_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
 DEPLOY_RUN_DIR=${_BASHUNIT_RUN_OUTPUT_DIR:-${TMPDIR:-/tmp}/bashunit/deploy-$$}
 DEPLOY_RUN_ID=${DEPLOY_RUN_ID:-${DEPLOY_RUN_DIR##*/}}
 DEPLOY_HOST_SLUG=${DEPLOY_HOST_SLUG:-$(hostname -s 2>/dev/null || hostname)}
@@ -48,7 +49,7 @@ deploy_slug() {
 }
 
 deploy_log_dir() {
-	printf '%s/logs/%s' "$DEPLOY_RUN_DIR" "$(deploy_slug "${DEPLOY_HOST_SLUG}-${DEPLOY_USER_SLUG}-$1")"
+	printf '%s/tmp/deploy-logs/%s' "$DEPLOY_PROJECT_ROOT" "$(deploy_name "$1")"
 }
 
 deploy_volume_name() {
@@ -265,7 +266,9 @@ deploy_run_step() {
 			mkdir -p "$log_dir" || status=$?
 			if ((status == 0)); then deploy_command exec "$name" sh -c 'timeout --signal=TERM --kill-after=30s "'"${DEPLOY_QUICK_INSTALL_TIMEOUT}"'s" env DEBUG=yes OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh --no-setup' >"$log_file" 2>&1 || status=$?; fi
 			if ((status == 124)); then printf '%s quick-install timed out after %ss (log: %s)\n' "$DEPLOY_PLATFORM" "$DEPLOY_QUICK_INSTALL_TIMEOUT" "$log_file" >&2; fi
-			if ((status != 0)); then tail -n 40 "$log_file" >&2 || true
+			if ((status != 0)); then
+				printf 'Full quick-install log: %s\n' "$log_file" >&2
+				tail -n 40 "$log_file" >&2 || true
 			else deploy_command exec "$name" sh -c 'printf "%s\n" "$1" > /var/tmp/opensim-deploy-package-manifest' sh "$manifest_stamp" || status=$?
 			fi
 			assert_equals 0 "$status" "$DEPLOY_PLATFORM quick-install"
