@@ -34,7 +34,7 @@ Each platform has its own Bashunit file, so it can also be selected directly:
 ./lib/bashunit/bashunit tests/20-Deploy/ubuntu-26.04-test.sh
 ```
 
-A targeted run leaves its container and shared package volume for inspection. Platform containers
+A targeted run leaves its containers for inspection. Platform containers
 are persistent by default and are reused on later runs. Their names include the launching machine,
 user, and OS version. Set `DEPLOY_EPHEMERAL=1` to use randomly named containers; those are removed
 by the final cleanup, and persistent containers are left untouched.
@@ -47,11 +47,12 @@ has a corresponding `*-test.sh` entry point that declares the shared tests from
 keys.
 
 Bashunit reports each operation as a separate test. A shared `package builder`
-group first creates or reuses a named package volume and a visible, persistent
-Debian 12 builder container. It installs `dpkg-scanpackages` once, streams the
-current package set only when its manifest changes, and creates `Packages.gz`
-in the shared volume. Each enabled platform then creates and starts its own
-container, checks readiness and OS identity, verifies the shared package set,
+group first creates or reuses a visible, persistent Debian 12 builder container.
+It installs `dpkg-scanpackages` once, stores the current package set in its
+container, and creates `Packages.gz` there. Each enabled platform then creates
+and starts its own container, checks readiness and OS identity, copies the
+package set from the builder only when its manifest changes, verifies the local
+copy,
 then runs `quick-install.sh` phases separately: dependencies, MariaDB and SQL
 account setup, .NET, and OpenSim packages. The five `.deb` files are
 staged by the local build after verifying the current source hashes for
@@ -63,12 +64,10 @@ interactively when the file is absent. It does not create a grid or simulator.
 It does not exercise service commands. `BASHUNIT_PROFILE=true` reports slowest
 tests at the end, including duration for a failed long-running step.
 
-Platform containers stay running after the matrix by default. The package builder and its named volume stay
-running and persist across test runs so subsequent runs avoid re-indexing and
-package transfer. They can be inspected in Podman Desktop and removed manually
-when no longer needed: `podman rm -f opensim-cli-test-build` followed by
-`podman volume rm opensim-cli-test-packages` (use the configured engine and
-Podman connection). Platform containers are labelled by OS, machine, and user. Titles
+Platform containers and the package builder stay running and persist across
+test runs, so subsequent runs avoid package installation and re-indexing when
+their contents are current. They can be inspected in Podman Desktop and removed
+manually when no longer needed with the configured container engine. Platform containers are labelled by OS, machine, and user. Titles
 stay short (for example, `debian-12 created`). If local tests, the build, or
 shared builder setup fails, dependent deployment tests are skipped. A platform
 creation or installation failure skips only that platform; other platforms

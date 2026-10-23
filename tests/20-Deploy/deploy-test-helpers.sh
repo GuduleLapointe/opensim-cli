@@ -11,7 +11,6 @@ DEPLOY_GATE_BLOCK_FILE=$DEPLOY_RUN_DIR/deployment-blocked
 DEPLOY_GATE_READY_FILE=$DEPLOY_RUN_DIR/deployment-ready
 DEPLOY_INFRA_BLOCK_FILE=$DEPLOY_RUN_DIR/deployment-infra-blocked
 DEPLOY_PACKAGE_DIR=${DEPLOY_PACKAGE_DIR:-${_BASHUNIT_RUN_OUTPUT_DIR:-}/deploy-packages}
-DEPLOY_VOLUME_NAME=${DEPLOY_VOLUME_NAME:-opensim-cli-test-packages}
 DEPLOY_BUILDER_NAME=${DEPLOY_BUILDER_NAME:-opensim-cli-test-build}
 DEPLOY_BUILDER_IMAGE=${DEPLOY_BUILDER_IMAGE:-docker.io/library/debian:12-slim}
 DEPLOY_QUICK_INSTALL_TIMEOUT=${DEPLOY_QUICK_INSTALL_TIMEOUT:-900}
@@ -54,10 +53,6 @@ deploy_slug() {
 
 deploy_log_dir() {
 	printf '%s/tmp/deploy-logs/%s' "$DEPLOY_PROJECT_ROOT" "$(deploy_name "$1")"
-}
-
-deploy_volume_name() {
-	printf '%s' "$DEPLOY_VOLUME_NAME"
 }
 
 deploy_builder_name() {
@@ -129,9 +124,8 @@ deploy_mark_infra_blocked() {
 }
 
 deploy_builder_step() {
-	local step=$1 builder volume status=0 running manifest remote_manifest index_stale=0
+	local step=$1 builder status=0 running manifest remote_manifest index_stale=0
 	builder=$(deploy_builder_name)
-	volume=$(deploy_volume_name)
 	bashunit::set_test_title "package builder $step"
 	if [[ -e "$DEPLOY_GATE_BLOCK_FILE" ]]; then
 		bashunit::skip 'local tests or package build failed'
@@ -145,12 +139,9 @@ deploy_builder_step() {
 		status=127
 	else
 		case "$step" in
-		volume)
-			if ! deploy_command volume inspect "$volume" >/dev/null 2>&1; then deploy_command volume create "$volume" >/dev/null || status=$?; fi
-			;;
 		created)
 			if ! deploy_command inspect "$builder" >/dev/null 2>&1; then
-				deploy_command create --name "$builder" --label org.opensim-cli.deploy=builder --volume "$volume:/tmp/opensim-local-install" "$DEPLOY_BUILDER_IMAGE" sh -c 'while :; do sleep 3600; done' >/dev/null || status=$?
+				deploy_command create --name "$builder" --label org.opensim-cli.deploy=builder "$DEPLOY_BUILDER_IMAGE" sh -c 'while :; do sleep 3600; done' >/dev/null || status=$?
 			fi
 			;;
 		started)
@@ -162,7 +153,7 @@ deploy_builder_step() {
 			fi
 			;;
 		ready)
-			deploy_command exec "$builder" sh -c 'test -w /tmp/opensim-local-install && command -v apt-get >/dev/null && command -v tar >/dev/null && command -v gzip >/dev/null && command -v sha256sum >/dev/null' >/dev/null || status=$?
+			deploy_command exec "$builder" sh -c 'mkdir -p /tmp/opensim-local-install && test -w /tmp/opensim-local-install && command -v apt-get >/dev/null && command -v tar >/dev/null && command -v gzip >/dev/null && command -v sha256sum >/dev/null' >/dev/null || status=$?
 			;;
 		scanner)
 			if ! deploy_command exec "$builder" sh -c 'command -v dpkg-scanpackages >/dev/null'; then
@@ -236,9 +227,7 @@ deploy_run_step() {
 	case "$step" in
 	created)
 		if ! deploy_select_engine; then status=127; else
-			local volume
 			local memory_args=()
-			volume=$(deploy_volume_name)
 			[[ -n "${MEMORY:-}" ]] && memory_args=(--memory "$MEMORY")
 			if deploy_command inspect "$name" >/dev/null 2>&1; then
 				status=0
@@ -251,7 +240,6 @@ deploy_run_step() {
 					--label "org.opensim-cli.deploy.ephemeral=$DEPLOY_EPHEMERAL" \
 					--label "org.opensim-cli.deploy.run=$DEPLOY_RUN_ID" \
 					"${memory_args[@]}" \
-					--volume "$volume:/tmp/opensim-local-install" \
 					"$DEPLOY_IMAGE" sh -c 'while :; do sleep 3600; done' >/dev/null || status=$?
 			fi
 		fi
@@ -274,7 +262,7 @@ deploy_run_step() {
 		;;
 	ready)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		deploy_command exec "$name" sh -c 'test -r /etc/os-release && test -x /bin/sh' >/dev/null || status=$?
+		deploy_command exec "$name" sh -c 'test -r /etc/os-release && test -x /bin/sh && command -v tar >/dev/null' >/dev/null || status=$?
 		assert_equals 0 "$status" "$DEPLOY_PLATFORM shell ready"
 		;;
 	id)
@@ -291,7 +279,30 @@ deploy_run_step() {
 		;;
 	synced)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		deploy_command exec "$name" sh -c 'test -s /tmp/opensim-local-install/MANIFEST && test -s /tmp/opensim-local-install/debs/Packages.gz && cd /tmp/opensim-local-install && sha256sum -c MANIFEST' >/dev/null || status=$?
+		local builder archive expected_manifest current_manifest package_mount
+		builder=$(deploy_builder_name)
+		expected_manifest=$(deploy_command exec "$builder" sh -c 'cat /tmp/opensim-local-install/MANIFEST' 2>/dev/null) || status=$?
+		current_manifest=$(deploy_command exec "$name" sh -c 'cat /tmp/opensim-local-install/MANIFEST 2>/dev/null' 2>/dev/null) || current_manifest=
+		if ((status == 0)) && { [[ "$current_manifest" != "$expected_manifest" ]] || ! deploy_command exec "$name" sh -c 'test -s /tmp/opensim-local-install/debs/Packages.gz' >/dev/null 2>&1; }; then
+			package_mount=$(deploy_command inspect --format '{{range .Mounts}}{{if eq .Destination "/tmp/opensim-local-install"}}{{.Source}}{{end}}{{end}}' "$name" 2>/dev/null) || package_mount=
+			if [[ -z "$package_mount" ]]; then
+				mkdir -p "$DEPLOY_RUN_DIR" || status=$?
+				archive=$(mktemp "$DEPLOY_RUN_DIR/$DEPLOY_PLATFORM-packages.XXXXXX.tar") || status=$?
+				if ((status == 0)); then
+					deploy_command exec "$builder" tar -C /tmp/opensim-local-install -cf - . >"$archive" || status=$?
+				fi
+				if ((status == 0)); then
+					deploy_command exec "$name" sh -c 'mkdir -p /tmp/opensim-local-install && find /tmp/opensim-local-install -mindepth 1 -maxdepth 1 -exec rm -rf {} +' || status=$?
+				fi
+				if ((status == 0)); then
+					deploy_command exec -i "$name" sh -c 'tar -xf - --no-same-owner -C /tmp/opensim-local-install' <"$archive" || status=$?
+				fi
+			fi
+			rm -f "${archive:-}"
+		fi
+		if ((status == 0)); then
+			deploy_command exec "$name" sh -c 'test -s /tmp/opensim-local-install/MANIFEST && test -s /tmp/opensim-local-install/debs/Packages.gz && cd /tmp/opensim-local-install && sha256sum -c MANIFEST' >/dev/null || status=$?
+		fi
 		assert_equals 0 "$status" "$DEPLOY_PLATFORM package sync"
 		;;
 	dependencies | mariadb | dotnet | opensim)
