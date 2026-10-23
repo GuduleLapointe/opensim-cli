@@ -52,7 +52,8 @@ Debian 12 builder container. It installs `dpkg-scanpackages` once, streams the
 current package set only when its manifest changes, and creates `Packages.gz`
 in the shared volume. Each enabled platform then creates and starts its own
 container, checks readiness and OS identity, verifies the shared package set,
-and runs `quick-install.sh` with `OPENSIM_KIT_DEBS`. The five `.deb` files are
+then runs `quick-install.sh` phases separately: dependencies, MariaDB and SQL
+account setup, .NET, and OpenSim packages. The five `.deb` files are
 staged by the local build after verifying the current source hashes for
 `bash-tools`, `opensim-engine`, `opensim-rest-php`, and `opensim-helpers`. The
 suite stops after verifying installation; it does not run `opensim setup` or
@@ -79,9 +80,10 @@ per-platform install timeout in seconds (default: 900).
 
 Set `DEPLOY_EPHEMERAL=1` in `tests/.env` to use temporary containers that the final cleanup removes.
 By default, deployment containers persist and are reused, so a successful installation is not repeated
-when the staged package manifest is unchanged. Full quick-install output is saved under
-`tmp/deploy-logs/<container-name>/quick-install.log` on the test machine and `/tmp/<container-name>/quick-install.log`
-inside the container. The host path is printed if installation fails.
+when the staged package manifest is unchanged. Each quick-install phase is logged
+under `tmp/deploy-logs/<container-name>/<phase>.log` on the test machine and
+`/tmp/<container-name>/<phase>.log` inside the container. The host path is printed
+if a phase fails.
 During the matrix, you can inspect, stop, or remove a container in Podman
 Desktop; if you stop or remove one, later checks for that platform will report
 the resulting state.

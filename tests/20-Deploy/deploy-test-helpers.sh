@@ -252,10 +252,16 @@ deploy_run_step() {
 			deploy_command exec "$name" sh -c 'test -s /tmp/opensim-local-install/MANIFEST && test -s /tmp/opensim-local-install/debs/Packages.gz && cd /tmp/opensim-local-install && sha256sum -c MANIFEST' >/dev/null || status=$?
 			assert_equals 0 "$status" "$DEPLOY_PLATFORM package sync"
 			;;
-		opensim | dotnet)
+		dependencies | mariadb | dotnet | opensim)
 			if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-			local log_dir log_file manifest_stamp installed_stamp container_log install_step
+			local log_dir log_file manifest_stamp installed_stamp container_log install_step option
 			install_step=$step
+			case "$step" in
+			dependencies) option=--dependencies ;;
+			mariadb) option=--mariadb ;;
+			dotnet) option=--dotnet ;;
+			opensim) option=--opensim ;;
+			esac
 			log_dir=$(deploy_log_dir "$DEPLOY_PLATFORM")
 			log_file=$log_dir/$install_step.log
 			manifest_stamp=$(cksum <"$DEPLOY_PACKAGE_DIR/MANIFEST" | awk '{print $1 ":" $2}')
@@ -271,17 +277,29 @@ deploy_run_step() {
 						set -o pipefail
 						log_file=$1
 						mkdir -p "$(dirname "$log_file")"
-						timeout --signal=TERM --kill-after=30s "${2}s" env DEBUG=yes OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh --no-setup --step "$3" 2>&1 | tee "$log_file"
+						timeout --signal=TERM --kill-after=30s "${2}s" env DEBUG=yes OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh "$3" 2>&1 | tee "$log_file"
 					' bash "$container_log" "$DEPLOY_QUICK_INSTALL_TIMEOUT" "$install_step" >"$log_file" 2>&1 || status=$?
 			fi
 			if ((status == 124)); then printf '%s quick-install timed out after %ss (log: %s)\n' "$DEPLOY_PLATFORM" "$DEPLOY_QUICK_INSTALL_TIMEOUT" "$log_file" >&2; fi
 			if ((status != 0)); then
 				printf 'Full quick-install log: %s\n' "$log_file" >&2
 				tail -n 40 "$log_file" >&2 || true
-			elif [[ "$step" == dotnet ]]; then
+			elif [[ "$step" == opensim ]]; then
 				deploy_command exec "$name" sh -c 'printf "%s\n" "$1" > /var/tmp/opensim-deploy-package-manifest' sh "$manifest_stamp" || status=$?
 			fi
 			assert_equals 0 "$status" "$DEPLOY_PLATFORM $install_step step"
+			;;
+		accounts)
+			if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+			actual=$(deploy_command exec "$name" sh -c 'mysql -Nse "SELECT COUNT(*) FROM mysql.user WHERE User IN (0x6f70656e73696d5f61646d696e,0x6f70656e73696d) AND Host=0x6c6f63616c686f7374"' 2>/dev/null) || status=$?
+			[[ "$actual" == 2 ]] || status=1
+			assert_equals 2 "$actual" "$DEPLOY_PLATFORM SQL accounts"
+			;;
+		credentials)
+			if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+			actual=$(deploy_command exec "$name" sh -c 'grep -Ec "^export OPENSIM_DB_(HOST|ADMIN_USER|ADMIN_PASS|USER|PASS)=" /root/.opensimrc' 2>/dev/null) || status=$?
+			[[ "$actual" == 5 ]] || status=1
+			assert_equals 5 "$actual" "$DEPLOY_PLATFORM saved SQL settings"
 			;;
 		packages)
 			if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
