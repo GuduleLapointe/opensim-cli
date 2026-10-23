@@ -60,6 +60,15 @@ deploy_builder_name() {
 	printf '%s' "$DEPLOY_BUILDER_NAME"
 }
 
+deploy_execution_location() {
+	deploy_select_engine >/dev/null 2>&1 || true
+	if [[ "$DEPLOY_ENGINE_SELECTED" == podman && -n "${CONTAINER_CONNECTION:-}" ]]; then
+		printf '%s' "$CONTAINER_CONNECTION"
+	else
+		printf 'local %s' "${DEPLOY_ENGINE_SELECTED:-container engine}"
+	fi
+}
+
 deploy_platform_block_file() {
 	printf '%s/%s-blocked' "$DEPLOY_RUN_DIR" "$1"
 }
@@ -158,7 +167,19 @@ deploy_mark_infra_blocked() {
 deploy_builder_step() {
 	local step=$1 builder status=0 running manifest remote_manifest index_stale=0
 	builder=$(deploy_builder_name)
-	bashunit::set_test_title "package builder $step"
+	case "$step" in
+	image) bashunit::set_test_title "package builder image $DEPLOY_BUILDER_IMAGE is available" ;;
+	created) bashunit::set_test_title "package builder is created" ;;
+	started) bashunit::set_test_title "package builder start succeeds" ;;
+	running) bashunit::set_test_title "package builder reports running" ;;
+	ready) bashunit::set_test_title "package builder is ready" ;;
+	scanner) bashunit::set_test_title "package indexer is available in builder" ;;
+	synced) bashunit::set_test_title "local package set is synced to builder" ;;
+	index_unchanged) bashunit::set_test_title "current package index stays unchanged" ;;
+	index_refresh) bashunit::set_test_title "stale package index is refreshed" ;;
+	source_refresh) bashunit::set_test_title "private packages remain available beside official APT source" ;;
+	*) bashunit::set_test_title "package builder $step" ;;
+	esac
 	if [[ -e "$DEPLOY_GATE_BLOCK_FILE" ]]; then
 		bashunit::skip 'local tests or package build failed'
 		return
@@ -186,6 +207,10 @@ deploy_builder_step() {
 				running=$(deploy_command inspect --format '{{.State.Running}}' "$builder") || status=$?
 				if [[ "$running" != true ]] && ((status == 0)); then deploy_command start "$builder" >/dev/null || status=$?; fi
 			fi
+			;;
+		running)
+			running=$(deploy_command inspect --format '{{.State.Running}}' "$builder") || status=$?
+			[[ "$running" == true ]] || status=1
 			;;
 		ready)
 			deploy_command exec "$builder" sh -c 'mkdir -p /tmp/opensim-local-install && test -w /tmp/opensim-local-install && command -v apt-get >/dev/null && command -v tar >/dev/null && command -v gzip >/dev/null && command -v sha256sum >/dev/null' >/dev/null || status=$?
@@ -279,9 +304,29 @@ deploy_builder_step() {
 }
 
 deploy_run_step() {
-	local step=$1 name status=0 actual
+	local step=$1 name status=0 actual location command
 	name=$(deploy_name "$DEPLOY_PLATFORM")
-	bashunit::set_test_title "$DEPLOY_PLATFORM $step"
+	location=$(deploy_execution_location)
+	case "$step" in
+	image) bashunit::set_test_title "$DEPLOY_PLATFORM container image $DEPLOY_IMAGE is available" ;;
+	created) bashunit::set_test_title "$DEPLOY_PLATFORM container is created on $location" ;;
+	started) bashunit::set_test_title "$DEPLOY_PLATFORM container start succeeds" ;;
+	running) bashunit::set_test_title "$DEPLOY_PLATFORM container reports running" ;;
+	ready) bashunit::set_test_title "$DEPLOY_PLATFORM container is ready" ;;
+	id) bashunit::set_test_title "$DEPLOY_PLATFORM container OS ID is $DEPLOY_EXPECTED_ID" ;;
+	version) bashunit::set_test_title "$DEPLOY_PLATFORM container OS version is $DEPLOY_EXPECTED_VERSION" ;;
+	builder_running) bashunit::set_test_title "$DEPLOY_PLATFORM package builder is running on $location" ;;
+	synced) bashunit::set_test_title "$DEPLOY_PLATFORM package bundle matches the current build" ;;
+	dependencies) bashunit::set_test_title "$DEPLOY_PLATFORM quick-install dependencies succeed" ;;
+	mariadb) bashunit::set_test_title "$DEPLOY_PLATFORM SQL server is available" ;;
+	accounts) bashunit::set_test_title "$DEPLOY_PLATFORM SQL accounts are created" ;;
+	credentials) bashunit::set_test_title "$DEPLOY_PLATFORM SQL credentials are saved" ;;
+	dotnet) bashunit::set_test_title "$DEPLOY_PLATFORM .NET runtime is available" ;;
+	opensim) bashunit::set_test_title "$DEPLOY_PLATFORM OpenSim packages are installed" ;;
+	packages) bashunit::set_test_title "$DEPLOY_PLATFORM installed packages are complete" ;;
+	setup_credentials) bashunit::set_test_title "$DEPLOY_PLATFORM setup reads saved or interactive credentials" ;;
+	*) bashunit::set_test_title "$DEPLOY_PLATFORM $step" ;;
+	esac
 	if [[ -e "$DEPLOY_GATE_BLOCK_FILE" || -e "$DEPLOY_INFRA_BLOCK_FILE" ]]; then
 		bashunit::skip 'local tests, build, or shared deployment setup failed'
 		return
@@ -293,88 +338,122 @@ deploy_run_step() {
 
 	case "$step" in
 	image)
-		deploy_ensure_image "$DEPLOY_IMAGE" "$(deploy_log_dir "$DEPLOY_PLATFORM")/image.log" || status=$?
-		assert_equals 0 "$status" "$DEPLOY_PLATFORM image ready"
+		local image_log image_command
+		image_log=$(deploy_log_dir "$DEPLOY_PLATFORM")/image.log
+		printf -v image_command 'deploy_ensure_image %q %q' "$DEPLOY_IMAGE" "$image_log"
+		assert_exec "$image_command"
+		return
 		;;
 	created)
 		if ! deploy_select_engine; then status=127; else
 			local memory_args=()
 			[[ -n "${MEMORY:-}" ]] && memory_args=(--memory "$MEMORY")
 			if deploy_command inspect "$name" >/dev/null 2>&1; then
-				status=0
+				printf -v command 'deploy_command inspect %q' "$name"
 			else
-				deploy_command create --name "$name" \
-					--label org.opensim-cli.deploy=1 \
-					--label "org.opensim-cli.deploy.platform=$DEPLOY_PLATFORM" \
-					--label "org.opensim-cli.deploy.host=$DEPLOY_HOST_SLUG" \
-					--label "org.opensim-cli.deploy.user=$DEPLOY_USER_SLUG" \
-					--label "org.opensim-cli.deploy.ephemeral=$DEPLOY_EPHEMERAL" \
-					--label "org.opensim-cli.deploy.run=$DEPLOY_RUN_ID" \
-					"${memory_args[@]}" \
-					"$DEPLOY_IMAGE" sh -c 'while :; do sleep 3600; done' >/dev/null || status=$?
+				local create_args=(deploy_command create --name "$name"
+					--label org.opensim-cli.deploy=1
+					--label "org.opensim-cli.deploy.platform=$DEPLOY_PLATFORM"
+					--label "org.opensim-cli.deploy.host=$DEPLOY_HOST_SLUG"
+					--label "org.opensim-cli.deploy.user=$DEPLOY_USER_SLUG"
+				--label "org.opensim-cli.deploy.ephemeral=$DEPLOY_EPHEMERAL"
+				--label "org.opensim-cli.deploy.run=$DEPLOY_RUN_ID")
+				create_args+=("${memory_args[@]}" "$DEPLOY_IMAGE" sh -c 'while :; do sleep 3600; done')
+				printf -v command '%q ' "${create_args[@]}"
 			fi
+			assert_exec "$command"
+			return
 		fi
-		assert_equals 0 "$status" "$DEPLOY_PLATFORM create"
+		assert_equals 0 "$status" "$DEPLOY_PLATFORM container creation"
 		;;
 	started)
 		if ! deploy_select_engine || ! deploy_command inspect "$name" >/dev/null 2>&1; then
-			bashunit::skip "$DEPLOY_PLATFORM not created"
+			bashunit::skip "$DEPLOY_PLATFORM container has not been created"
 			return
 		fi
-		local running
-		running=$(deploy_command inspect --format '{{.State.Running}}' "$name") || status=$?
-		if [[ "$running" != true ]] && ((status == 0)); then deploy_command start "$name" >/dev/null || status=$?; fi
-		assert_equals 0 "$status" "$DEPLOY_PLATFORM start"
+		local start_command
+		printf -v start_command 'if [[ $(deploy_command inspect --format %q %q) != true ]]; then deploy_command start %q; fi' \
+			'{{.State.Running}}' "$name" "$name"
+		assert_exec "$start_command"
+		return
 		;;
 	running)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		actual=$(deploy_command inspect --format '{{.State.Running}}' "$name") || status=$?
-		assert_equals true "$actual" "$DEPLOY_PLATFORM running"
+		local running_command
+		printf -v running_command 'deploy_command inspect --format %q %q' '{{.State.Running}}' "$name"
+		assert_exec "$running_command" --stdout true
+		return
 		;;
 	ready)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		deploy_command exec "$name" sh -c 'test -r /etc/os-release && test -x /bin/sh && command -v tar >/dev/null' >/dev/null || status=$?
-		assert_equals 0 "$status" "$DEPLOY_PLATFORM shell ready"
+		local ready_command
+		printf -v ready_command 'deploy_command exec %q sh -c %q' "$name" 'test -r /etc/os-release && test -x /bin/sh && command -v tar >/dev/null'
+		assert_exec "$ready_command"
+		return
 		;;
 	id)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		actual=$(deploy_command exec "$name" sh -c '. /etc/os-release; printf "%s" "$ID"') || status=$?
-		[[ "$actual" == "$DEPLOY_EXPECTED_ID" ]] || status=1
-		assert_equals "$DEPLOY_EXPECTED_ID" "$actual" "$DEPLOY_PLATFORM ID"
+		local id_command
+		printf -v id_command 'deploy_command exec %q sh -c %q' "$name" '. /etc/os-release; printf "%s" "$ID"'
+		assert_exec "$id_command" --stdout "$DEPLOY_EXPECTED_ID"
+		return
 		;;
 	version)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		actual=$(deploy_command exec "$name" sh -c '. /etc/os-release; printf "%s" "$VERSION_ID"') || status=$?
-		[[ "$actual" == "$DEPLOY_EXPECTED_VERSION" ]] || status=1
-		assert_equals "$DEPLOY_EXPECTED_VERSION" "$actual" "$DEPLOY_PLATFORM version"
+		local version_command
+		printf -v version_command 'deploy_command exec %q sh -c %q' "$name" '. /etc/os-release; printf "%s" "$VERSION_ID"'
+		assert_exec "$version_command" --stdout "$DEPLOY_EXPECTED_VERSION"
+		return
+		;;
+	builder_running)
+		local builder builder_running builder_command
+		builder=$(deploy_builder_name)
+		builder_running=$(deploy_command inspect --format '{{.State.Running}}' "$builder" 2>/dev/null) || builder_running=
+		if [[ "$builder_running" != true ]]; then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
+		printf -v builder_command 'deploy_command inspect --format %q %q' '{{.State.Running}}' "$builder"
+		assert_exec "$builder_command" --stdout true
+		return
 		;;
 	synced)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		local builder archive expected_manifest current_manifest package_mount
+		local builder archive expected_manifest current_manifest package_mount failed_operation
 		builder=$(deploy_builder_name)
-		expected_manifest=$(deploy_command exec "$builder" sh -c 'cat /tmp/opensim-local-install/MANIFEST' 2>/dev/null) || status=$?
-		current_manifest=$(deploy_command exec "$name" sh -c 'cat /tmp/opensim-local-install/MANIFEST 2>/dev/null' 2>/dev/null) || current_manifest=
+		failed_operation='read the package manifest from the builder'
+		expected_manifest=$(deploy_command exec "$builder" sh -c 'cat /tmp/opensim-local-install/MANIFEST') || status=$?
+		current_manifest=$(deploy_command exec "$name" sh -c 'cat /tmp/opensim-local-install/MANIFEST 2>/dev/null') || current_manifest=
 		if ((status == 0)) && { [[ "$current_manifest" != "$expected_manifest" ]] || ! deploy_command exec "$name" sh -c 'test -s /tmp/opensim-local-install/debs/Packages.gz' >/dev/null 2>&1; }; then
 			package_mount=$(deploy_command inspect --format '{{range .Mounts}}{{if eq .Destination "/tmp/opensim-local-install"}}{{.Source}}{{end}}{{end}}' "$name" 2>/dev/null) || package_mount=
 			if [[ -z "$package_mount" ]]; then
 				mkdir -p "$DEPLOY_RUN_DIR" || status=$?
 				archive=$(mktemp "$DEPLOY_RUN_DIR/$DEPLOY_PLATFORM-packages.XXXXXX.tar") || status=$?
 				if ((status == 0)); then
+					failed_operation='archive the package bundle from the builder'
 					deploy_command exec "$builder" tar -C /tmp/opensim-local-install -cf - . >"$archive" || status=$?
 				fi
 				if ((status == 0)); then
+					failed_operation='clear the old package bundle from the platform container'
 					deploy_command exec "$name" sh -c 'mkdir -p /tmp/opensim-local-install && find /tmp/opensim-local-install -mindepth 1 -maxdepth 1 -exec rm -rf {} +' || status=$?
 				fi
 				if ((status == 0)); then
+					failed_operation='extract the package bundle into the platform container'
 					deploy_command exec -i "$name" sh -c 'tar -xf - --no-same-owner -C /tmp/opensim-local-install' <"$archive" || status=$?
 				fi
 			fi
 			rm -f "${archive:-}"
 		fi
 		if ((status == 0)); then
-			deploy_command exec "$name" sh -c 'test -s /tmp/opensim-local-install/MANIFEST && test -s /tmp/opensim-local-install/debs/Packages.gz && cd /tmp/opensim-local-install && sha256sum -c MANIFEST' >/dev/null || status=$?
+			failed_operation='verify package manifest and checksums in the platform container'
+			local verify_command
+			printf -v verify_command 'deploy_command exec %q sh -c %q' "$name" 'test -s /tmp/opensim-local-install/MANIFEST && test -s /tmp/opensim-local-install/debs/Packages.gz && cd /tmp/opensim-local-install && sha256sum -c MANIFEST'
+			if deploy_command exec "$name" sh -c 'test -s /tmp/opensim-local-install/MANIFEST && test -s /tmp/opensim-local-install/debs/Packages.gz && cd /tmp/opensim-local-install && sha256sum -c MANIFEST' >/dev/null 2>&1; then
+				assert_exec "$verify_command"
+				return
+			fi
+			deploy_mark_platform_blocked "$DEPLOY_PLATFORM"
+			assert_exec "$verify_command"
+			return
 		fi
-		assert_equals 0 "$status" "$DEPLOY_PLATFORM package sync"
+		assert_equals 0 "$status" "$DEPLOY_PLATFORM $failed_operation"
 		;;
 	dependencies | mariadb | dotnet | opensim)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi

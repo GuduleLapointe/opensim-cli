@@ -50,7 +50,9 @@ keys.
 
 Bashunit reports each operation as a separate test. A shared `package builder`
 group first pulls the Debian 12 image when needed, then creates or reuses a
-visible, persistent builder container.
+visible, persistent builder container. A full Deploy run creates it before the
+platform tests. A platform file selected by itself expects this shared builder
+to be running; it reports that prerequisite separately before attempting sync.
 It installs `dpkg-scanpackages` once, stores the current package set in its
 container, and creates `Packages.gz` there. Each enabled platform then creates
 and starts its own container, checks readiness and OS identity, copies the
@@ -102,7 +104,9 @@ when the staged package manifest is unchanged. Each quick-install phase is logge
 under `tmp/deploy-logs/<container-name>/<phase>.log` on the test machine and
 `/tmp/<container-name>/<phase>.log` inside the container. The host path is printed
 if a phase fails.
-During the matrix, you can inspect, stop, or remove a container in Podman
+Test titles distinguish the start command from the running-state check, name
+the expected operating-system ID and version, and identify the package builder
+prerequisite before package synchronization. During the matrix, you can inspect, stop, or remove a container in Podman
 Desktop; if you stop or remove one, later checks for that platform will report
 the resulting state.
 
