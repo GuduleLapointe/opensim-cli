@@ -269,6 +269,7 @@ deploy_run_step() {
 				deploy_command exec "$name" bash -c '
 					set -o pipefail
 					log_file=$1
+					mkdir -p "$(dirname "$log_file")"
 					timeout --signal=TERM --kill-after=30s "${2}s" env DEBUG=yes OPENSIM_KIT_DEBS=/tmp/opensim-local-install/debs ASSUME_YES=yes /bin/bash /tmp/opensim-local-install/quick-install.sh --no-setup 2>&1 | tee "$log_file"
 				' bash "$container_log" "$DEPLOY_QUICK_INSTALL_TIMEOUT" >"$log_file" 2>&1 || status=$?
 			fi
