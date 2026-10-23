@@ -116,6 +116,7 @@ deploy_installation_is_current() {
 	local name=$1
 	deploy_command exec "$name" sh -c '
 		command -v opensim >/dev/null &&
+		dpkg-query -W -f="\${db:Status-Status}" opensim 2>/dev/null | grep -qx installed &&
 		dpkg-query -W -f="\${db:Status-Status}" opensim-cli 2>/dev/null | grep -qx installed &&
 		dotnet --list-runtimes 2>/dev/null | grep -Eq "Microsoft\\.NETCore\\.App [8-9][.]|Microsoft\\.NETCore\\.App [1-9][0-9]+[.]" &&
 		mysqladmin ping --silent
@@ -573,7 +574,7 @@ deploy_run_step() {
 				deploy_command exec "$name" sh -c 'dotnet --list-runtimes 2>/dev/null | grep -Eq "Microsoft\\.NETCore\\.App [8-9][.]|Microsoft\\.NETCore\\.App [1-9][0-9]+[.]"' >"$log_file" 2>&1 || status=$?
 				;;
 			opensim)
-				deploy_command exec "$name" sh -c 'command -v opensim >/dev/null && dpkg-query -W -f="\${db:Status-Status}" opensim-cli 2>/dev/null | grep -qx installed' >"$log_file" 2>&1 || status=$?
+				deploy_command exec "$name" sh -c 'command -v opensim >/dev/null && dpkg-query -W -f="\${db:Status-Status}" opensim opensim-cli 2>/dev/null | grep -cqx installed' >"$log_file" 2>&1 || status=$?
 				;;
 			esac
 		fi
@@ -602,8 +603,8 @@ deploy_run_step() {
 		;;
 	packages)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		printf -v command 'deploy_command exec %q sh -c %q' "$name" 'dpkg-query -W -f="\${db:Status-Status}\n" bash-tools opensim-cli opensim-engine opensim-helpers opensim-rest-php | grep -Ec "^installed$"'
-		assert_exec "$command" --stdout 5
+		printf -v command 'deploy_command exec %q sh -c %q' "$name" 'dpkg-query -W -f="\${db:Status-Status}\n" bash-tools opensim opensim-cli opensim-engine opensim-helpers opensim-rest-php | grep -Ec "^installed$"'
+		assert_exec "$command" --stdout 6
 		;;
 	setup_credentials)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi

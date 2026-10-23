@@ -8,7 +8,7 @@
 #   Or from a clone of the repository:
 #     git clone https://github.com/GuduleLapointe/opensim-cli.git && cd opensim-cli && ./quick-install.sh
 #
-#   Or with the packages only:  sudo apt install opensim-cli opensim-helpers && opensim setup
+#   Or with the packages only:  sudo apt install opensim opensim-cli opensim-helpers && opensim setup
 #
 # From a clone it runs the tools of the clone; its PHP libraries come from Composer.
 #
@@ -19,7 +19,7 @@
 #           --dependencies        install quick-install's own dependencies
 #           --mariadb | --mysql   install/configure the requested SQL server
 #           --dotnet              install the .NET runtime without OpenSim packages
-#           --opensim             install OpenSim packages (or prepare the clone)
+#           --opensim             install OpenSimulator and its management packages (or prepare the clone)
 # Environment: OPENSIM_KIT_DEBS=folder  install the packages (*.deb) of that folder instead of the Magiiic repository
 
 set -euo pipefail
@@ -39,7 +39,7 @@ MAGIIIC_KEY=https://apt.magiiic.com/magiiic-packaging.asc
 MAGIIIC_REPOSITORY="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com stable main"
 # What the tools need on a machine that does not have the packages (a clone): the same as the package opensim-tools
 PHP_PACKAGES=(php-cli php-curl php-intl php-mbstring php-mysql php-xml)
-OPENSIM_PACKAGES=(opensim-cli opensim-helpers)
+OPENSIM_PACKAGES=(opensim opensim-cli opensim-helpers)
 
 OPENSIM_KIT_DEBS=${OPENSIM_KIT_DEBS:-}
 ASSUME_YES=${ASSUME_YES:-}
@@ -405,7 +405,7 @@ phase_cleanup() {
 	local -a packages=() folders=() databases=() duplicate_debs=() groups=() group_debs=()
 	local path sql_client db escaped_db answer prefix package_rows database_rows status package dist_folder archive_folder deb group seen i
 
-	package_rows=$(dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' 'opensim-*' 2>/dev/null) || package_rows=
+	package_rows=$(dpkg-query -W -f='${db:Status-Abbrev} ${binary:Package}\n' opensim 'opensim-*' 2>/dev/null) || package_rows=
 	while read -r status package; do
 		if [[ "$status" == ii* ]]; then packages+=("$package"); fi
 	done <<<"$package_rows"
