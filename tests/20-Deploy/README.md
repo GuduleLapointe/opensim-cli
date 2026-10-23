@@ -48,42 +48,32 @@ has a corresponding `*-test.sh` entry point that declares the shared tests from
 `DEPLOY_PLATFORMS_FILE` to use a different data file with the same platform
 keys.
 
-Bashunit reports each operation as a separate test. A shared `package builder`
-group first pulls the Debian 12 image when needed, then creates or reuses a
-visible, persistent builder container. A full Deploy run creates it before the
-platform tests. A platform file selected by itself expects this shared builder
-to be running; it reports that prerequisite separately before attempting sync.
-It installs `dpkg-scanpackages` once, stores the current package set in its
-container, and creates `Packages.gz` there. Each enabled platform then creates
-and starts its own container, checks readiness and OS identity, then syncs the
-package set from the builder when its manifest changes. Manifest availability,
-archive creation, cleanup of an old copy, extraction, and checksum verification
-each have a separate Bashunit result. It then runs `quick-install.sh` steps
-separately by default: dependencies,
-MariaDB and SQL account setup, .NET, and OpenSim packages. Set
+Bashunit reports each operation as a separate test. Each enabled platform
+creates and starts its own container, checks readiness and OS identity, then
+runs `quick-install.sh` steps separately by default: dependencies, MariaDB and
+SQL account setup, .NET, and OpenSim packages. Set
 `DEPLOY_INSTALL_MODE=single` to run `quick-install.sh` once without a step
 option, as in a normal installation, followed by separate checks for MariaDB,
 .NET, and OpenSim. Use `DEPLOY_INSTALL_MODE=separate` to run each installation
 step as its own command; this is the default and is useful for isolating a slow
 or failing step. A fresh-container timing comparison can use
-`DEPLOY_EPHEMERAL=1 DEPLOY_INSTALL_MODE=single`. The five `.deb` files are
-staged by the local build after verifying the current source hashes for
-`bash-tools`, `opensim-engine`, `opensim-rest-php`, and `opensim-helpers`. A
-setup smoke test then runs the installed `opensim setup` interface with a
-stubbed engine response, checking both that installer-saved SQL credentials in
+`DEPLOY_EPHEMERAL=1 DEPLOY_INSTALL_MODE=single`. Five `.deb` files are built
+and staged locally after verifying the current source hashes for `bash-tools`,
+`opensim-engine`, `opensim-rest-php`, and `opensim-helpers`. A setup smoke test
+then runs the installed `opensim setup` interface with a stubbed engine
+response, checking both that installer-saved SQL credentials in
 `/root/.opensimrc` reach the engine and that credentials can be entered
 interactively when the file is absent. It does not create a grid or simulator.
 It does not exercise service commands. `BASHUNIT_PROFILE=true` reports slowest
 tests at the end, including duration for a failed long-running step.
 
-Platform containers and the package builder stay running and persist across
-test runs, so subsequent runs avoid package installation and re-indexing when
-their contents are current. They can be inspected in Podman Desktop and removed
-manually when no longer needed with the configured container engine. Platform containers are labelled by OS, machine, and user. Titles
-stay short (for example, `debian-12 created`). If local tests, the build, or
-shared builder setup fails, dependent deployment tests are skipped. A platform
-creation or installation failure skips only that platform; other platforms
-continue.
+Platform containers stay running and persist across test runs, so subsequent
+runs avoid package installation when their contents are current. They can be
+inspected in Podman Desktop and removed manually when no longer needed with the
+configured container engine. Platform containers are labelled by OS, machine,
+and user. Titles stay short (for example, `debian-12 created`). If local tests
+or the build fails, dependent deployment tests are skipped. A platform creation
+or installation failure skips only that platform; other platforms continue.
 
 Podman is preferred and Docker is the fallback. To select an engine explicitly,
 set `DEPLOY_ENGINE=podman` or `DEPLOY_ENGINE=docker` in the caller's environment
@@ -100,14 +90,14 @@ is saved elsewhere.
 
 Set `DEPLOY_EPHEMERAL=1` in `tests/.env` to use temporary containers removed by
 the platform file's teardown, even when that file is run on its own.
-By default, deployment containers persist and are reused, so a successful installation is not repeated
-when the staged package manifest is unchanged. Each quick-install phase is logged
-under `tmp/deploy-logs/<container-name>/<phase>.log` on the test machine and
-`/tmp/<container-name>/<phase>.log` inside the container. The host path is printed
-if a phase fails.
-Test titles distinguish the start command from the running-state check, name
-the expected operating-system ID and version, and identify the package builder
-prerequisite before package synchronization. During the matrix, you can inspect, stop, or remove a container in Podman
+By default, deployment containers persist and are reused, so a successful
+installation is not repeated when the staged package manifest and selected APT
+suite are unchanged. Each quick-install phase is logged under
+`tmp/deploy-logs/<container-name>/<phase>.log` on the test machine and
+`/tmp/<container-name>/<phase>.log` inside the container. The host path is
+printed if a phase fails. Test titles distinguish the start command from the
+running-state check and name the expected operating-system ID and version.
+During the matrix, you can inspect, stop, or remove a container in Podman
 Desktop; if you stop or remove one, later checks for that platform will report
 the resulting state.
 
@@ -118,10 +108,14 @@ platform row and matching test file to extend it. All tests use the shared
 
 If the local build test was not selected, the first deployment prerequisite
 builds and stages the same five current packages locally before contacting the
-container engine. `CONTAINER_CONNECTION` applies to both the shared package
-builder and the platform containers; it never redirects the local build.
-The remote image and container availability checks use Bashunit's one-retry
-annotation. A check that only passes on retry is marked as flaky; package
-mutations and installation tests are not retried.
+container engine. Containers install OpenSim packages from the official APT
+repository. Set `DEPLOY_APT_SUITE=tests` to select the test suite; it defaults
+to `stable`. Test packages can be published from the local build with
+`DEPLOY_PUBLISH_TEST_PACKAGES=1` and a local repository clone configured as
+`APT_REPO_DIR` in `tests/.env`. No local `.deb` files are copied into the OS
+containers. `CONTAINER_CONNECTION` applies to platform containers and never
+redirects the local build. The remote image and container availability checks
+use Bashunit's one-retry annotation. A check that only passes on retry is
+marked as flaky; package mutations and installation tests are not retried.
 
 Source-clone mode remains out of scope.
