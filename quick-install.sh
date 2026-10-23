@@ -17,7 +17,7 @@
 #           --setup               run `opensim setup` after the full or OpenSim install
 #           --dependencies        install quick-install's own dependencies
 #           --mariadb | --mysql   install/configure the requested SQL server
-#           --dotnet              install the .NET runtime
+#           --dotnet              install the .NET runtime without OpenSim packages
 #           --opensim             install OpenSim packages (or prepare the clone)
 # Environment: OPENSIM_KIT_DEBS=folder  install the packages (*.deb) of that folder instead of the Magiiic repository
 
@@ -122,6 +122,28 @@ apt_update() {
 	fi
 }
 
+dotnet_runtime_package() {
+	local package
+	while IFS= read -r package; do
+		[[ "$package" =~ ^dotnet-runtime-([0-9]+)\.0$ ]] || continue
+		(( BASH_REMATCH[1] >= 8 )) || continue
+		if apt-cache policy "$package" 2>/dev/null | grep -Eq 'Candidate: [^()]'; then
+			printf '%s\n' "$package"
+			return 0
+		fi
+	done < <(apt-cache pkgnames dotnet-runtime- 2>/dev/null | sort -Vr)
+	return 1
+}
+
+dotnet_runtime_installed() {
+	command -v dotnet >/dev/null 2>&1 &&
+		dotnet --list-runtimes 2>/dev/null | grep -Eq 'Microsoft\.NETCore\.App (8|9|[1-9][0-9]+)\.'
+}
+
+apt_has_candidate() {
+	apt-cache policy "$1" 2>/dev/null | grep -Eq 'Candidate: [^()]'
+}
+
 install_packages() {
 	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu (see INSTALLATION.md for the others)"
 	export DEBIAN_FRONTEND=noninteractive
@@ -156,6 +178,9 @@ configure_package_sources() {
 				install_packages dpkg-dev || die "no dpkg-scanpackages, could not install dpkg-dev"
 			fi
 			(cd "$debs" && dpkg-scanpackages . /dev/null | gzip -9c >Packages.gz) || die "local package index refresh failed"
+		fi
+		if command -v runuser >/dev/null 2>&1 && ! as_root runuser -u _apt -- test -r "$debs/Packages.gz"; then
+			die "local package repository $debs is not readable by APT; move it outside /root (for example, to /opt/opensim/dist)"
 		fi
 		if ! grep -Fq "file:$debs" /etc/apt/sources.list.d/magiiic.list 2>/dev/null; then
 			printf 'deb [trusted=yes] file:%s ./\n' "$debs" | as_root tee /etc/apt/sources.list.d/magiiic.list >/dev/null || return $?
@@ -295,15 +320,48 @@ end_installation() {
 phase_dotnet() {
 	[[ $(uname -s) == Linux ]] || { say ".NET installation is only run on Linux"; return 0; }
 	recover_dpkg_configuration || die "could not complete package configuration"
-	if [[ -n "$clone" && -z "$OPENSIM_KIT_DEBS" ]]; then
-		[[ -f "$clone/vendor/autoload.php" ]] || phase_dependencies || return $?
-		as_root "$clone/bin/opensim" install-dotnet -y || return $?
-		return
+	apt_update || die "could not refresh package lists"
+	local runtime_package support_packages=()
+	if ! dotnet_runtime_installed; then
+		if runtime_package=$(dotnet_runtime_package); then
+			support_packages+=("$runtime_package")
+		else
+			say "No suitable .NET runtime package is available; use Microsoft's installer"
+		fi
 	fi
-	configure_package_sources || return $?
-	# The engine owns the runtime installer; its package does not install the CLI.
-	install_packages opensim-engine || die "could not install opensim-engine for the .NET installer"
-	as_root php -r 'require "/usr/share/opensim-engine/vendor/autoload.php"; $ui = new OpenSim\Provisioning\NullUi(true); $installer = new OpenSim\Runtime\DotnetInstaller($ui); exit($installer->install(8) ? 0 : 1);' || die "could not install the .NET runtime"
+	if ! ldconfig -p 2>/dev/null | grep -q 'libgdiplus\.so'; then
+		if apt_has_candidate libgdiplus; then
+			support_packages+=(libgdiplus)
+		else
+			say "libgdiplus is not available from the configured APT sources"
+		fi
+	fi
+	if ((${#support_packages[@]})); then
+		install_packages "${support_packages[@]}" || die "could not install .NET runtime packages"
+	fi
+	dotnet_runtime_installed && return 0
+
+	if ! command -v curl >/dev/null 2>&1 || ! dpkg-query -W -f='${db:Status-Status}' ca-certificates 2>/dev/null | grep -qx installed; then
+		install_packages ca-certificates curl || die "could not install curl for the .NET installer"
+	fi
+	if ! ldconfig -p 2>/dev/null | grep -q 'libicuuc\.so'; then
+		local icu_package
+		icu_package=$(apt-cache pkgnames libicu 2>/dev/null | grep -E '^libicu[0-9]+(t64)?$' | sort -V | tail -n 1)
+		[[ -z "$icu_package" ]] || install_packages "$icu_package" || die "could not install $icu_package"
+	fi
+	local install_script
+	install_script=$(mktemp "${TMPDIR:-/tmp}/dotnet-install.XXXXXX") || return $?
+	if ! curl -fsSL https://builds.dotnet.microsoft.com/dotnet/scripts/v1/dotnet-install.sh -o "$install_script"; then
+		rm -f "$install_script"
+		die "could not download dotnet-install.sh"
+	fi
+	as_root bash "$install_script" --runtime dotnet --channel 8.0 --install-dir /usr/local/share/dotnet || {
+		rm -f "$install_script"
+		die "could not install the .NET runtime"
+	}
+	rm -f "$install_script"
+	as_root ln -sf /usr/local/share/dotnet/dotnet /usr/local/bin/dotnet || die "could not link dotnet into /usr/local/bin"
+	dotnet_runtime_installed || die "no .NET 8 or newer runtime is available after installation"
 }
 
 phase_opensim() {
