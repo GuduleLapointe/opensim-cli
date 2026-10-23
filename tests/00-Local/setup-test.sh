@@ -18,6 +18,7 @@ DATABASE_FORM='{"data":{"attributes":{"action":"screen","kind":"form","title":"D
 function set_up() {
 	WORK="$(mktemp -d)"
 	export HOME="$WORK"
+	unset OPENSIM_RC OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
 	local fixtures
 	fixtures="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/fixtures"
 	mkdir -p "$WORK/engine/bin" "$WORK/engine/lib"
@@ -149,6 +150,15 @@ function test_saved_database_admin_credentials_are_sent_to_the_engine() {
 	assert_contains "Administrator password" "$out"
 	assert_contains "********" "$out"
 	assert_not_contains "saved-secret" "$out"
+}
+
+function test_database_admin_credentials_can_be_entered_without_opensimrc() {
+	local out
+	engine_says "$DATABASE_FORM" "$QUIT"
+	out=$(setup_with 5 opensim_admin 6 interactive-secret "")
+	assert_equals "opensim_admin" "$(request 2 '.answers.admin_user')"
+	assert_equals "interactive-secret" "$(request 2 '.answers.admin_password')"
+	assert_not_contains "interactive-secret" "$out"
 }
 
 function test_button_processing_is_left_to_the_engine_for_processing() {

@@ -321,6 +321,46 @@ deploy_run_step() {
 		if [[ "$actual" != $'installed\ninstalled\ninstalled\ninstalled\ninstalled' ]]; then status=1; fi
 		assert_equals 0 "$status" "$DEPLOY_PLATFORM packages installed"
 		;;
+	setup_credentials)
+		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+		deploy_command exec -i "$name" bash -s <<-'SETUP_CREDENTIALS_TEST' || status=$?
+			set -euo pipefail
+			work=$(mktemp -d)
+			trap 'rm -rf "$work"' EXIT
+			engine="$work/engine"
+			mkdir -p "$engine/bin" "$engine/lib"
+			cp /usr/share/opensim-cli/vendor/magicoli/opensim-engine/lib/rc-helpers "$engine/lib/rc-helpers"
+			cat <<'MOCK_API' >"$engine/bin/opensim-api"
+			#!/usr/bin/env bash
+			cat >>"$MOCK_REQUESTS"
+			if [[ $(wc -l <"$MOCK_REQUESTS") -eq 1 ]]; then
+				cat <<'DATABASE_FORM'
+			{"data":{"attributes":{"action":"screen","kind":"form","title":"Database","text":"","notice":"","fields":[{"name":"admin_user","label":"Administrator","value":"","secret":false},{"name":"admin_password","label":"Administrator password","value":"","secret":true}],"buttons":{"next":"OK","back":"Back"},"state":"database-state"}}}
+			DATABASE_FORM
+			else
+				cat <<'DONE'
+			{"data":{"attributes":{"action":"quit","message":"Done."}}}
+			DONE
+			fi
+			MOCK_API
+			chmod +x "$engine/bin/opensim-api"
+			printf '\n' >"$work/answers"
+			(
+				exec 3<"$work/answers"
+				export OPENSIM_API="$engine/bin/opensim-api"
+				export MOCK_REQUESTS="$work/requests" OPENSIM_SETUP_UI=plain FE_INPUT_FD=3 FE_TTY=/dev/null
+				/usr/share/opensim-cli/libexec/setup
+			) >"$work/output" 2>&1
+			[[ -r /root/.opensimrc ]]
+			expected_user=$(bash -c 'source /root/.opensimrc; printf "%s" "$OPENSIM_DB_ADMIN_USER"')
+			expected_pass=$(bash -c 'source /root/.opensimrc; printf "%s" "$OPENSIM_DB_ADMIN_PASS"')
+			request=$(tail -n 1 "$work/requests")
+			jq -e --arg user "$expected_user" --arg pass "$expected_pass" \
+				'.data.attributes.answers.admin_user == $user and .data.attributes.answers.admin_password == $pass' <<<"$request" >/dev/null
+			! grep -Fq "$expected_pass" "$work/output"
+		SETUP_CREDENTIALS_TEST
+		assert_equals 0 "$status" "$DEPLOY_PLATFORM setup reads installer-saved SQL credentials"
+		;;
 	esac
 	if ((status != 0)); then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
 }

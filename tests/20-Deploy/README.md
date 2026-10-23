@@ -55,10 +55,12 @@ container, checks readiness and OS identity, verifies the shared package set,
 then runs `quick-install.sh` phases separately: dependencies, MariaDB and SQL
 account setup, .NET, and OpenSim packages. The five `.deb` files are
 staged by the local build after verifying the current source hashes for
-`bash-tools`, `opensim-engine`, `opensim-rest-php`, and `opensim-helpers`. The
-suite stops after verifying installation; it does not run `opensim setup` or
-exercise service commands. `BASHUNIT_PROFILE=true` reports slowest tests at the
-end, including duration for a failed long-running step.
+`bash-tools`, `opensim-engine`, `opensim-rest-php`, and `opensim-helpers`. A
+setup smoke test then runs the installed `opensim setup` interface with the
+installer's `/root/.opensimrc` and a stubbed engine response, checking that the
+saved SQL credentials reach the engine without creating a grid or simulator.
+It does not exercise service commands. `BASHUNIT_PROFILE=true` reports slowest
+tests at the end, including duration for a failed long-running step.
 
 Platform containers stay running after the matrix by default. The package builder and its named volume stay
 running and persist across test runs so subsequent runs avoid re-indexing and
