@@ -56,9 +56,10 @@ then runs `quick-install.sh` phases separately: dependencies, MariaDB and SQL
 account setup, .NET, and OpenSim packages. The five `.deb` files are
 staged by the local build after verifying the current source hashes for
 `bash-tools`, `opensim-engine`, `opensim-rest-php`, and `opensim-helpers`. A
-setup smoke test then runs the installed `opensim setup` interface with the
-installer's `/root/.opensimrc` and a stubbed engine response, checking that the
-saved SQL credentials reach the engine without creating a grid or simulator.
+setup smoke test then runs the installed `opensim setup` interface with a
+stubbed engine response, checking both that installer-saved SQL credentials in
+`/root/.opensimrc` reach the engine and that credentials can be entered
+interactively when the file is absent. It does not create a grid or simulator.
 It does not exercise service commands. `BASHUNIT_PROFILE=true` reports slowest
 tests at the end, including duration for a failed long-running step.
 

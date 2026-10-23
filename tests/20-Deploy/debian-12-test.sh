@@ -18,5 +18,5 @@ if deploy_load_platform debian-12; then
 	function test_12_dotnet_runtime() { deploy_run_step dotnet; }
 	function test_13_opensim_packages() { deploy_run_step opensim; }
 	function test_14_packages_installed() { deploy_run_step packages; }
-	function test_15_setup_reuses_installer_saved_sql_credentials() { deploy_run_step setup_credentials; }
+	function test_15_setup_works_with_or_without_opensimrc() { deploy_run_step setup_credentials; }
 fi

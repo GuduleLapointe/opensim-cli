@@ -344,22 +344,33 @@ deploy_run_step() {
 			fi
 			MOCK_API
 			chmod +x "$engine/bin/opensim-api"
-			printf '\n' >"$work/answers"
-			(
-				exec 3<"$work/answers"
-				export OPENSIM_API="$engine/bin/opensim-api"
-				export MOCK_REQUESTS="$work/requests" OPENSIM_SETUP_UI=plain FE_INPUT_FD=3 FE_TTY=/dev/null
-				/usr/share/opensim-cli/libexec/setup
-			) >"$work/output" 2>&1
+			run_setup() {
+				local home=$1 answers=$2
+				: >"$work/requests"
+				printf '%s\n' "$answers" >"$work/answers"
+				(
+					exec 3<"$work/answers"
+					unset OPENSIM_RC OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
+					export HOME="$home" OPENSIM_API="$engine/bin/opensim-api"
+					export MOCK_REQUESTS="$work/requests" OPENSIM_SETUP_UI=plain FE_INPUT_FD=3 FE_TTY=/dev/null
+					/usr/share/opensim-cli/libexec/setup
+				)
+			}
+			run_setup /root '' >"$work/saved-output" 2>&1
 			[[ -r /root/.opensimrc ]]
 			expected_user=$(bash -c 'source /root/.opensimrc; printf "%s" "$OPENSIM_DB_ADMIN_USER"')
 			expected_pass=$(bash -c 'source /root/.opensimrc; printf "%s" "$OPENSIM_DB_ADMIN_PASS"')
 			request=$(tail -n 1 "$work/requests")
 			jq -e --arg user "$expected_user" --arg pass "$expected_pass" \
 				'.data.attributes.answers.admin_user == $user and .data.attributes.answers.admin_password == $pass' <<<"$request" >/dev/null
-			! grep -Fq "$expected_pass" "$work/output"
+			! grep -Fq "$expected_pass" "$work/saved-output"
+			mkdir -p "$work/empty-home"
+			run_setup "$work/empty-home" $'1\nmanual-admin\n2\ninteractive-secret\n' >"$work/manual-output" 2>&1
+			request=$(tail -n 1 "$work/requests")
+			jq -e '.data.attributes.answers.admin_user == "manual-admin" and .data.attributes.answers.admin_password == "interactive-secret"' <<<"$request" >/dev/null
+			! grep -Fq 'interactive-secret' "$work/manual-output"
 		SETUP_CREDENTIALS_TEST
-		assert_equals 0 "$status" "$DEPLOY_PLATFORM setup reads installer-saved SQL credentials"
+		assert_equals 0 "$status" "$DEPLOY_PLATFORM setup reads saved or interactive SQL credentials"
 		;;
 	esac
 	if ((status != 0)); then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
