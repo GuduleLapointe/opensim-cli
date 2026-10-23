@@ -43,7 +43,10 @@
         "bin/opensim"
     ],
     "scripts": {
-        "test": "./lib/bashunit/bashunit"
+        "test": [
+            "Composer\\Config::disableProcessTimeout",
+            "./lib/bashunit/bashunit"
+        ]
     },
     "require-dev": {
         "magicoli/build-tools": "^0.1.6"
