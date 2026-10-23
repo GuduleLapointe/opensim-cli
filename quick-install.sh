@@ -93,14 +93,9 @@ start_setup() { # the library of the questions, then the command to run, which g
 
 install_packages() {
 	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu (see INSTALLATION.md for the others)"
-	local apt_options=()
-	if [[ "${1:-}" == --no-install-recommends ]]; then
-		apt_options+=(--no-install-recommends)
-		shift
-	fi
 	export DEBIAN_FRONTEND=noninteractive
 	as_root apt-get update -qq
-	as_root apt-get install -y -qq "${apt_options[@]}" "$@"
+	as_root apt-get install -y -qq "$@"
 }
 
 # The .NET runtime OpenSimulator needs, and libgdiplus, by the command of the tools (it knows what each system has)
@@ -254,8 +249,8 @@ else
 	fi
 
 	say "Install apt packages"
-	# Pick MariaDB explicitly; the CLI package's default-mysql-server recommendation resolves to MySQL on Ubuntu.
-	install_packages --no-install-recommends "${OPENSIM_PACKAGES[@]}" mariadb-server || die error $?
+	# Ask APT for MariaDB in the same transaction; the CLI package also recommends a default MySQL server.
+	install_packages "${OPENSIM_PACKAGES[@]}" mariadb-server || die error $?
 
 	if ! command -v dotnet | grep -q .; then
 		say "Install dotnet"
