@@ -19,13 +19,6 @@ function set_up() {
 	WORK=$(mktemp -d)
 	MAGIIIC_SOURCE_FILE=$WORK/magiiic.list
 	TMP=$WORK/quick-install
-	mkdir -p "$WORK/bin"
-	cat <<'APT_CACHE' >"$WORK/bin/apt-cache"
-#!/usr/bin/env bash
-printf 'libgdiplus:\n  Installed: (none)\n  Candidate: 6.1+dfsg-1\n'
-APT_CACHE
-	chmod +x "$WORK/bin/apt-cache"
-	PATH="$WORK/bin:$PATH"
 }
 
 function tear_down() {
@@ -72,18 +65,12 @@ SOURCES
 	assert_equals 1 "$(grep -Fc 'https://apt.magiiic.com charm stable unstable' "$MAGIIIC_SOURCE_FILE")"
 }
 
-function test_apt_candidate_detection_uses_localized_candidate_field() {
-	quick_install_load_library || return
-	assert_exec 'apt_has_candidate libgdiplus'
-}
-
-function test_dotnet_phase_installs_libgdiplus_without_a_separate_candidate_probe() {
+function test_dotnet_phase_requests_libgdiplus_directly_from_apt_when_missing() {
 	quick_install_load_library || return
 	recover_dpkg_configuration() { return 0; }
 	apt_update() { return 0; }
 	uname() { printf 'Linux\n'; }
 	ldconfig() { return 1; }
-	apt_has_candidate() { return 1; }
 	dotnet_runtime_package() { printf 'dotnet-runtime-10.0\n'; }
 	local runtime_checks=0 installed_packages
 	dotnet_runtime_installed() {

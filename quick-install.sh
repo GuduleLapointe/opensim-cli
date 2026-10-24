@@ -176,10 +176,6 @@ dotnet_runtime_installed() {
 		dotnet --list-runtimes 2>/dev/null | grep -Eq 'Microsoft\.NETCore\.App (8|9|[1-9][0-9]+)\.'
 }
 
-apt_has_candidate() {
-	LC_ALL=C apt-cache policy "$1" 2>/dev/null | grep -Eq 'Candidate: [^()]'
-}
-
 install_packages() {
 	local started
 	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu (see INSTALLATION.md for the others)"
