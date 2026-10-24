@@ -1,5 +1,6 @@
 # The projects of the family the Debian package gets from their own packages, not from its vendor folder:
 # composer name, Debian package
 magicoli/bash-tools bash-tools
+magicoli/build-tools build-tools
 magicoli/opensim-engine opensim-engine
-magicoli/opensim-rest-php opensim-rest-php
+#magicoli/opensim-rest-php opensim-rest-php
