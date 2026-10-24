@@ -194,7 +194,7 @@
             "dist": {
                 "type": "path",
                 "url": "../opensim-engine",
-                "reference": "e6b3e0c6b968bf78471249c3418d60f2ede4d1a2"
+                "reference": "98736172bcaecc4102da014e4454663e1288bfa7"
             },
             "require": {
                 "ext-curl": "*",
@@ -831,16 +831,16 @@
     "packages-dev": [
         {
             "name": "magicoli/build-tools",
-            "version": "0.1.7",
+            "version": "0.1.9",
             "source": {
                 "type": "git",
                 "url": "https://github.com/magicoli/build-tools.git",
-                "reference": "800c819003aff62de4f1e38b797d06d1e5b8d3e4"
+                "reference": "0296f73c8647e7363cd018511675636f2eda16ad"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/magicoli/build-tools/zipball/800c819003aff62de4f1e38b797d06d1e5b8d3e4",
-                "reference": "800c819003aff62de4f1e38b797d06d1e5b8d3e4",
+                "url": "https://api.github.com/repos/magicoli/build-tools/zipball/0296f73c8647e7363cd018511675636f2eda16ad",
+                "reference": "0296f73c8647e7363cd018511675636f2eda16ad",
                 "shasum": ""
             },
             "require": {
@@ -865,9 +865,9 @@
             "description": "Build, release and publish a project: Debian packages, zip, GitHub release, apt repository.",
             "support": {
                 "issues": "https://github.com/magicoli/build-tools/issues",
-                "source": "https://github.com/magicoli/build-tools/tree/0.1.7"
+                "source": "https://github.com/magicoli/build-tools/tree/0.1.9"
             },
-            "time": "2026-10-24T00:02:14+00:00"
+            "time": "2026-10-24T04:02:05+00:00"
         }
     ],
     "aliases": [],
