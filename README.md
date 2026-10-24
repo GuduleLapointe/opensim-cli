@@ -30,7 +30,9 @@ Installation
     - [ ] Homebrew (macos)
     - [x] from local git clone
     - [x] from local deb packages
-    - [ ] to docker/podman container
+    - [x] multi-platform testing on podman containers
+    - [ ] install as podman container
+    - [ ] install as docker container
     - [ ] advanced/expert install
 - [ ] Build
     - [x] apt .deb package (tested on debian 12 and 13, ubuntu 24.04 and 26.04, should work on other debian variants)
