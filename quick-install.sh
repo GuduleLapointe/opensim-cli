@@ -51,6 +51,7 @@ unset OPENSIM_KIT_APT_DIST_WAS_SET OPENSIM_KIT_APT_DIST_FROM_ENV
 unset OPENSIM_KIT_APT_COMPONENT_WAS_SET OPENSIM_KIT_APT_COMPONENT_FROM_ENV
 
 MAGIIIC_KEY=https://apt.magiiic.com/magiiic-packaging.asc
+MAGIIIC_SOURCE_FILE=${MAGIIIC_SOURCE_FILE:-/etc/apt/sources.list.d/magiiic.list}
 OPENSIM_KIT_APT_DIST=${OPENSIM_KIT_APT_DIST:-charm}
 if [[ -z "${OPENSIM_KIT_APT_COMPONENT:-}" ]]; then
 	if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
@@ -227,7 +228,7 @@ apt_accessible_local_repository() {
 }
 
 merge_magiiic_repository_components() {
-	local repository=$1 source_file=/etc/apt/sources.list.d/magiiic.list
+	local repository=$1 source_file=$MAGIIIC_SOURCE_FILE
 	local -a fields components
 	local component existing_components
 	local -A seen_components=()
@@ -245,7 +246,7 @@ merge_magiiic_repository_components() {
 			uri_index = 2
 			if ($2 ~ /^\[/) uri_index++
 			if ($(uri_index) == "https://apt.magiiic.com" && $(uri_index + 1) == distribution) {
-				for (index = uri_index + 2; index <= NF; index++) print $index
+				for (field = uri_index + 2; field <= NF; field++) print $field
 			}
 		}
 	' "$source_file" 2>/dev/null || true)
@@ -310,7 +311,7 @@ configure_package_sources() {
 	[[ "$PACKAGE_SOURCES_READY" == yes ]] && return 0
 	[[ $(uname -s) == Linux ]] || die "packages are for Debian and Ubuntu"
 	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu"
-	local source_file=/etc/apt/sources.list.d/magiiic.list
+	local source_file=$MAGIIIC_SOURCE_FILE
 	local -a bootstrap_packages=(ca-certificates curl gpg openssl)
 	local package local_debs= refresh_local_index=no
 	if [[ -n "$OPENSIM_KIT_DEBS" ]]; then
@@ -604,6 +605,12 @@ phase_opensim() {
 }
 
 # === Actual business logic starts here ===
+
+# Tests source this file to exercise the pure APT helpers without installing
+# packages or changing the host.
+if [[ "${QUICK_INSTALL_LIBRARY_ONLY:-}" == yes ]]; then
+	return 0 2>/dev/null || exit 0
+fi
 
 PGM=$(basename "$0")
 TMP=/tmp/$PGM.$$

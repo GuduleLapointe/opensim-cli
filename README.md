@@ -23,6 +23,20 @@ See `./quick-install.sh --help` for other options.
 
 ## Features
 
+Installation
+
+- [x] `quick-install.sh`: automated installation script
+    - [x] apt official repo (linux, stable by default)
+    - [ ] Homebrew (macos)
+    - [x] from local git clone
+    - [x] from local deb packages
+    - [ ] to docker/podman container
+    - [ ] advanced/expert install
+- [ ] Build
+    - [x] apt .deb package (tested on debian 12 and 13, ubuntu 24.04 and 26.04, should work on other debian variants)
+    - [x] zip (universal)
+    - [ ] homebrew
+
 Commands:
 
 - [x] status
@@ -60,12 +74,6 @@ This machine
 - [ ] oar pack|info|check|unpack
 - [ ] rest --url http://HOST:PORT --user USER (-- <command> | - | --repl)
 - [x] install-dotnet install the .NET runtime OpenSim needs (as root)
-
-Builds
-
-- [x] apt (tested on debian 12 and 13, ubuntu 24.04 and 26.04, should work on other debian variants)
-- [x] zip (universal)
-- [ ] homebrew
 
 ## Usage
 

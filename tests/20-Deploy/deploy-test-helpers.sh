@@ -2,6 +2,7 @@
 
 DEPLOY_PLATFORMS_FILE=${DEPLOY_PLATFORMS_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/platforms.tsv}
 DEPLOY_PROJECT_ROOT=${DEPLOY_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
+DEPLOY_CONTAINER_CLI=${DEPLOY_CONTAINER_CLI:-$DEPLOY_PROJECT_ROOT/vendor/magicoli/opensim-engine/bin/opensim-container.php}
 DEPLOY_RUN_DIR=${_BASHUNIT_RUN_OUTPUT_DIR:-${TMPDIR:-/tmp}/bashunit/deploy-$$}
 DEPLOY_RUN_ID=${DEPLOY_RUN_ID:-${DEPLOY_RUN_DIR##*/}}
 DEPLOY_HOST_SLUG=${DEPLOY_HOST_SLUG:-$(hostname -s 2>/dev/null || hostname)}
@@ -20,23 +21,18 @@ DEPLOY_EXPECTED_ID=
 DEPLOY_EXPECTED_VERSION=
 
 deploy_select_engine() {
-	case "${DEPLOY_ENGINE:-auto}" in
-	auto) if command -v podman >/dev/null 2>&1; then DEPLOY_ENGINE_SELECTED=podman; elif command -v docker >/dev/null 2>&1; then DEPLOY_ENGINE_SELECTED=docker; else return 1; fi ;;
-	podman | docker)
-		command -v "$DEPLOY_ENGINE" >/dev/null 2>&1 || return 1
-		DEPLOY_ENGINE_SELECTED=$DEPLOY_ENGINE
-		;;
-	*) return 1 ;;
-	esac
+	[[ "${DEPLOY_ENGINE:-podman}" == podman || "${DEPLOY_ENGINE:-podman}" == auto ]] || return 1
+	command -v podman >/dev/null 2>&1 || return 1
+	command -v php >/dev/null 2>&1 || return 1
+	[[ -x "$DEPLOY_CONTAINER_CLI" ]] || return 1
+	DEPLOY_ENGINE_SELECTED=podman
 }
 
 deploy_command() {
-	if [[ -z "$DEPLOY_ENGINE_SELECTED" ]]; then deploy_select_engine || return 127; fi
-	if [[ "$DEPLOY_ENGINE_SELECTED" == podman && -n "${CONTAINER_CONNECTION:-}" ]]; then
-		podman --connection "$CONTAINER_CONNECTION" "$@"
-	else
-		"$DEPLOY_ENGINE_SELECTED" "$@"
-	fi
+	deploy_select_engine || return 127
+	local connection_args=()
+	[[ -n "${CONTAINER_CONNECTION:-}" ]] && connection_args=(--connection "$CONTAINER_CONNECTION")
+	php "$DEPLOY_CONTAINER_CLI" "${connection_args[@]}" "$@"
 }
 
 deploy_name() {
@@ -55,11 +51,10 @@ deploy_log_dir() {
 }
 
 deploy_execution_location() {
-	deploy_select_engine >/dev/null 2>&1 || true
-	if [[ "$DEPLOY_ENGINE_SELECTED" == podman && -n "${CONTAINER_CONNECTION:-}" ]]; then
+	if [[ -n "${CONTAINER_CONNECTION:-}" ]]; then
 		printf '%s' "$CONTAINER_CONNECTION"
 	else
-		printf 'local %s' "${DEPLOY_ENGINE_SELECTED:-container engine}"
+		printf 'local Podman'
 	fi
 }
 
@@ -97,7 +92,7 @@ deploy_skip_unless_running() {
 		bashunit::skip "$platform not created"
 		return 0
 	fi
-	state=$(deploy_command inspect --format '{{.State.Running}}' "$name" 2>/dev/null) || state=false
+	state=$(deploy_command running "$name" 2>/dev/null) || state=false
 	if [[ "$state" != true ]]; then
 		bashunit::skip "$platform not running"
 		return 0
@@ -107,7 +102,7 @@ deploy_skip_unless_running() {
 
 deploy_installation_is_current() {
 	local name=$1
-	deploy_command exec "$name" sh -c '
+	deploy_command exec "$name" -- sh -c '
 		command -v opensim >/dev/null &&
 		dpkg-query -W -f="\${db:Status-Status}" opensim 2>/dev/null | grep -qx installed &&
 		dpkg-query -W -f="\${db:Status-Status}" opensim-cli 2>/dev/null | grep -qx installed &&
@@ -120,11 +115,7 @@ deploy_ensure_image() {
 	local image=$1 log_file=$2 status=0
 	if ! deploy_select_engine; then return 127; fi
 	mkdir -p "$(dirname "$log_file")" || return $?
-	if ! deploy_command image inspect "$image" >/dev/null 2>&1; then
-		deploy_command pull "$image" >"$log_file" 2>&1 || status=$?
-	else
-		printf 'Image already present: %s\n' "$image" >"$log_file"
-	fi
+	deploy_command image-pull "$image" >"$log_file" 2>&1 || status=$?
 	if ((status != 0)); then
 		printf 'Could not prepare container image %s (log: %s)\n' "$image" "$log_file" >&2
 		tail -n 40 "$log_file" >&2 || true
@@ -140,6 +131,7 @@ deploy_test_gate() {
 		assert_equals 'separate or single' "$DEPLOY_INSTALL_MODE" 'DEPLOY_INSTALL_MODE'
 		return
 	fi
+	assert_matches '^(separate|single)$' "$DEPLOY_INSTALL_MODE"
 	if [[ -e "$DEPLOY_INFRA_BLOCK_FILE" ]]; then
 		bashunit::skip 'deployment setup failed'
 	fi
@@ -193,14 +185,14 @@ deploy_run_step() {
 		apt_source_family) expected='deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable' ;;
 		apt_source_tests) expected='deb [trusted=yes] https://apt.magiiic.com charm-tests dev' ;;
 		apt_source_no_main)
-			printf -v command 'deploy_command exec %q sh -c %q' "$name" '! grep -Eq "^[[:space:]]*deb .*apt\\.magiiic\\.com main " /etc/apt/sources.list.d/magiiic.list'
+		printf -v command 'deploy_command exec %q -- sh -c %q' "$name" '! grep -Eq "^[[:space:]]*deb .*apt\\.magiiic\\.com main " /etc/apt/sources.list.d/magiiic.list'
 			assert_exec "$command"
 			failures_after=$(bashunit::state::get_assertions_failed)
 			if ((failures_after > failures_before)); then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
 			return
 			;;
 		esac
-		printf -v command 'deploy_command exec %q grep -Fx %q /etc/apt/sources.list.d/magiiic.list' "$name" "$expected"
+		printf -v command 'deploy_command exec %q -- grep -Fx %q /etc/apt/sources.list.d/magiiic.list' "$name" "$expected"
 		assert_exec "$command"
 		failures_after=$(bashunit::state::get_assertions_failed)
 		if ((failures_after > failures_before)); then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
@@ -215,21 +207,16 @@ deploy_run_step() {
 		;;
 	created)
 		if ! deploy_select_engine; then status=127; else
-			local memory_args=()
-			[[ -n "${MEMORY:-}" ]] && memory_args=(--memory "$MEMORY")
-			if deploy_command inspect "$name" >/dev/null 2>&1; then
-				printf -v command 'deploy_command inspect %q' "$name"
-			else
-				local create_args=(deploy_command create --name "$name"
-					--label org.opensim-cli.deploy=1
-					--label "org.opensim-cli.deploy.platform=$DEPLOY_PLATFORM"
-					--label "org.opensim-cli.deploy.host=$DEPLOY_HOST_SLUG"
-					--label "org.opensim-cli.deploy.user=$DEPLOY_USER_SLUG"
+			local create_args=(deploy_command create --name "$name" --image "$DEPLOY_IMAGE"
+				--label org.opensim-cli.deploy=1
+				--label "org.opensim-cli.deploy.platform=$DEPLOY_PLATFORM"
+				--label "org.opensim-cli.deploy.host=$DEPLOY_HOST_SLUG"
+				--label "org.opensim-cli.deploy.user=$DEPLOY_USER_SLUG"
 				--label "org.opensim-cli.deploy.ephemeral=$DEPLOY_EPHEMERAL"
 				--label "org.opensim-cli.deploy.run=$DEPLOY_RUN_ID")
-				create_args+=("${memory_args[@]}" "$DEPLOY_IMAGE" sh -c 'while :; do sleep 3600; done')
-				printf -v command '%q ' "${create_args[@]}"
-			fi
+			[[ -n "${MEMORY:-}" ]] && create_args+=(--memory "$MEMORY")
+			create_args+=(-- sh -c 'while :; do sleep 3600; done')
+			printf -v command '%q ' "${create_args[@]}"
 			assert_exec "$command"
 			return
 		fi
@@ -241,42 +228,47 @@ deploy_run_step() {
 			return
 		fi
 		local start_command
-		printf -v start_command 'if [[ $(deploy_command inspect --format %q %q) != true ]]; then deploy_command start %q; fi' \
-			'{{.State.Running}}' "$name" "$name"
+		printf -v start_command 'deploy_command start %q' "$name"
 		assert_exec "$start_command"
 		return
 		;;
 	running)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
 		local running_command
-		printf -v running_command 'deploy_command inspect --format %q %q' '{{.State.Running}}' "$name"
+		printf -v running_command 'deploy_command running %q' "$name"
 		assert_exec "$running_command" --stdout true
 		return
 		;;
 	ready)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		local ready_command
-		printf -v ready_command 'deploy_command exec %q sh -c %q' "$name" 'test -r /etc/os-release && test -x /bin/sh && command -v tar >/dev/null'
+		local ready_command failures_before failures_after
+		failures_before=$(bashunit::state::get_assertions_failed)
+		printf -v ready_command 'deploy_command exec %q -- sh -c %q' "$name" 'test -r /etc/os-release && test -x /bin/sh && command -v tar >/dev/null'
 		assert_exec "$ready_command"
-		if ! deploy_command exec "$name" sh -c 'test -r /etc/os-release && test -x /bin/sh && command -v tar >/dev/null'; then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
+		failures_after=$(bashunit::state::get_assertions_failed)
+		if ((failures_after > failures_before)); then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
 		return
 		;;
 	id)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		local id_command id_check
+		local id_command id_check failures_before failures_after
+		failures_before=$(bashunit::state::get_assertions_failed)
 		id_check=' . /etc/os-release; if [ "${ID:-}" != "$1" ]; then printf "OS_RELEASE_MISMATCH expected ID=%s, got ID=%s\n" "$1" "${ID:-missing}" >&2; exit 1; fi'
-		printf -v id_command 'deploy_command exec %q sh -c %q sh %q 2>&1' "$name" "$id_check" "$DEPLOY_EXPECTED_ID"
-		assert_exec "$id_command" --stdout-not-contains OS_RELEASE_MISMATCH
-		if ! deploy_command exec "$name" sh -c "$id_check" sh "$DEPLOY_EXPECTED_ID" >/dev/null 2>&1; then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
+		printf -v id_command 'deploy_command exec %q -- sh -c %q sh %q 2>&1' "$name" "$id_check" "$DEPLOY_EXPECTED_ID"
+		assert_exec "$id_command"
+		failures_after=$(bashunit::state::get_assertions_failed)
+		if ((failures_after > failures_before)); then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
 		return
 		;;
 	version)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		local version_command version_check
+		local version_command version_check failures_before failures_after
+		failures_before=$(bashunit::state::get_assertions_failed)
 		version_check=' . /etc/os-release; if [ "${ID:-}" != "$1" ] || [ "${VERSION_ID:-}" != "$2" ]; then printf "OS_RELEASE_MISMATCH expected ID=%s VERSION_ID=%s, got ID=%s VERSION_ID=%s\n" "$1" "$2" "${ID:-missing}" "${VERSION_ID:-missing}" >&2; exit 1; fi'
-		printf -v version_command 'deploy_command exec %q sh -c %q sh %q %q 2>&1' "$name" "$version_check" "$DEPLOY_EXPECTED_ID" "$DEPLOY_EXPECTED_VERSION"
-		assert_exec "$version_command" --stdout-not-contains OS_RELEASE_MISMATCH
-		if ! deploy_command exec "$name" sh -c "$version_check" sh "$DEPLOY_EXPECTED_ID" "$DEPLOY_EXPECTED_VERSION" >/dev/null 2>&1; then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
+		printf -v version_command 'deploy_command exec %q -- sh -c %q sh %q %q 2>&1' "$name" "$version_check" "$DEPLOY_EXPECTED_ID" "$DEPLOY_EXPECTED_VERSION"
+		assert_exec "$version_command"
+		failures_after=$(bashunit::state::get_assertions_failed)
+		if ((failures_after > failures_before)); then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
 		return
 		;;
 	dependencies | mariadb | dotnet | opensim)
@@ -307,7 +299,7 @@ deploy_run_step() {
 			install_stamp="$DEPLOY_APT_DIST/$DEPLOY_APT_COMPONENT:$(shasum -a 256 "$DEPLOY_PROJECT_ROOT/quick-install.sh" | awk '{print $1}')"
 			if [[ "$step" == opensim ]]; then
 				local apt_candidates
-				apt_candidates=$(deploy_command exec "$name" sh -c '
+				apt_candidates=$(deploy_command exec "$name" -- sh -c '
 					for package in bash-tools opensim opensim-cli opensim-engine opensim-helpers opensim-rest-php; do
 						candidate=$(apt-cache policy "$package" 2>/dev/null | awk '/Candidate:/ { print $2 }')
 						printf "%s=%s\n" "$package" "${candidate:-missing}"
@@ -319,7 +311,7 @@ deploy_run_step() {
 					install_stamp=
 				fi
 			fi
-			installed_stamp=$(deploy_command exec "$name" sh -c 'cat /var/tmp/opensim-deploy-install-stamp 2>/dev/null' 2>/dev/null) || installed_stamp=
+			installed_stamp=$(deploy_command exec "$name" -- sh -c 'cat /var/tmp/opensim-deploy-install-stamp 2>/dev/null' 2>/dev/null) || installed_stamp=
 		fi
 		if [[ "$step" == opensim && "$execute_install" == 1 && "$DEPLOY_EPHEMERAL" != 1 && -n "$install_stamp" && "$installed_stamp" == "$install_stamp" ]] && deploy_installation_is_current "$name"; then
 			bashunit::skip "$DEPLOY_PLATFORM package set already installed"
@@ -328,9 +320,9 @@ deploy_run_step() {
 		mkdir -p "$log_dir" || status=$?
 		if [[ "$execute_install" == 1 ]] && ((status == 0)); then
 			container_log="/tmp/$name/$install_step.log"
-			deploy_command exec -i "$name" sh -c 'cat > /tmp/quick-install.sh && chmod +x /tmp/quick-install.sh' <"$DEPLOY_PROJECT_ROOT/quick-install.sh" || status=$?
+			deploy_command exec "$name" --input -- sh -c 'cat > /tmp/quick-install.sh && chmod +x /tmp/quick-install.sh' <"$DEPLOY_PROJECT_ROOT/quick-install.sh" || status=$?
 			if ((status == 0)); then
-				deploy_command exec "$name" bash -c '
+				deploy_command exec "$name" -- bash -c '
 					set -o pipefail
 					log_file=$1
 					mkdir -p "$(dirname "$log_file")"
@@ -345,13 +337,13 @@ deploy_run_step() {
 		if [[ "$execute_install" == 0 && "$status" == 0 ]]; then
 			case "$step" in
 			mariadb)
-				deploy_command exec "$name" sh -c 'mysqladmin ping --silent' >"$log_file" 2>&1 || status=$?
+				deploy_command exec "$name" -- sh -c 'mysqladmin ping --silent' >"$log_file" 2>&1 || status=$?
 				;;
 			dotnet)
-				deploy_command exec "$name" sh -c 'dotnet --list-runtimes 2>/dev/null | grep -Eq "Microsoft\\.NETCore\\.App [8-9][.]|Microsoft\\.NETCore\\.App [1-9][0-9]+[.]"' >"$log_file" 2>&1 || status=$?
+				deploy_command exec "$name" -- sh -c 'dotnet --list-runtimes 2>/dev/null | grep -Eq "Microsoft\\.NETCore\\.App [8-9][.]|Microsoft\\.NETCore\\.App [1-9][0-9]+[.]"' >"$log_file" 2>&1 || status=$?
 				;;
 			opensim)
-				deploy_command exec "$name" sh -c 'command -v opensim >/dev/null && test "$(dpkg-query -W -f="\${db:Status-Status}\n" opensim opensim-cli 2>/dev/null | grep -c "^installed$")" -eq 2' >"$log_file" 2>&1 || status=$?
+				deploy_command exec "$name" -- sh -c 'command -v opensim >/dev/null && test "$(dpkg-query -W -f="\${db:Status-Status}\n" opensim opensim-cli 2>/dev/null | grep -c "^installed$")" -eq 2' >"$log_file" 2>&1 || status=$?
 				;;
 			esac
 		fi
@@ -360,7 +352,7 @@ deploy_run_step() {
 			printf 'Full quick-install log: %s\n' "$log_file" >&2
 			tail -n 40 "$log_file" >&2 || true
 		elif [[ "$step" == opensim || ( "$DEPLOY_INSTALL_MODE" == single && "$step" == dependencies ) ]]; then
-			deploy_command exec "$name" sh -c 'printf "%s\n" "$1" > /var/tmp/opensim-deploy-install-stamp' sh "$install_stamp" || status=$?
+			deploy_command exec "$name" -- sh -c 'printf "%s\n" "$1" > /var/tmp/opensim-deploy-install-stamp' sh "$install_stamp" || status=$?
 		fi
 		if [[ "$execute_install" == 1 ]]; then
 			assert_equals 0 "$status" "$DEPLOY_PLATFORM $install_step step"
@@ -370,22 +362,22 @@ deploy_run_step() {
 		;;
 	accounts)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		printf -v command 'deploy_command exec %q sh -c %q' "$name" 'mysql -Nse "SELECT COUNT(*) FROM mysql.user WHERE User IN (0x6f70656e73696d5f61646d696e,0x6f70656e73696d) AND Host=0x6c6f63616c686f7374"'
+		printf -v command 'deploy_command exec %q -- sh -c %q' "$name" 'mysql -Nse "SELECT COUNT(*) FROM mysql.user WHERE User IN (0x6f70656e73696d5f61646d696e,0x6f70656e73696d) AND Host=0x6c6f63616c686f7374"'
 		assert_exec "$command" --stdout 2
 		;;
 	credentials)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		printf -v command 'deploy_command exec %q sh -c %q' "$name" 'count=$(grep -Ec "^export OPENSIM_DB_(HOST|ADMIN_USER|ADMIN_PASS|USER|PASS)=" /root/.opensimrc); printf "saved database setting count: %s\n" "$count"; test "$count" -eq 5'
+		printf -v command 'deploy_command exec %q -- sh -c %q' "$name" 'count=$(grep -Ec "^export OPENSIM_DB_(HOST|ADMIN_USER|ADMIN_PASS|USER|PASS)=" /root/.opensimrc); printf "saved database setting count: %s\n" "$count"; test "$count" -eq 5'
 		assert_exec "$command" --stdout-contains 'saved database setting count: 5'
 		;;
 	packages)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		printf -v command 'deploy_command exec %q sh -c %q' "$name" 'dpkg-query -W -f="\${db:Status-Status}\n" bash-tools opensim opensim-cli opensim-engine opensim-helpers opensim-rest-php | grep -Ec "^installed$"'
+		printf -v command 'deploy_command exec %q -- sh -c %q' "$name" 'dpkg-query -W -f="\${db:Status-Status}\n" bash-tools opensim opensim-cli opensim-engine opensim-helpers opensim-rest-php | grep -Ec "^installed$"'
 		assert_exec "$command" --stdout 6
 		;;
 	setup_credentials)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		deploy_command exec -i "$name" bash -s <<-'SETUP_CREDENTIALS_TEST' || status=$?
+		deploy_command exec "$name" --input -- bash -s <<-'SETUP_CREDENTIALS_TEST' || status=$?
 			set -euo pipefail
 			work=$(mktemp -d)
 			trap 'rm -rf "$work"' EXIT
@@ -444,5 +436,5 @@ deploy_cleanup_platform() {
 	[[ "$DEPLOY_EPHEMERAL" == 1 ]] || return 0
 	deploy_select_engine || return 1
 	deploy_command inspect "$name" >/dev/null 2>&1 || return 0
-	deploy_command rm --force "$name" >/dev/null
+	deploy_command remove --force "$name" >/dev/null
 }
