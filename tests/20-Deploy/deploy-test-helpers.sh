@@ -160,10 +160,10 @@ deploy_test_gate() {
 		assert_exec "bash $(printf %q "$build_script") $(printf %q "$DEPLOY_PACKAGE_DIR") $(printf %q "$artifact_dir")" \
 			'local package build and staging should succeed'
 	fi
-	assert_exec "test -s $(printf %q "$DEPLOY_PACKAGE_DIR/MANIFEST") && test -s $(printf %q "$DEPLOY_PACKAGE_DIR/debs/SHA256SUMS") && test \$(find $(printf %q "$DEPLOY_PACKAGE_DIR/debs") -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ') -eq 5" \
-		'five locally built packages and their manifests should be available'
+	assert_exec "test -s $(printf %q "$DEPLOY_PACKAGE_DIR/MANIFEST") && test -s $(printf %q "$DEPLOY_PACKAGE_DIR/debs/SHA256SUMS") && test \$(find $(printf %q "$DEPLOY_PACKAGE_DIR/debs") -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ') -eq 1" \
+		'the locally built OpenSim CLI package and its manifests should be available'
 	if [[ ! -s "$DEPLOY_PACKAGE_DIR/MANIFEST" || ! -s "$DEPLOY_PACKAGE_DIR/debs/SHA256SUMS" || ! -s "$DEPLOY_PACKAGE_DIR/quick-install.sh" ]] ||
-		[[ $(find "$DEPLOY_PACKAGE_DIR/debs" -maxdepth 1 -type f -name '*.deb' 2>/dev/null | wc -l | tr -d ' ') != 5 ]]; then
+		[[ $(find "$DEPLOY_PACKAGE_DIR/debs" -maxdepth 1 -type f -name '*.deb' 2>/dev/null | wc -l | tr -d ' ') != 1 ]]; then
 		: >"$DEPLOY_GATE_BLOCK_FILE"
 		return
 	fi

@@ -107,8 +107,9 @@ platform row and matching test file to extend it. All tests use the shared
 `tests/bootstrap.sh` environment initialization.
 
 If the local build test was not selected, the first deployment prerequisite
-builds and stages the same five current packages locally before contacting the
-container engine. Compatibility containers install from the public APT
+builds and stages the current CLI package locally before contacting the
+container engine. Its path dependencies are prepared from Composer's installed
+`vendor/` sources. Compatibility containers install from the public APT
 repository: signed `charm stable unstable` and trusted unsigned
 `charm-tests dev`. Publish test packages with `./dev/release.sh --tests`
 before running compatibility tests; the test suite never publishes packages.

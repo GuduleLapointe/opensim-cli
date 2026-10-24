@@ -11,18 +11,51 @@ trap 'rm -rf "$WORK"' EXIT
 BUILD_PROJECT="$WORK/project"
 git clone --quiet --shared --no-checkout "$OPENSIM_ROOT" "$BUILD_PROJECT"
 git -C "$BUILD_PROJECT" checkout --quiet --detach HEAD
-git clone --quiet --shared --no-checkout "$OPENSIM_ROOT/../opensim-engine" "$WORK/opensim-engine"
-git -C "$WORK/opensim-engine" checkout --quiet --detach HEAD
-git clone --quiet --shared --no-checkout "$OPENSIM_ROOT/../opensim-rest-php" "$WORK/opensim-rest-php"
-git -C "$WORK/opensim-rest-php" checkout --quiet --detach HEAD
 ln -s "$OPENSIM_ROOT/vendor" "$BUILD_PROJECT/vendor"
+
+# Build-tools stages path dependencies from the relative paths in composer.lock.
+# Populate those paths from Composer's installed packages, regardless of whether
+# Composer installed each package from a local path or from a distribution archive.
+while IFS=$'\t' read -r composer_package repository_path; do
+	[[ -n "$composer_package" ]] || continue
+	case "$repository_path" in
+	../*) relative_path=${repository_path#../} ;;
+	*) printf 'unsupported Composer path repository for %s: %s\n' "$composer_package" "$repository_path" >&2; exit 1 ;;
+	esac
+	[[ -n "$relative_path" && "$relative_path" != *../* && "$relative_path" != /* ]] || {
+		printf 'Composer path repository escapes the build workspace: %s\n' "$repository_path" >&2
+		exit 1
+	}
+	package_source="$BUILD_PROJECT/vendor/$composer_package"
+	package_copy="$WORK/$relative_path"
+	[[ -d "$package_source" ]] || {
+		printf 'Composer package source is missing from vendor: %s\n' "$package_source" >&2
+		exit 1
+	}
+	mkdir -p "$(dirname "$package_copy")"
+	package_git_root=$(git -C "$package_source" rev-parse --show-toplevel 2>/dev/null || true)
+	if [[ -n "$package_git_root" && "$package_git_root" != "$OPENSIM_ROOT" ]]; then
+		git clone --quiet --shared --no-checkout "$package_source" "$package_copy"
+		git -C "$package_copy" checkout --quiet --detach HEAD
+	else
+		mkdir -p "$package_copy"
+		cp -R "$package_source/." "$package_copy/"
+	fi
+done < <(php -r '
+$lock = json_decode(file_get_contents($argv[1]), true, 512, JSON_THROW_ON_ERROR);
+foreach ($lock["packages"] ?? [] as $package) {
+    if (($package["dist"]["type"] ?? "") === "path") {
+        echo $package["name"], "\t", $package["dist"]["url"], "\n";
+    }
+}
+' "$BUILD_PROJECT/composer.lock")
 
 rm -rf "$DEPLOY_STAGE" "$ARTIFACT_STAGE"
 mkdir -p "$DEPLOY_STAGE/debs" "$ARTIFACT_STAGE"
 cd "$BUILD_PROJECT"
 mkdir -p dist
 find dist -mindepth 1 -maxdepth 1 -type f -delete
-if ! DIRTY=1 ./dev/build.sh >"$WORK/build.log" 2>&1; then
+if ! GIT_CEILING_DIRECTORIES="$WORK" DIRTY=1 ./dev/build.sh >"$WORK/build.log" 2>&1; then
 	cat "$WORK/build.log"
 	exit 1
 fi
@@ -38,23 +71,7 @@ cp "$cli_deb" "$DEPLOY_STAGE/debs/"
 cp "$cli_zip" "$ARTIFACT_STAGE/opensim-cli.zip"
 cp "$OPENSIM_ROOT/quick-install.sh" "$DEPLOY_STAGE/quick-install.sh"
 
-for repo_package in \
-	"$OPENSIM_ROOT/../bash-tools:bash-tools" \
-	"$OPENSIM_ROOT/vendor/magicoli/opensim-engine:opensim-engine" \
-	"$OPENSIM_ROOT/vendor/magicoli/opensim-rest-php:opensim-rest-php" \
-	"$OPENSIM_ROOT/../opensim-helpers:opensim-helpers"; do
-	repo=${repo_package%:*}
-	package=${repo_package##*:}
-	version=$(cd "$repo" && "$BUILD_TOOLS" version | sed -n 's/^DEB_VERSION=//p')
-	deb="$repo/dist/${package}_${version}_all.deb"
-	if [[ ! -s "$deb" ]]; then
-		printf '%s package is missing or does not match its current source hash: %s\n' "$package" "$deb" >&2
-		exit 1
-	fi
-	cp "$deb" "$DEPLOY_STAGE/debs/"
-done
-
-[[ $(find "$DEPLOY_STAGE/debs" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ') == 5 ]]
+[[ $(find "$DEPLOY_STAGE/debs" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ') == 1 ]]
 (cd "$DEPLOY_STAGE/debs" && shasum -a 256 ./*.deb >SHA256SUMS)
 (cd "$DEPLOY_STAGE" && shasum -a 256 quick-install.sh debs/*.deb >MANIFEST)
-printf 'Built OpenSim CLI .deb and .zip; staged five current .deb packages.\n'
+printf 'Built and staged the OpenSim CLI .deb and .zip from the Composer-installed sources.\n'
