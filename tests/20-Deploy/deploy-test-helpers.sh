@@ -7,10 +7,7 @@ DEPLOY_RUN_ID=${DEPLOY_RUN_ID:-${DEPLOY_RUN_DIR##*/}}
 DEPLOY_HOST_SLUG=${DEPLOY_HOST_SLUG:-$(hostname -s 2>/dev/null || hostname)}
 DEPLOY_USER_SLUG=${DEPLOY_USER_SLUG:-$(id -un 2>/dev/null || printf user)}
 DEPLOY_EPHEMERAL=${DEPLOY_EPHEMERAL:-0}
-DEPLOY_GATE_BLOCK_FILE=$DEPLOY_RUN_DIR/deployment-blocked
-DEPLOY_GATE_READY_FILE=$DEPLOY_RUN_DIR/deployment-ready
 DEPLOY_INFRA_BLOCK_FILE=$DEPLOY_RUN_DIR/deployment-infra-blocked
-DEPLOY_PACKAGE_DIR=${DEPLOY_PACKAGE_DIR:-${_BASHUNIT_RUN_OUTPUT_DIR:-}/deploy-packages}
 DEPLOY_APT_DIST=charm-tests
 DEPLOY_APT_COMPONENT=dev
 DEPLOY_QUICK_INSTALL_TIMEOUT=${DEPLOY_QUICK_INSTALL_TIMEOUT:-900}
@@ -136,42 +133,15 @@ deploy_ensure_image() {
 }
 
 deploy_test_gate() {
-	local failure_file=${FAILURES_OUTPUT_PATH:-$DEPLOY_RUN_DIR/failures}
-	bashunit::set_test_title "$DEPLOY_PLATFORM local tests and package set are ready"
+	bashunit::set_test_title "$DEPLOY_PLATFORM deployment mode is valid"
 	mkdir -p "$DEPLOY_RUN_DIR"
 	if [[ "$DEPLOY_INSTALL_MODE" != separate && "$DEPLOY_INSTALL_MODE" != single ]]; then
 		deploy_mark_infra_blocked
 		assert_equals 'separate or single' "$DEPLOY_INSTALL_MODE" 'DEPLOY_INSTALL_MODE'
 		return
 	fi
-	if [[ -e "$DEPLOY_GATE_BLOCK_FILE" || -e "$DEPLOY_INFRA_BLOCK_FILE" ]]; then
-		bashunit::skip 'local tests, build, or deployment setup failed'
-		return
-	fi
-	if [[ ! -e "$DEPLOY_GATE_READY_FILE" && -s "$failure_file" ]]; then
-		: >"$DEPLOY_GATE_BLOCK_FILE"
-		bashunit::skip 'local tests or package build failed'
-		return
-	fi
-	if [[ ! -s "$DEPLOY_PACKAGE_DIR/MANIFEST" ]]; then
-		local build_script artifact_dir
-		build_script=$DEPLOY_PROJECT_ROOT/tests/10-Build/build-packages.sh
-		artifact_dir=${_BASHUNIT_RUN_OUTPUT_DIR:?}/build-artifacts
-		assert_exec "bash $(printf %q "$build_script") $(printf %q "$DEPLOY_PACKAGE_DIR") $(printf %q "$artifact_dir")" \
-			'local package build and staging should succeed'
-	fi
-	assert_exec "test -s $(printf %q "$DEPLOY_PACKAGE_DIR/MANIFEST") && test -s $(printf %q "$DEPLOY_PACKAGE_DIR/debs/SHA256SUMS") && test \$(find $(printf %q "$DEPLOY_PACKAGE_DIR/debs") -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ') -eq 1" \
-		'the locally built OpenSim CLI package and its manifests should be available'
-	if [[ ! -s "$DEPLOY_PACKAGE_DIR/MANIFEST" || ! -s "$DEPLOY_PACKAGE_DIR/debs/SHA256SUMS" || ! -s "$DEPLOY_PACKAGE_DIR/quick-install.sh" ]] ||
-		[[ $(find "$DEPLOY_PACKAGE_DIR/debs" -maxdepth 1 -type f -name '*.deb' 2>/dev/null | wc -l | tr -d ' ') != 1 ]]; then
-		: >"$DEPLOY_GATE_BLOCK_FILE"
-		return
-	fi
-	: >"$DEPLOY_GATE_READY_FILE"
-	assert_exec "cd $(printf %q "$DEPLOY_PACKAGE_DIR") && shasum -a 256 -c MANIFEST >/dev/null && cd debs && shasum -a 256 -c SHA256SUMS >/dev/null" \
-		'local package checksums should match their manifests'
-	if ! (cd "$DEPLOY_PACKAGE_DIR" && shasum -a 256 -c MANIFEST >/dev/null && cd debs && shasum -a 256 -c SHA256SUMS >/dev/null); then
-		: >"$DEPLOY_GATE_BLOCK_FILE"
+	if [[ -e "$DEPLOY_INFRA_BLOCK_FILE" ]]; then
+		bashunit::skip 'deployment setup failed'
 	fi
 }
 
@@ -205,8 +175,8 @@ deploy_run_step() {
 	setup_credentials) bashunit::set_test_title "$DEPLOY_PLATFORM setup reads saved or interactive credentials" ;;
 	*) bashunit::set_test_title "$DEPLOY_PLATFORM $step" ;;
 	esac
-	if [[ -e "$DEPLOY_GATE_BLOCK_FILE" || -e "$DEPLOY_INFRA_BLOCK_FILE" ]]; then
-		bashunit::skip 'local tests, build, or shared deployment setup failed'
+	if [[ -e "$DEPLOY_INFRA_BLOCK_FILE" ]]; then
+		bashunit::skip 'deployment setup failed'
 		return
 	fi
 	if [[ -e "$(deploy_platform_block_file "$DEPLOY_PLATFORM")" ]]; then
@@ -311,7 +281,7 @@ deploy_run_step() {
 		;;
 	dependencies | mariadb | dotnet | opensim)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		local log_dir log_file manifest_stamp installed_stamp container_log install_step option execute_install=1
+		local log_dir log_file install_stamp installed_stamp container_log install_step option execute_install=1
 		install_step=$step
 		if [[ "$DEPLOY_INSTALL_MODE" == single ]]; then
 			case "$step" in
@@ -331,20 +301,20 @@ deploy_run_step() {
 		log_dir=$(deploy_log_dir "$DEPLOY_PLATFORM")
 		log_file=$log_dir/$install_step.log
 		bashunit::set_test_title "$DEPLOY_PLATFORM $install_step"
-		manifest_stamp=
+		install_stamp=
 		installed_stamp=
 		if [[ "$execute_install" == 1 ]]; then
-			manifest_stamp="$DEPLOY_APT_DIST/$DEPLOY_APT_COMPONENT:$(cksum <"$DEPLOY_PACKAGE_DIR/MANIFEST" | awk '{print $1 ":" $2}')"
-			installed_stamp=$(deploy_command exec "$name" sh -c 'cat /var/tmp/opensim-deploy-package-manifest 2>/dev/null' 2>/dev/null) || installed_stamp=
+			install_stamp="$DEPLOY_APT_DIST/$DEPLOY_APT_COMPONENT:$(shasum -a 256 "$DEPLOY_PROJECT_ROOT/quick-install.sh" | awk '{print $1}')"
+			installed_stamp=$(deploy_command exec "$name" sh -c 'cat /var/tmp/opensim-deploy-install-stamp 2>/dev/null' 2>/dev/null) || installed_stamp=
 		fi
-		if [[ "$execute_install" == 1 && "$DEPLOY_EPHEMERAL" != 1 && "$installed_stamp" == "$manifest_stamp" ]] && [[ "$step" == opensim || ( "$DEPLOY_INSTALL_MODE" == single && "$step" == dependencies ) ]] && deploy_installation_is_current "$name"; then
+		if [[ "$execute_install" == 1 && "$DEPLOY_EPHEMERAL" != 1 && "$installed_stamp" == "$install_stamp" ]] && [[ "$step" == opensim || ( "$DEPLOY_INSTALL_MODE" == single && "$step" == dependencies ) ]] && deploy_installation_is_current "$name"; then
 			bashunit::skip "$DEPLOY_PLATFORM package set already installed"
 			return
 		fi
 		mkdir -p "$log_dir" || status=$?
 		if [[ "$execute_install" == 1 ]] && ((status == 0)); then
 			container_log="/tmp/$name/$install_step.log"
-			deploy_command exec -i "$name" sh -c 'cat > /tmp/quick-install.sh && chmod +x /tmp/quick-install.sh' <"$DEPLOY_PACKAGE_DIR/quick-install.sh" || status=$?
+			deploy_command exec -i "$name" sh -c 'cat > /tmp/quick-install.sh && chmod +x /tmp/quick-install.sh' <"$DEPLOY_PROJECT_ROOT/quick-install.sh" || status=$?
 			if ((status == 0)); then
 				deploy_command exec "$name" bash -c '
 					set -o pipefail
@@ -376,7 +346,7 @@ deploy_run_step() {
 			printf 'Full quick-install log: %s\n' "$log_file" >&2
 			tail -n 40 "$log_file" >&2 || true
 		elif [[ "$step" == opensim || ( "$DEPLOY_INSTALL_MODE" == single && "$step" == dependencies ) ]]; then
-			deploy_command exec "$name" sh -c 'printf "%s\n" "$1" > /var/tmp/opensim-deploy-package-manifest' sh "$manifest_stamp" || status=$?
+			deploy_command exec "$name" sh -c 'printf "%s\n" "$1" > /var/tmp/opensim-deploy-install-stamp' sh "$install_stamp" || status=$?
 		fi
 		if [[ "$execute_install" == 1 ]]; then
 			assert_equals 0 "$status" "$DEPLOY_PLATFORM $install_step step"

@@ -3,7 +3,7 @@
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/deploy-test-helpers.sh"
 if deploy_load_platform ubuntu-24.04; then
-	function test_00_local_build_passed() { deploy_test_gate; }
+	function test_00_deployment_mode_is_valid() { deploy_test_gate; }
 	# @retry 1
 	function test_01_container_image_is_available() { deploy_run_step image; }
 	# @retry 1

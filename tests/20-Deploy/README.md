@@ -6,14 +6,13 @@ Run the full test suite through the project test command:
 composer test
 ```
 
-It runs local application tests, then the package build, then deployment.
-Bashunit marks dependent build and deployment tests as skipped when an
-earlier check fails. Each platform file removes its ephemeral container in
+The full suite uses Bashunit's default alphabetical discovery. Local
+application tests and the package build run before deployment by directory
+name, but deployment tests are independent: they install the packages already
+published in the APT test repository and run whether or not the local build was
+selected or succeeded. Each platform file removes its ephemeral container in
 Bashunit's `tear_down_after_script` hook, including when the file is selected
-directly. The full suite uses Bashunit's default
-alphabetical discovery. The numbered directories put local application tests
-and the package build before deployment; platform files remain grouped by
-operating system.
+directly.
 
 To run only deployment tests:
 
@@ -57,9 +56,7 @@ option, as in a normal installation, followed by separate checks for MariaDB,
 .NET, and OpenSim. Use `DEPLOY_INSTALL_MODE=separate` to run each installation
 step as its own command; this is the default and is useful for isolating a slow
 or failing step. A fresh-container timing comparison can use
-`DEPLOY_EPHEMERAL=1 DEPLOY_INSTALL_MODE=single`. Five `.deb` files are built
-and staged locally after verifying the current source hashes for `bash-tools`,
-`opensim-engine`, `opensim-rest-php`, and `opensim-helpers`. A setup smoke test
+`DEPLOY_EPHEMERAL=1 DEPLOY_INSTALL_MODE=single`. A setup smoke test
 then runs the installed `opensim setup` interface with a stubbed engine
 response, checking both that installer-saved SQL credentials in
 `/root/.opensimrc` reach the engine and that credentials can be entered
@@ -68,11 +65,12 @@ It does not exercise service commands. `BASHUNIT_PROFILE=true` reports slowest
 tests at the end, including duration for a failed long-running step.
 
 Platform containers stay running and persist across test runs, so subsequent
-runs avoid package installation when their contents are current. They can be
+runs avoid package installation when their contents are current and the local
+installer script has not changed. They can be
 inspected in Podman Desktop and removed manually when no longer needed with the
 configured container engine. Platform containers are labelled by OS, machine,
-and user. Titles stay short (for example, `debian-12 created`). If local tests
-or the build fails, dependent deployment tests are skipped. A platform creation
+and user. Titles stay short (for example, `debian-12 created`). Deployment does
+not depend on local test or build results. A platform creation
 or installation failure skips only that platform; other platforms continue.
 
 Podman is preferred and Docker is the fallback. To select an engine explicitly,
@@ -91,8 +89,8 @@ is saved elsewhere.
 Set `DEPLOY_EPHEMERAL=1` in `tests/.env` to use temporary containers removed by
 the platform file's teardown, even when that file is run on its own.
 By default, deployment containers persist and are reused, so a successful
-installation is not repeated when the staged package manifest and selected APT
-suite are unchanged. Each quick-install phase is logged under
+installation is not repeated when the selected APT suite and local installer
+script are unchanged. Each quick-install phase is logged under
 `tmp/deploy-logs/<container-name>/<phase>.log` on the test machine and
 `/tmp/<container-name>/<phase>.log` inside the container. The host path is
 printed if a phase fails. Test titles distinguish the start command from the
@@ -106,16 +104,15 @@ Ubuntu 26.04); commented rows are not discovered or reported as tests. Add a
 platform row and matching test file to extend it. All tests use the shared
 `tests/bootstrap.sh` environment initialization.
 
-If the local build test was not selected, the first deployment prerequisite
-builds and stages the current CLI package locally before contacting the
-container engine. Its path dependencies are prepared from Composer's installed
-`vendor/` sources. Compatibility containers install from the public APT
-repository: signed `charm stable unstable` and trusted unsigned
-`charm-tests dev`. Publish test packages with `./dev/release.sh --tests`
-before running compatibility tests; the test suite never publishes packages.
-No local `.deb` files are copied into the platform containers. The test suite
-also checks that the installer does not configure the obsolete `main stable`
-source.
+Compatibility containers install from the public APT repository: signed
+`charm stable unstable` and trusted unsigned `charm-tests dev`. Publish test
+packages with `./dev/release.sh --tests` before running compatibility tests;
+the test suite never builds or publishes packages for this suite. It copies the
+working tree's `quick-install.sh` into each container, but does not copy or
+install local `.deb` files. The test suite also checks that the installer does
+not configure the obsolete `main stable` source. The separate local build tests
+continue to verify package construction from Composer's installed `vendor/`
+sources.
 `CONTAINER_CONNECTION` applies to platform containers and never
 redirects the local build. The remote image and container availability checks
 use Bashunit's one-retry annotation. A check that only passes on retry is
