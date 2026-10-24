@@ -1,6 +1,6 @@
 ## Changelog
 
-### Unreleased
+### 3.0.0-dev.1
 
 Complete rewrite of opensim terminal tools, using new opensim-engine 3.x API
 

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "2292252b7275f287821b74d82486b3db",
+    "content-hash": "88c3a385955995c6c0f93a73aff37e67",
     "packages": [
         {
             "name": "laminas/laminas-escaper",
@@ -70,10 +70,16 @@
         {
             "name": "magicoli/bash-tools",
             "version": "1.0.9",
-            "dist": {
-                "type": "path",
-                "url": "../bash-tools",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/magicoli/bash-tools.git",
                 "reference": "781def8f2fa4cc6d9b8952b566023c730e01c569"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/magicoli/bash-tools/zipball/781def8f2fa4cc6d9b8952b566023c730e01c569",
+                "reference": "781def8f2fa4cc6d9b8952b566023c730e01c569",
+                "shasum": ""
             },
             "bin": [
                 "bin/cpuinfo",
@@ -95,6 +101,7 @@
                     "Magicoli\\BashHelpers\\": "src/"
                 }
             },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "AGPL-3.0-or-later"
             ],
@@ -105,10 +112,11 @@
                 }
             ],
             "description": "Eclectic collection of bash tools and helpers.",
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "support": {
+                "issues": "https://github.com/magicoli/bash-tools/issues",
+                "source": "https://github.com/magicoli/bash-tools/tree/1.0.9"
+            },
+            "time": "2026-10-24T11:40:03+00:00"
         },
         {
             "name": "magicoli/kick-inside",
@@ -182,11 +190,17 @@
         },
         {
             "name": "magicoli/opensim-engine",
-            "version": "3.x-dev",
+            "version": "3.0.0-beta.8",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/GuduleLapointe/opensim-engine.git",
+                "reference": "1ac0a56f8a6bd3726ae1026db0b3246ff83650a4"
+            },
             "dist": {
-                "type": "path",
-                "url": "../opensim-engine",
-                "reference": "d014acc5c11d51cec6bea6847208b5c0a18b50e3"
+                "type": "zip",
+                "url": "https://api.github.com/repos/GuduleLapointe/opensim-engine/zipball/1ac0a56f8a6bd3726ae1026db0b3246ff83650a4",
+                "reference": "1ac0a56f8a6bd3726ae1026db0b3246ff83650a4",
+                "shasum": ""
             },
             "require": {
                 "ext-curl": "*",
@@ -201,7 +215,7 @@
                 "ext-simplexml": "*",
                 "laminas/laminas-escaper": "^2.12@stable",
                 "magicoli/kick-inside": "^0.1.0",
-                "magicoli/opensim-rest-php": "@dev",
+                "magicoli/opensim-rest-php": "^1.1.3",
                 "nubs/random-name-generator": "^2.2",
                 "php": ">=8.2",
                 "phpxmlrpc/phpxmlrpc": "^4.11",
@@ -212,7 +226,7 @@
             },
             "require-dev": {
                 "dealerdirect/phpcodesniffer-composer-installer": "^1.2",
-                "magicoli/bash-tools": "^1.0",
+                "magicoli/bash-tools": "^1.0.7",
                 "magicoli/build-tools": "^0.1.2",
                 "magicoli/pest-failure-summary": "^1.0",
                 "nyholm/psr7": "^1.8",
@@ -226,28 +240,20 @@
                 "nyholm/psr7": "A PSR-7 and PSR-17 implementation to serve the API with Api\\Handler (any other works)"
             },
             "bin": [
-                "bin/opensim-api",
-                "bin/opensim-container.php"
+                "bin/opensim-api"
             ],
             "type": "library",
             "autoload": {
-                "psr-4": {
-                    "OpenSim\\": "src/"
-                },
                 "files": [
                     "includes/functions-gettext.php",
                     "includes/constants.php",
                     "includes/polyfills.php"
-                ]
-            },
-            "scripts": {
-                "test": [
-                    "pest"
                 ],
-                "docs": [
-                    "php dev/api-docs.php"
-                ]
+                "psr-4": {
+                    "OpenSim\\": "src/"
+                }
             },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "AGPL-3.0-or-later"
             ],
@@ -258,18 +264,25 @@
                 }
             ],
             "description": "OpenSimulator Engine - Framework-agnostic core functionality for OpenSim grids",
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "support": {
+                "issues": "https://github.com/GuduleLapointe/opensim-engine/issues",
+                "source": "https://github.com/GuduleLapointe/opensim-engine/tree/3.0.0-beta.8"
+            },
+            "time": "2026-10-24T04:09:34+00:00"
         },
         {
             "name": "magicoli/opensim-rest-php",
-            "version": "dev-opensim-kit",
+            "version": "1.1.3",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/GuduleLapointe/opensim-rest-php.git",
+                "reference": "66cfb967e051581e3aac007a8490352fc4038914"
+            },
             "dist": {
-                "type": "path",
-                "url": "../opensim-rest-php",
-                "reference": "9a4b5da1b9818f68c749057c8a4c7315f14c7946"
+                "type": "zip",
+                "url": "https://api.github.com/repos/GuduleLapointe/opensim-rest-php/zipball/66cfb967e051581e3aac007a8490352fc4038914",
+                "reference": "66cfb967e051581e3aac007a8490352fc4038914",
+                "shasum": ""
             },
             "require": {
                 "ext-curl": "*",
@@ -292,11 +305,7 @@
                     "class-rest.php"
                 ]
             },
-            "scripts": {
-                "test": [
-                    "pest"
-                ]
-            },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "AGPL-3.0-or-later"
             ],
@@ -307,10 +316,11 @@
                 }
             ],
             "description": "OpenSimulator REST PHP library and command-line client",
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "support": {
+                "issues": "https://github.com/GuduleLapointe/opensim-rest-php/issues",
+                "source": "https://github.com/GuduleLapointe/opensim-rest-php/tree/1.1.3"
+            },
+            "time": "2026-10-05T22:14:53+00:00"
         },
         {
             "name": "nubs/random-name-generator",
@@ -865,11 +875,7 @@
     ],
     "aliases": [],
     "minimum-stability": "dev",
-    "stability-flags": {
-        "magicoli/bash-tools": 20,
-        "magicoli/opensim-engine": 20,
-        "magicoli/opensim-rest-php": 20
-    },
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {},
