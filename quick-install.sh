@@ -283,7 +283,7 @@ write_magiiic_repositories() {
 					next
 				}
 				uri_index = 2
-				if ($2 ~ /^\\[/) uri_index++
+				if ($2 ~ /^\[/) uri_index++
 				uri = $(uri_index)
 				distribution = $(uri_index + 1)
 				if (uri ~ /^file:/) next
