@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "25b4012bf8d7a0264b82187b1b0ec12a",
+    "content-hash": "2292252b7275f287821b74d82486b3db",
     "packages": [
         {
             "name": "laminas/laminas-escaper",
@@ -70,16 +70,10 @@
         {
             "name": "magicoli/bash-tools",
             "version": "1.0.9",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/magicoli/bash-tools.git",
-                "reference": "781def8f2fa4cc6d9b8952b566023c730e01c569"
-            },
             "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/magicoli/bash-tools/zipball/781def8f2fa4cc6d9b8952b566023c730e01c569",
-                "reference": "781def8f2fa4cc6d9b8952b566023c730e01c569",
-                "shasum": ""
+                "type": "path",
+                "url": "../bash-tools",
+                "reference": "781def8f2fa4cc6d9b8952b566023c730e01c569"
             },
             "bin": [
                 "bin/cpuinfo",
@@ -101,7 +95,6 @@
                     "Magicoli\\BashHelpers\\": "src/"
                 }
             },
-            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "AGPL-3.0-or-later"
             ],
@@ -112,11 +105,10 @@
                 }
             ],
             "description": "Eclectic collection of bash tools and helpers.",
-            "support": {
-                "issues": "https://github.com/magicoli/bash-tools/issues",
-                "source": "https://github.com/magicoli/bash-tools/tree/1.0.9"
-            },
-            "time": "2026-10-24T11:40:03+00:00"
+            "transport-options": {
+                "symlink": true,
+                "relative": true
+            }
         },
         {
             "name": "magicoli/kick-inside",
@@ -194,7 +186,7 @@
             "dist": {
                 "type": "path",
                 "url": "../opensim-engine",
-                "reference": "618ea7d67b1b8b185657a039b5401022984fa76f"
+                "reference": "d014acc5c11d51cec6bea6847208b5c0a18b50e3"
             },
             "require": {
                 "ext-curl": "*",
@@ -234,7 +226,8 @@
                 "nyholm/psr7": "A PSR-7 and PSR-17 implementation to serve the API with Api\\Handler (any other works)"
             },
             "bin": [
-                "bin/opensim-api"
+                "bin/opensim-api",
+                "bin/opensim-container.php"
             ],
             "type": "library",
             "autoload": {
@@ -873,6 +866,7 @@
     "aliases": [],
     "minimum-stability": "dev",
     "stability-flags": {
+        "magicoli/bash-tools": 20,
         "magicoli/opensim-engine": 20,
         "magicoli/opensim-rest-php": 20
     },

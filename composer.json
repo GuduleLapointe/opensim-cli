@@ -10,28 +10,10 @@
         }
     ],
     "require": {
-        "magicoli/bash-tools": "^1.0.7",
-        "magicoli/opensim-engine": "@dev",
+        "magicoli/bash-tools": "@dev",
+        "magicoli/opensim-engine": "3.x-dev",
         "magicoli/opensim-rest-php": "@dev"
     },
-    "repositories": [
-        {
-            "name": "magicoli/opensim-engine",
-            "url": "../opensim-engine/",
-            "type": "path",
-            "options": {
-                "symlink": true
-            }
-        },
-        {
-            "name": "magicoli/opensim-rest-php",
-            "url": "../opensim-rest-php/",
-            "type": "path",
-            "options": {
-                "symlink": true
-            }
-        }
-    ],
     "minimum-stability": "dev",
     "prefer-stable": true,
     "config": {
@@ -50,5 +32,31 @@
     },
     "require-dev": {
         "magicoli/build-tools": "^0.1.6"
-    }
+    },
+    "repositories": [
+        {
+            "name": "magicoli/bash-tools",
+            "url": "../bash-tools/",
+            "type": "path",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "name": "magicoli/opensim-engine",
+            "url": "../opensim-engine/",
+            "type": "path",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "name": "magicoli/opensim-rest-php",
+            "url": "../opensim-rest-php/",
+            "type": "path",
+            "options": {
+                "symlink": true
+            }
+        }
+    ]
 }
