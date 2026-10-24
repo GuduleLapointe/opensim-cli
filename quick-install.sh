@@ -162,7 +162,7 @@ dotnet_runtime_package() {
 	while IFS= read -r package; do
 		[[ "$package" =~ ^dotnet-runtime-([0-9]+)\.0$ ]] || continue
 		(( BASH_REMATCH[1] >= 8 )) || continue
-		if apt-cache policy "$package" 2>/dev/null | grep -Eq 'Candidate: [^()]'; then
+		if LC_ALL=C apt-cache policy "$package" 2>/dev/null | grep -Eq 'Candidate: [^()]'; then
 			printf '%s\n' "$package"
 			return 0
 		fi
@@ -176,7 +176,7 @@ dotnet_runtime_installed() {
 }
 
 apt_has_candidate() {
-	apt-cache policy "$1" 2>/dev/null | grep -Eq 'Candidate: [^()]'
+	LC_ALL=C apt-cache policy "$1" 2>/dev/null | grep -Eq 'Candidate: [^()]'
 }
 
 install_packages() {
@@ -264,16 +264,52 @@ merge_magiiic_repository_components() {
 	printf '\n'
 }
 
+write_magiiic_repositories() {
+	local source_file=$1 temporary_file=$2 repository distribution
+	local desired_distributions=''
+	local -a fields
+	for repository in "${MAGIIIC_REPOSITORIES[@]}"; do
+		read -r -a fields <<<"$repository"
+		desired_distributions+=" ${fields[3]}"
+	done
+	if [[ -r "$source_file" ]]; then
+		awk -v desired_distributions="$desired_distributions" '
+			BEGIN {
+				desired_count = split(desired_distributions, desired, " ")
+			}
+			{
+				if ($1 != "deb" && $1 != "deb-src") {
+					print
+					next
+				}
+				uri_index = 2
+				if ($2 ~ /^\\[/) uri_index++
+				uri = $(uri_index)
+				distribution = $(uri_index + 1)
+				if (uri ~ /^file:/) next
+				if (uri == "https://apt.magiiic.com") {
+					if (distribution == "stable" || distribution == "unstable" || distribution == "tests") next
+					for (i = 1; i <= desired_count; i++) {
+						if (distribution == desired[i]) next
+					}
+				}
+				print
+			}
+		' "$source_file" >"$temporary_file" || return $?
+	else
+		: >"$temporary_file" || return $?
+	fi
+	for repository in "${MAGIIIC_REPOSITORIES[@]}"; do
+		merge_magiiic_repository_components "$repository" >>"$temporary_file" || return $?
+	done
+	[[ -z "${apt_debs:-}" ]] || printf 'deb [trusted=yes] file:%s ./\n' "$apt_debs" >>"$temporary_file"
+	as_root install -m 644 "$temporary_file" "$source_file"
+}
+
 configure_package_sources() {
 	[[ "$PACKAGE_SOURCES_READY" == yes ]] && return 0
 	[[ $(uname -s) == Linux ]] || die "packages are for Debian and Ubuntu"
 	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu"
-	# A local repository from an earlier run may point at a different path.
-	# Remove it before install_packages runs apt-get update; the source for this
-	# run is configured below, after the local index has been checked.
-	if grep -Eq '^[[:space:]]*deb([[:space:]]|\[).*file:' /etc/apt/sources.list.d/magiiic.list 2>/dev/null; then
-		as_root rm -f /etc/apt/sources.list.d/magiiic.list || return $?
-	fi
 	local source_file=/etc/apt/sources.list.d/magiiic.list
 	local -a bootstrap_packages=(ca-certificates curl gpg openssl)
 	local package local_debs= refresh_local_index=no
@@ -319,13 +355,7 @@ configure_package_sources() {
 	if [[ ! -s /usr/share/keyrings/magiiic-packaging.gpg ]]; then
 		curl -fsSL "$MAGIIIC_KEY" | as_root gpg --dearmor --yes -o /usr/share/keyrings/magiiic-packaging.gpg || return $?
 	fi
-	{
-		local repository
-		for repository in "${MAGIIIC_REPOSITORIES[@]}"; do
-			merge_magiiic_repository_components "$repository"
-		done
-		[[ -z "$apt_debs" ]] || printf 'deb [trusted=yes] file:%s ./\n' "$apt_debs"
-	} | as_root tee "$source_file" >/dev/null || return $?
+	write_magiiic_repositories "$source_file" "$TMP.magiiic.sources" || return $?
 	APT_UPDATED=no
 	apt_update || return $?
 	PACKAGE_SOURCES_READY=yes
