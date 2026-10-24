@@ -11,7 +11,8 @@ DEPLOY_GATE_BLOCK_FILE=$DEPLOY_RUN_DIR/deployment-blocked
 DEPLOY_GATE_READY_FILE=$DEPLOY_RUN_DIR/deployment-ready
 DEPLOY_INFRA_BLOCK_FILE=$DEPLOY_RUN_DIR/deployment-infra-blocked
 DEPLOY_PACKAGE_DIR=${DEPLOY_PACKAGE_DIR:-${_BASHUNIT_RUN_OUTPUT_DIR:-}/deploy-packages}
-DEPLOY_APT_SUITE=${DEPLOY_APT_SUITE:-stable}
+DEPLOY_APT_DIST=${DEPLOY_APT_DIST:-charm-tests}
+DEPLOY_APT_COMPONENT=${DEPLOY_APT_COMPONENT:-dev}
 DEPLOY_QUICK_INSTALL_TIMEOUT=${DEPLOY_QUICK_INSTALL_TIMEOUT:-900}
 DEPLOY_INSTALL_MODE=${DEPLOY_INSTALL_MODE:-separate}
 DEPLOY_ENGINE_SELECTED=
@@ -192,7 +193,7 @@ deploy_run_step() {
 	id) bashunit::set_test_title "$DEPLOY_PLATFORM container OS ID is $DEPLOY_EXPECTED_ID" ;;
 	version) bashunit::set_test_title "$DEPLOY_PLATFORM container OS version is $DEPLOY_EXPECTED_VERSION" ;;
 	dependencies) bashunit::set_test_title "$DEPLOY_PLATFORM quick-install dependencies succeed" ;;
-	apt_source) bashunit::set_test_title "$DEPLOY_PLATFORM OpenSim APT suite is $DEPLOY_APT_SUITE" ;;
+	apt_source) bashunit::set_test_title "$DEPLOY_PLATFORM OpenSim APT source is $DEPLOY_APT_DIST/$DEPLOY_APT_COMPONENT" ;;
 	mariadb) bashunit::set_test_title "$DEPLOY_PLATFORM SQL server is available" ;;
 	accounts) bashunit::set_test_title "$DEPLOY_PLATFORM SQL accounts are created" ;;
 	credentials) bashunit::set_test_title "$DEPLOY_PLATFORM SQL credentials are saved" ;;
@@ -214,18 +215,27 @@ deploy_run_step() {
 	case "$step" in
 	apt_source)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		local failures_before failures_after source
-		if [[ "$DEPLOY_APT_SUITE" == tests ]]; then
-			source='deb [trusted=yes] https://apt.magiiic.com tests main'
+		local failures_before failures_after source shared_source
+		if [[ "$DEPLOY_APT_DIST" == charm-tests ]]; then
+			source="deb [trusted=yes] https://apt.magiiic.com $DEPLOY_APT_DIST $DEPLOY_APT_COMPONENT"
 		else
-			source="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $DEPLOY_APT_SUITE main"
+			source="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $DEPLOY_APT_DIST $DEPLOY_APT_COMPONENT"
 		fi
+		shared_source='deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com main stable'
 		printf -v command 'deploy_command exec %q grep -Fx %q /etc/apt/sources.list.d/magiiic.list' \
 			"$name" "$source"
 		failures_before=$(bashunit::state::get_assertions_failed)
 		assert_exec "$command"
 		failures_after=$(bashunit::state::get_assertions_failed)
 		if ((failures_after > failures_before)); then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
+		if [[ "$DEPLOY_APT_DIST" != main ]]; then
+			printf -v command 'deploy_command exec %q grep -Fx %q /etc/apt/sources.list.d/magiiic.list' \
+				"$name" "$shared_source"
+			failures_before=$(bashunit::state::get_assertions_failed)
+			assert_exec "$command"
+			failures_after=$(bashunit::state::get_assertions_failed)
+			if ((failures_after > failures_before)); then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
+		fi
 		return
 		;;
 	image)
@@ -326,7 +336,7 @@ deploy_run_step() {
 		manifest_stamp=
 		installed_stamp=
 		if [[ "$execute_install" == 1 ]]; then
-			manifest_stamp="$DEPLOY_APT_SUITE:$(cksum <"$DEPLOY_PACKAGE_DIR/MANIFEST" | awk '{print $1 ":" $2}')"
+			manifest_stamp="$DEPLOY_APT_DIST/$DEPLOY_APT_COMPONENT:$(cksum <"$DEPLOY_PACKAGE_DIR/MANIFEST" | awk '{print $1 ":" $2}')"
 			installed_stamp=$(deploy_command exec "$name" sh -c 'cat /var/tmp/opensim-deploy-package-manifest 2>/dev/null' 2>/dev/null) || installed_stamp=
 		fi
 		if [[ "$execute_install" == 1 && "$DEPLOY_EPHEMERAL" != 1 && "$installed_stamp" == "$manifest_stamp" ]] && [[ "$step" == opensim || ( "$DEPLOY_INSTALL_MODE" == single && "$step" == dependencies ) ]] && deploy_installation_is_current "$name"; then
@@ -342,12 +352,12 @@ deploy_run_step() {
 					set -o pipefail
 					log_file=$1
 					mkdir -p "$(dirname "$log_file")"
-					if [[ -n "$4" ]]; then
-						timeout --signal=TERM --kill-after=30s "${2}s" env DEBUG=yes OPENSIM_KIT_APT_SUITE="$3" ASSUME_YES=yes /bin/bash /tmp/quick-install.sh "$4" 2>&1 | tee "$log_file"
+					if [[ -n "$5" ]]; then
+						timeout --signal=TERM --kill-after=30s "${2}s" env DEBUG=yes OPENSIM_KIT_APT_DIST="$3" OPENSIM_KIT_APT_COMPONENT="$4" ASSUME_YES=yes /bin/bash /tmp/quick-install.sh "$5" 2>&1 | tee "$log_file"
 					else
-						timeout --signal=TERM --kill-after=30s "${2}s" env DEBUG=yes OPENSIM_KIT_APT_SUITE="$3" ASSUME_YES=yes /bin/bash /tmp/quick-install.sh 2>&1 | tee "$log_file"
+						timeout --signal=TERM --kill-after=30s "${2}s" env DEBUG=yes OPENSIM_KIT_APT_DIST="$3" OPENSIM_KIT_APT_COMPONENT="$4" ASSUME_YES=yes /bin/bash /tmp/quick-install.sh 2>&1 | tee "$log_file"
 					fi
-				' bash "$container_log" "$DEPLOY_QUICK_INSTALL_TIMEOUT" "$DEPLOY_APT_SUITE" "$option" >"$log_file" 2>&1 || status=$?
+				' bash "$container_log" "$DEPLOY_QUICK_INSTALL_TIMEOUT" "$DEPLOY_APT_DIST" "$DEPLOY_APT_COMPONENT" "$option" >"$log_file" 2>&1 || status=$?
 			fi
 		fi
 		if [[ "$execute_install" == 0 && "$status" == 0 ]]; then

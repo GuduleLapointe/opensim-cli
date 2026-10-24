@@ -24,7 +24,7 @@ function test_build_sh_produces_deb_and_zip() {
 
 function test_current_packages_can_be_published_to_the_tests_suite() {
 	if [[ "${DEPLOY_PUBLISH_TEST_PACKAGES:-0}" != 1 ]]; then
-		bashunit::skip 'publishing disabled; set DEPLOY_PUBLISH_TEST_PACKAGES=1 to publish to APT suite tests'
+		bashunit::skip 'publishing disabled; set DEPLOY_PUBLISH_TEST_PACKAGES=1 to publish to APT charm-tests/dev'
 		return
 	fi
 	assert_exec "bash '$OPENSIM_ROOT/tests/10-Build/publish-test-packages.sh' '$DEPLOY_STAGE/debs'"

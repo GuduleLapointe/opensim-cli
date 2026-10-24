@@ -21,7 +21,8 @@
 #           --dotnet              install the .NET runtime without OpenSim packages
 #           --opensim             install OpenSimulator and its management packages (or prepare the clone)
 # Environment: OPENSIM_KIT_DEBS=folder       install packages (*.deb) from a local folder
-#             OPENSIM_KIT_APT_SUITE=tests     use another suite of the official APT repository
+#             OPENSIM_KIT_APT_DIST=charm-tests select an APT distribution (default: charm)
+#             OPENSIM_KIT_APT_COMPONENT=dev    select its component (default: stable, or dev for charm-tests)
 
 set -euo pipefail
 
@@ -30,25 +31,43 @@ if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != root ]] && command -v getent >/dev/
 	INSTALLER_HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
 fi
 OPENSIM_RC_PATH=${OPENSIM_RC:-$INSTALLER_HOME/.opensimrc}
-OPENSIM_KIT_APT_SUITE_WAS_SET=${OPENSIM_KIT_APT_SUITE+x}
-OPENSIM_KIT_APT_SUITE_FROM_ENV=${OPENSIM_KIT_APT_SUITE:-}
+OPENSIM_KIT_APT_DIST_WAS_SET=${OPENSIM_KIT_APT_DIST+x}
+OPENSIM_KIT_APT_DIST_FROM_ENV=${OPENSIM_KIT_APT_DIST:-}
+OPENSIM_KIT_APT_COMPONENT_WAS_SET=${OPENSIM_KIT_APT_COMPONENT+x}
+OPENSIM_KIT_APT_COMPONENT_FROM_ENV=${OPENSIM_KIT_APT_COMPONENT:-}
 
 for file in "${1:+$1/.env}" "$OPENSIM_RC_PATH"; do
 	# shellcheck disable=SC1090
 	[[ -n "$file" && -r "$file" ]] && source "$file"
 done
 
-if [[ "$OPENSIM_KIT_APT_SUITE_WAS_SET" == x ]]; then
-	OPENSIM_KIT_APT_SUITE=$OPENSIM_KIT_APT_SUITE_FROM_ENV
+if [[ "$OPENSIM_KIT_APT_DIST_WAS_SET" == x ]]; then
+	OPENSIM_KIT_APT_DIST=$OPENSIM_KIT_APT_DIST_FROM_ENV
 fi
-unset OPENSIM_KIT_APT_SUITE_WAS_SET OPENSIM_KIT_APT_SUITE_FROM_ENV
+if [[ "$OPENSIM_KIT_APT_COMPONENT_WAS_SET" == x ]]; then
+	OPENSIM_KIT_APT_COMPONENT=$OPENSIM_KIT_APT_COMPONENT_FROM_ENV
+fi
+unset OPENSIM_KIT_APT_DIST_WAS_SET OPENSIM_KIT_APT_DIST_FROM_ENV
+unset OPENSIM_KIT_APT_COMPONENT_WAS_SET OPENSIM_KIT_APT_COMPONENT_FROM_ENV
 
 MAGIIIC_KEY=https://apt.magiiic.com/magiiic-packaging.asc
-OPENSIM_KIT_APT_SUITE=${OPENSIM_KIT_APT_SUITE:-stable}
-if [[ "$OPENSIM_KIT_APT_SUITE" == tests ]]; then
-	MAGIIIC_REPOSITORY='deb [trusted=yes] https://apt.magiiic.com tests main'
+OPENSIM_KIT_APT_DIST=${OPENSIM_KIT_APT_DIST:-charm}
+if [[ -z "${OPENSIM_KIT_APT_COMPONENT:-}" ]]; then
+	if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
+		OPENSIM_KIT_APT_COMPONENT=dev
+	else
+		OPENSIM_KIT_APT_COMPONENT=stable
+	fi
+fi
+MAGIIIC_REPOSITORIES=()
+if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
+	MAGIIIC_REPOSITORIES+=("deb [trusted=yes] https://apt.magiiic.com charm-tests $OPENSIM_KIT_APT_COMPONENT")
 else
-	MAGIIIC_REPOSITORY="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $OPENSIM_KIT_APT_SUITE main"
+	MAGIIIC_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $OPENSIM_KIT_APT_DIST $OPENSIM_KIT_APT_COMPONENT")
+fi
+# OpenSim packages depend on shared tools published in main.
+if [[ "$OPENSIM_KIT_APT_DIST" != main ]]; then
+	MAGIIIC_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com main stable")
 fi
 # What the tools need on a machine that does not have the packages (a clone): the same as the package opensim-tools
 PHP_PACKAGES=(php-cli php-curl php-intl php-mbstring php-mysql php-xml)
@@ -221,7 +240,8 @@ configure_package_sources() {
 	install_packages ca-certificates curl gpg openssl || return $?
 
 	local apt_debs=
-	[[ "$OPENSIM_KIT_APT_SUITE" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid OPENSIM_KIT_APT_SUITE: $OPENSIM_KIT_APT_SUITE"
+	[[ "$OPENSIM_KIT_APT_DIST" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid OPENSIM_KIT_APT_DIST: $OPENSIM_KIT_APT_DIST"
+	[[ "$OPENSIM_KIT_APT_COMPONENT" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid OPENSIM_KIT_APT_COMPONENT: $OPENSIM_KIT_APT_COMPONENT"
 	if [[ -n "$OPENSIM_KIT_DEBS" ]]; then
 		local debs
 		debs=$(cd "$OPENSIM_KIT_DEBS" && pwd) || die "$OPENSIM_KIT_DEBS is not a folder"
@@ -235,11 +255,11 @@ configure_package_sources() {
 		fi
 		apt_debs=$(apt_accessible_local_repository "$debs") || return $?
 	fi
-	if [[ "$OPENSIM_KIT_APT_SUITE" != tests && ! -s /usr/share/keyrings/magiiic-packaging.gpg ]]; then
+	if [[ ! -s /usr/share/keyrings/magiiic-packaging.gpg ]]; then
 		curl -fsSL "$MAGIIIC_KEY" | as_root gpg --dearmor --yes -o /usr/share/keyrings/magiiic-packaging.gpg || return $?
 	fi
 	{
-		printf '%s\n' "$MAGIIIC_REPOSITORY"
+		printf '%s\n' "${MAGIIIC_REPOSITORIES[@]}"
 		[[ -z "$apt_debs" ]] || printf 'deb [trusted=yes] file:%s ./\n' "$apt_debs"
 	} | as_root tee /etc/apt/sources.list.d/magiiic.list >/dev/null || return $?
 	APT_UPDATED=no

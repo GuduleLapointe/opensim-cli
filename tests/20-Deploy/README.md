@@ -109,12 +109,13 @@ platform row and matching test file to extend it. All tests use the shared
 If the local build test was not selected, the first deployment prerequisite
 builds and stages the same five current packages locally before contacting the
 container engine. Containers install OpenSim packages from the official APT
-repository. Set `DEPLOY_APT_SUITE=tests` to select the test suite; it defaults
-to `stable`. Test packages can be published from the local build with
+repository. `DEPLOY_APT_DIST` and `DEPLOY_APT_COMPONENT` select a package
+source; they default to `charm-tests/dev`. Test packages can be published from the local build with
 `DEPLOY_PUBLISH_TEST_PACKAGES=1` and a local repository clone configured as
 `APT_REPO_DIR` in `tests/.env`. No local `.deb` files are copied into the OS
-containers. The `tests` suite is unsigned and the installer trusts it
-explicitly; `stable` and `unstable` continue to use the repository signing key.
+containers. The installer also enables `main/stable` for shared package
+dependencies. The test distribution is unsigned and trusted explicitly;
+signed distributions use the repository signing key.
 `CONTAINER_CONNECTION` applies to platform containers and never
 redirects the local build. The remote image and container availability checks
 use Bashunit's one-retry annotation. A check that only passes on retry is
