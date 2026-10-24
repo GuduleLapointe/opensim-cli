@@ -274,23 +274,47 @@ configure_package_sources() {
 	if grep -Eq '^[[:space:]]*deb([[:space:]]|\[).*file:' /etc/apt/sources.list.d/magiiic.list 2>/dev/null; then
 		as_root rm -f /etc/apt/sources.list.d/magiiic.list || return $?
 	fi
-	install_packages ca-certificates curl gpg openssl || return $?
+	local source_file=/etc/apt/sources.list.d/magiiic.list
+	local -a bootstrap_packages=(ca-certificates curl gpg openssl)
+	local package local_debs= refresh_local_index=no
+	if [[ -n "$OPENSIM_KIT_DEBS" ]]; then
+		local_debs=$(cd "$OPENSIM_KIT_DEBS" && pwd) || die "$OPENSIM_KIT_DEBS is not a folder"
+		if [[ ! -s "$local_debs/Packages.gz" ]] || [[ $(ls -rt "$local_debs"/*.deb "$local_debs/Packages.gz" 2>/dev/null | tail -n 1) != "$local_debs/Packages.gz" ]]; then
+			refresh_local_index=yes
+			command -v dpkg-scanpackages >/dev/null 2>&1 || bootstrap_packages+=(dpkg-dev)
+		fi
+	fi
+	local -a missing_bootstrap_packages=()
+	for package in "${bootstrap_packages[@]}"; do
+		dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null | grep -qx installed || missing_bootstrap_packages+=("$package")
+	done
+	if ((${#missing_bootstrap_packages[@]})); then
+		# Old repository entries can make the bootstrap apt update fail before
+		# this script has a chance to replace them. Hide this file only while
+		# installing tools from the distribution repositories, then restore it.
+		local source_backup=$TMP.magiiic.list source_saved=no bootstrap_status=0
+		if [[ -e "$source_file" ]]; then
+			as_root cp -f "$source_file" "$source_backup" || return $?
+			as_root rm -f "$source_file" || return $?
+			source_saved=yes
+		fi
+		install_packages "${missing_bootstrap_packages[@]}" || bootstrap_status=$?
+		if [[ "$source_saved" == yes ]]; then
+			as_root mv -f "$source_backup" "$source_file" || return $?
+		fi
+		((bootstrap_status == 0)) || return "$bootstrap_status"
+	fi
 
 	local apt_debs=
 	[[ "$OPENSIM_KIT_APT_DIST" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid OPENSIM_KIT_APT_DIST: $OPENSIM_KIT_APT_DIST"
 	[[ "$OPENSIM_KIT_APT_COMPONENT" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid OPENSIM_KIT_APT_COMPONENT: $OPENSIM_KIT_APT_COMPONENT"
 	if [[ -n "$OPENSIM_KIT_DEBS" ]]; then
-		local debs
-		debs=$(cd "$OPENSIM_KIT_DEBS" && pwd) || die "$OPENSIM_KIT_DEBS is not a folder"
-		say "Use local packages from $debs"
-		if [[ ! -s "$debs/Packages.gz" ]] || [[ $(ls -rt "$debs"/*.deb "$debs/Packages.gz" 2>/dev/null | tail -n 1) != "$debs/Packages.gz" ]]; then
+		say "Use local packages from $local_debs"
+		if [[ "$refresh_local_index" == yes ]]; then
 			say "Refresh the local package index"
-			if ! command -v dpkg-scanpackages >/dev/null 2>&1; then
-				install_packages dpkg-dev || die "no dpkg-scanpackages, could not install dpkg-dev"
-			fi
-			(cd "$debs" && dpkg-scanpackages --multiversion . /dev/null | gzip -9c >Packages.gz) || die "local package index refresh failed"
+			(cd "$local_debs" && dpkg-scanpackages --multiversion . /dev/null | gzip -9c >Packages.gz) || die "local package index refresh failed"
 		fi
-		apt_debs=$(apt_accessible_local_repository "$debs") || return $?
+		apt_debs=$(apt_accessible_local_repository "$local_debs") || return $?
 	fi
 	if [[ ! -s /usr/share/keyrings/magiiic-packaging.gpg ]]; then
 		curl -fsSL "$MAGIIIC_KEY" | as_root gpg --dearmor --yes -o /usr/share/keyrings/magiiic-packaging.gpg || return $?
@@ -301,7 +325,7 @@ configure_package_sources() {
 			merge_magiiic_repository_components "$repository"
 		done
 		[[ -z "$apt_debs" ]] || printf 'deb [trusted=yes] file:%s ./\n' "$apt_debs"
-	} | as_root tee /etc/apt/sources.list.d/magiiic.list >/dev/null || return $?
+	} | as_root tee "$source_file" >/dev/null || return $?
 	APT_UPDATED=no
 	apt_update || return $?
 	PACKAGE_SOURCES_READY=yes
