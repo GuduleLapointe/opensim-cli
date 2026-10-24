@@ -77,3 +77,18 @@ function test_apt_candidate_detection_uses_localized_candidate_field() {
 	assert_exec 'apt_has_candidate libgdiplus'
 }
 
+function test_missing_libgdiplus_warning_explains_its_effect_on_regions() {
+	quick_install_load_library || return
+	recover_dpkg_configuration() { return 0; }
+	apt_update() { return 0; }
+	uname() { printf 'Linux\n'; }
+	ldconfig() { return 1; }
+	apt_has_candidate() { return 1; }
+	dotnet_runtime_installed() { return 0; }
+	local output
+	output=$(phase_dotnet)
+	assert_contains 'APT has no candidate for libgdiplus' "$output"
+	assert_contains 'OpenSim regions may fail to start (dynamic textures)' "$output"
+	assert_contains 'Enable an APT source that provides libgdiplus or install it manually' "$output"
+}
+

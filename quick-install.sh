@@ -499,7 +499,7 @@ phase_dotnet() {
 		if apt_has_candidate libgdiplus; then
 			support_packages+=(libgdiplus)
 		else
-			say "libgdiplus is not available from the configured APT sources"
+			say "Warning: APT has no candidate for libgdiplus; OpenSim regions may fail to start (dynamic textures). Enable an APT source that provides libgdiplus or install it manually."
 		fi
 	fi
 	if ((${#support_packages[@]})); then
