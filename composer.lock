@@ -69,16 +69,16 @@
         },
         {
             "name": "magicoli/bash-tools",
-            "version": "1.0.7",
+            "version": "1.0.8",
             "source": {
                 "type": "git",
                 "url": "https://github.com/magicoli/bash-tools.git",
-                "reference": "60ecf4fa3c4ab9144251428e7bf784c0aa4aff10"
+                "reference": "a16f77a44c17ea457a66af81e68e69e2b53fdfdd"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/magicoli/bash-tools/zipball/60ecf4fa3c4ab9144251428e7bf784c0aa4aff10",
-                "reference": "60ecf4fa3c4ab9144251428e7bf784c0aa4aff10",
+                "url": "https://api.github.com/repos/magicoli/bash-tools/zipball/a16f77a44c17ea457a66af81e68e69e2b53fdfdd",
+                "reference": "a16f77a44c17ea457a66af81e68e69e2b53fdfdd",
                 "shasum": ""
             },
             "bin": [
@@ -114,9 +114,9 @@
             "description": "Eclectic collection of bash tools and helpers.",
             "support": {
                 "issues": "https://github.com/magicoli/bash-tools/issues",
-                "source": "https://github.com/magicoli/bash-tools/tree/1.0.7"
+                "source": "https://github.com/magicoli/bash-tools/tree/1.0.8"
             },
-            "time": "2026-10-05T18:34:19+00:00"
+            "time": "2026-10-24T00:18:23+00:00"
         },
         {
             "name": "magicoli/kick-inside",
@@ -194,7 +194,7 @@
             "dist": {
                 "type": "path",
                 "url": "../opensim-engine",
-                "reference": "3b7c2293fc428f1945d7fe92a969fa031cdad5e5"
+                "reference": "e6b3e0c6b968bf78471249c3418d60f2ede4d1a2"
             },
             "require": {
                 "ext-curl": "*",
@@ -831,16 +831,16 @@
     "packages-dev": [
         {
             "name": "magicoli/build-tools",
-            "version": "0.1.6",
+            "version": "0.1.7",
             "source": {
                 "type": "git",
                 "url": "https://github.com/magicoli/build-tools.git",
-                "reference": "ff58191f0eebb1cb6e42f533bf0cc49057e09246"
+                "reference": "800c819003aff62de4f1e38b797d06d1e5b8d3e4"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/magicoli/build-tools/zipball/ff58191f0eebb1cb6e42f533bf0cc49057e09246",
-                "reference": "ff58191f0eebb1cb6e42f533bf0cc49057e09246",
+                "url": "https://api.github.com/repos/magicoli/build-tools/zipball/800c819003aff62de4f1e38b797d06d1e5b8d3e4",
+                "reference": "800c819003aff62de4f1e38b797d06d1e5b8d3e4",
                 "shasum": ""
             },
             "require": {
@@ -865,9 +865,9 @@
             "description": "Build, release and publish a project: Debian packages, zip, GitHub release, apt repository.",
             "support": {
                 "issues": "https://github.com/magicoli/build-tools/issues",
-                "source": "https://github.com/magicoli/build-tools/tree/0.1.6"
+                "source": "https://github.com/magicoli/build-tools/tree/0.1.7"
             },
-            "time": "2026-10-06T06:38:34+00:00"
+            "time": "2026-10-24T00:02:14+00:00"
         }
     ],
     "aliases": [],

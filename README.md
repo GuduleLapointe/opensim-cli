@@ -4,14 +4,22 @@ The command line to set up and manage OpenSimulator, in bash. It asks the questi
 
 **Under construction.** The quick setup asks what to set up and a few answers, checks them with the engine and shows the setup they stand for. Besides it: status, start, stop, restart, console and install-dotnet. `dev/build.sh` makes the Debian package and the zip into `dist/`. The package installs the bash completion (`share/bash-completion/opensim`).
 
+## Quick install
+
+This will install OpenSimulator, OpenSim Engine and all required packages from official apt repository.
+
+```
+curl -o https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/refs/heads/dev/quick-install.sh
+chmod +x quick-install.sh
+./quick-install.sh --setup
+```
+
+See `./quick-install.sh --help` for other options.
+
 ## Requirements
 
 - bash 5, `jq`, `php-cli` and `dialog` (`brew install dialog`, `apt install dialog`)
 - the dependencies, installed with `composer install`: [bash-tools](https://github.com/magicoli/bash-tools) and the [engine](https://github.com/GuduleLapointe/opensim-engine) (the packages link them in `vendor/magicoli/` instead)
-
-## Rights
-
-The files of the grids belong to the user the instances run as (`SystemUser` of `opensim.conf`). When it is not you, every command runs as that user with `sudo -u`, checked before the first question: you need to be allowed to.
 
 ## Features
 
@@ -91,3 +99,7 @@ Without a terminal (a script) the questions are plain lines, a number edits an a
 ## Settings
 
 `~/.opensimrc` is read first, it is a bash file: it can set the `PATH` (which `php`, which tools) or anything the tools need. The `.env` of this project is read by bash-tools.
+
+## User permissions
+
+The files of the grids belong to the user the instances run as (`SystemUser` of `opensim.conf`). When it is not you, every command runs as that user with `sudo -u`, checked before the first question: you need to be allowed to.
