@@ -496,11 +496,7 @@ phase_dotnet() {
 		fi
 	fi
 	if ! ldconfig -p 2>/dev/null | grep -q 'libgdiplus\.so'; then
-		if apt_has_candidate libgdiplus; then
-			support_packages+=(libgdiplus)
-		else
-			say "Warning: APT has no candidate for libgdiplus; OpenSim regions may fail to start (dynamic textures). Enable an APT source that provides libgdiplus or install it manually."
-		fi
+		support_packages+=(libgdiplus)
 	fi
 	if ((${#support_packages[@]})); then
 		install_packages "${support_packages[@]}" || die "could not install .NET runtime packages"
