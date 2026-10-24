@@ -21,7 +21,7 @@
 #           --dotnet              install the .NET runtime without OpenSim packages
 #           --opensim             install OpenSimulator and its management packages (or prepare the clone)
 # Environment: OPENSIM_KIT_DEBS=folder       install packages (*.deb) from a local folder
-#             OPENSIM_KIT_APT_DIST=charm-tests select an APT distribution (default: charm)
+#             OPENSIM_KIT_APT_DIST=charm-tests select the unsigned test distribution (default: charm)
 #             OPENSIM_KIT_APT_COMPONENT=dev    select its component (default: stable, or dev for charm-tests)
 
 set -euo pipefail
@@ -62,12 +62,11 @@ fi
 MAGIIIC_REPOSITORIES=()
 if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
 	MAGIIIC_REPOSITORIES+=("deb [trusted=yes] https://apt.magiiic.com charm-tests $OPENSIM_KIT_APT_COMPONENT")
+	# Test packages may depend on released OpenSim packages. Keep their signed
+	# stable and unstable components available while testing charm-tests/dev.
+	MAGIIIC_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable")
 else
 	MAGIIIC_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $OPENSIM_KIT_APT_DIST $OPENSIM_KIT_APT_COMPONENT")
-fi
-# OpenSim packages depend on shared tools published in main.
-if [[ "$OPENSIM_KIT_APT_DIST" != main ]]; then
-	MAGIIIC_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com main stable")
 fi
 # What the tools need on a machine that does not have the packages (a clone): the same as the package opensim-tools
 PHP_PACKAGES=(php-cli php-curl php-intl php-mbstring php-mysql php-xml)
@@ -227,6 +226,44 @@ apt_accessible_local_repository() {
 	printf '%s\n' "$mirror"
 }
 
+merge_magiiic_repository_components() {
+	local repository=$1 source_file=/etc/apt/sources.list.d/magiiic.list
+	local -a fields components
+	local component existing_components
+	local -A seen_components=()
+
+	read -r -a fields <<<"$repository"
+	# The repository lines generated above have one option field, then URI and distribution.
+	[[ ${#fields[@]} -ge 5 && "${fields[0]}" == deb ]] || {
+		printf '%s\n' "$repository"
+		return
+	}
+
+	components=("${fields[@]:4}")
+	existing_components=$(awk -v distribution="${fields[3]}" '
+		$1 == "deb" {
+			uri_index = 2
+			if ($2 ~ /^\[/) uri_index++
+			if ($(uri_index) == "https://apt.magiiic.com" && $(uri_index + 1) == distribution) {
+				for (index = uri_index + 2; index <= NF; index++) print $index
+			}
+		}
+	' "$source_file" 2>/dev/null || true)
+	while IFS= read -r component; do
+		[[ -n "$component" ]] && components+=("$component")
+	done <<<"$existing_components"
+
+	local -a unique_components=()
+	for component in "${components[@]}"; do
+		[[ -n "$component" && -z "${seen_components[$component]+x}" ]] || continue
+		seen_components[$component]=1
+		unique_components+=("$component")
+	done
+	printf '%s %s %s %s' "${fields[0]}" "${fields[1]}" "${fields[2]}" "${fields[3]}"
+	printf ' %s' "${unique_components[@]}"
+	printf '\n'
+}
+
 configure_package_sources() {
 	[[ "$PACKAGE_SOURCES_READY" == yes ]] && return 0
 	[[ $(uname -s) == Linux ]] || die "packages are for Debian and Ubuntu"
@@ -259,7 +296,10 @@ configure_package_sources() {
 		curl -fsSL "$MAGIIIC_KEY" | as_root gpg --dearmor --yes -o /usr/share/keyrings/magiiic-packaging.gpg || return $?
 	fi
 	{
-		printf '%s\n' "${MAGIIIC_REPOSITORIES[@]}"
+		local repository
+		for repository in "${MAGIIIC_REPOSITORIES[@]}"; do
+			merge_magiiic_repository_components "$repository"
+		done
 		[[ -z "$apt_debs" ]] || printf 'deb [trusted=yes] file:%s ./\n' "$apt_debs"
 	} | as_root tee /etc/apt/sources.list.d/magiiic.list >/dev/null || return $?
 	APT_UPDATED=no

@@ -11,8 +11,8 @@ DEPLOY_GATE_BLOCK_FILE=$DEPLOY_RUN_DIR/deployment-blocked
 DEPLOY_GATE_READY_FILE=$DEPLOY_RUN_DIR/deployment-ready
 DEPLOY_INFRA_BLOCK_FILE=$DEPLOY_RUN_DIR/deployment-infra-blocked
 DEPLOY_PACKAGE_DIR=${DEPLOY_PACKAGE_DIR:-${_BASHUNIT_RUN_OUTPUT_DIR:-}/deploy-packages}
-DEPLOY_APT_DIST=${DEPLOY_APT_DIST:-charm-tests}
-DEPLOY_APT_COMPONENT=${DEPLOY_APT_COMPONENT:-dev}
+DEPLOY_APT_DIST=charm-tests
+DEPLOY_APT_COMPONENT=dev
 DEPLOY_QUICK_INSTALL_TIMEOUT=${DEPLOY_QUICK_INSTALL_TIMEOUT:-900}
 DEPLOY_INSTALL_MODE=${DEPLOY_INSTALL_MODE:-separate}
 DEPLOY_ENGINE_SELECTED=
@@ -193,7 +193,9 @@ deploy_run_step() {
 	id) bashunit::set_test_title "$DEPLOY_PLATFORM container OS ID is $DEPLOY_EXPECTED_ID" ;;
 	version) bashunit::set_test_title "$DEPLOY_PLATFORM container OS version is $DEPLOY_EXPECTED_VERSION" ;;
 	dependencies) bashunit::set_test_title "$DEPLOY_PLATFORM quick-install dependencies succeed" ;;
-	apt_source) bashunit::set_test_title "$DEPLOY_PLATFORM OpenSim APT source is $DEPLOY_APT_DIST/$DEPLOY_APT_COMPONENT" ;;
+	apt_source_family) bashunit::set_test_title "$DEPLOY_PLATFORM signed charm stable/unstable APT source is configured" ;;
+	apt_source_tests) bashunit::set_test_title "$DEPLOY_PLATFORM trusted charm-tests/dev APT source is configured" ;;
+	apt_source_no_main) bashunit::set_test_title "$DEPLOY_PLATFORM does not use the obsolete main APT source" ;;
 	mariadb) bashunit::set_test_title "$DEPLOY_PLATFORM SQL server is available" ;;
 	accounts) bashunit::set_test_title "$DEPLOY_PLATFORM SQL accounts are created" ;;
 	credentials) bashunit::set_test_title "$DEPLOY_PLATFORM SQL credentials are saved" ;;
@@ -213,29 +215,25 @@ deploy_run_step() {
 	fi
 
 	case "$step" in
-	apt_source)
+	apt_source_family | apt_source_tests | apt_source_no_main)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		local failures_before failures_after source shared_source
-		if [[ "$DEPLOY_APT_DIST" == charm-tests ]]; then
-			source="deb [trusted=yes] https://apt.magiiic.com $DEPLOY_APT_DIST $DEPLOY_APT_COMPONENT"
-		else
-			source="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $DEPLOY_APT_DIST $DEPLOY_APT_COMPONENT"
-		fi
-		shared_source='deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com main stable'
-		printf -v command 'deploy_command exec %q grep -Fx %q /etc/apt/sources.list.d/magiiic.list' \
-			"$name" "$source"
+		local expected failures_before failures_after
 		failures_before=$(bashunit::state::get_assertions_failed)
-		assert_exec "$command"
-		failures_after=$(bashunit::state::get_assertions_failed)
-		if ((failures_after > failures_before)); then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
-		if [[ "$DEPLOY_APT_DIST" != main ]]; then
-			printf -v command 'deploy_command exec %q grep -Fx %q /etc/apt/sources.list.d/magiiic.list' \
-				"$name" "$shared_source"
-			failures_before=$(bashunit::state::get_assertions_failed)
+		case "$step" in
+		apt_source_family) expected='deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable' ;;
+		apt_source_tests) expected='deb [trusted=yes] https://apt.magiiic.com charm-tests dev' ;;
+		apt_source_no_main)
+			printf -v command 'deploy_command exec %q sh -c %q' "$name" '! grep -Eq "^[[:space:]]*deb .*apt\\.magiiic\\.com main " /etc/apt/sources.list.d/magiiic.list'
 			assert_exec "$command"
 			failures_after=$(bashunit::state::get_assertions_failed)
 			if ((failures_after > failures_before)); then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
-		fi
+			return
+			;;
+		esac
+		printf -v command 'deploy_command exec %q grep -Fx %q /etc/apt/sources.list.d/magiiic.list' "$name" "$expected"
+		assert_exec "$command"
+		failures_after=$(bashunit::state::get_assertions_failed)
+		if ((failures_after > failures_before)); then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
 		return
 		;;
 	image)
