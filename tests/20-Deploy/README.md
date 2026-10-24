@@ -88,9 +88,9 @@ is saved elsewhere.
 
 Set `DEPLOY_EPHEMERAL=1` in `tests/.env` to use temporary containers removed by
 the platform file's teardown, even when that file is run on its own.
-By default, deployment containers persist and are reused, so a successful
-installation is not repeated when the selected APT suite and local installer
-script are unchanged. Each quick-install phase is logged under
+By default, deployment containers persist and are reused. In separate mode,
+package installation is skipped only when the installed package versions match
+the current APT candidates and the local installer script is unchanged. Each quick-install phase is logged under
 `tmp/deploy-logs/<container-name>/<phase>.log` on the test machine and
 `/tmp/<container-name>/<phase>.log` inside the container. The host path is
 printed if a phase fails. Test titles distinguish the start command from the

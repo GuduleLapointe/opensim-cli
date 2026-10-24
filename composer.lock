@@ -69,16 +69,16 @@
         },
         {
             "name": "magicoli/bash-tools",
-            "version": "1.0.8",
+            "version": "1.0.9",
             "source": {
                 "type": "git",
                 "url": "https://github.com/magicoli/bash-tools.git",
-                "reference": "a16f77a44c17ea457a66af81e68e69e2b53fdfdd"
+                "reference": "781def8f2fa4cc6d9b8952b566023c730e01c569"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/magicoli/bash-tools/zipball/a16f77a44c17ea457a66af81e68e69e2b53fdfdd",
-                "reference": "a16f77a44c17ea457a66af81e68e69e2b53fdfdd",
+                "url": "https://api.github.com/repos/magicoli/bash-tools/zipball/781def8f2fa4cc6d9b8952b566023c730e01c569",
+                "reference": "781def8f2fa4cc6d9b8952b566023c730e01c569",
                 "shasum": ""
             },
             "bin": [
@@ -114,9 +114,9 @@
             "description": "Eclectic collection of bash tools and helpers.",
             "support": {
                 "issues": "https://github.com/magicoli/bash-tools/issues",
-                "source": "https://github.com/magicoli/bash-tools/tree/1.0.8"
+                "source": "https://github.com/magicoli/bash-tools/tree/1.0.9"
             },
-            "time": "2026-10-24T00:18:23+00:00"
+            "time": "2026-10-24T11:40:03+00:00"
         },
         {
             "name": "magicoli/kick-inside",
@@ -194,7 +194,7 @@
             "dist": {
                 "type": "path",
                 "url": "../opensim-engine",
-                "reference": "98736172bcaecc4102da014e4454663e1288bfa7"
+                "reference": "618ea7d67b1b8b185657a039b5401022984fa76f"
             },
             "require": {
                 "ext-curl": "*",
@@ -220,7 +220,7 @@
             },
             "require-dev": {
                 "dealerdirect/phpcodesniffer-composer-installer": "^1.2",
-                "magicoli/bash-tools": "^1.0.7",
+                "magicoli/bash-tools": "^1.0",
                 "magicoli/build-tools": "^0.1.2",
                 "magicoli/pest-failure-summary": "^1.0",
                 "nyholm/psr7": "^1.8",

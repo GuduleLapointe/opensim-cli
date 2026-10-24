@@ -305,9 +305,23 @@ deploy_run_step() {
 		installed_stamp=
 		if [[ "$execute_install" == 1 ]]; then
 			install_stamp="$DEPLOY_APT_DIST/$DEPLOY_APT_COMPONENT:$(shasum -a 256 "$DEPLOY_PROJECT_ROOT/quick-install.sh" | awk '{print $1}')"
+			if [[ "$step" == opensim ]]; then
+				local apt_candidates
+				apt_candidates=$(deploy_command exec "$name" sh -c '
+					for package in bash-tools opensim opensim-cli opensim-engine opensim-helpers opensim-rest-php; do
+						candidate=$(apt-cache policy "$package" 2>/dev/null | awk '/Candidate:/ { print $2 }')
+						printf "%s=%s\n" "$package" "${candidate:-missing}"
+					done
+				' 2>/dev/null) || apt_candidates=
+				if [[ -n "$apt_candidates" ]]; then
+					install_stamp+=":$(printf '%s\n' "$apt_candidates" | shasum -a 256 | awk '{print $1}')"
+				else
+					install_stamp=
+				fi
+			fi
 			installed_stamp=$(deploy_command exec "$name" sh -c 'cat /var/tmp/opensim-deploy-install-stamp 2>/dev/null' 2>/dev/null) || installed_stamp=
 		fi
-		if [[ "$execute_install" == 1 && "$DEPLOY_EPHEMERAL" != 1 && "$installed_stamp" == "$install_stamp" ]] && [[ "$step" == opensim || ( "$DEPLOY_INSTALL_MODE" == single && "$step" == dependencies ) ]] && deploy_installation_is_current "$name"; then
+		if [[ "$step" == opensim && "$execute_install" == 1 && "$DEPLOY_EPHEMERAL" != 1 && -n "$install_stamp" && "$installed_stamp" == "$install_stamp" ]] && deploy_installation_is_current "$name"; then
 			bashunit::skip "$DEPLOY_PLATFORM package set already installed"
 			return
 		fi

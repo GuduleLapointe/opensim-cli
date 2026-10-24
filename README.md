@@ -61,6 +61,12 @@ This machine
 - [ ] rest --url http://HOST:PORT --user USER (-- <command> | - | --repl)
 - [x] install-dotnet install the .NET runtime OpenSim needs (as root)
 
+Builds
+
+- [x] apt (tested on debian 12 and 13, ubuntu 24.04 and 26.04, should work on other debian variants)
+- [x] zip (universal)
+- [ ] homebrew
+
 ## Usage
 
 ```bash
