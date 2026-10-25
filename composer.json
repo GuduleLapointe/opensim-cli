@@ -11,7 +11,7 @@
     ],
     "require": {
         "magicoli/bash-tools": "@dev",
-        "magicoli/container-tools": "dev-master",
+        "magicoli/container-tools": "@dev",
         "magicoli/opensim-engine": "@dev",
         "magicoli/opensim-rest-php": "@dev",
         "magicoli/build-tools": "@dev"
@@ -29,17 +29,6 @@
             }
         },
         {
-            "name": "magicoli/container-tools",
-            "url": "../container-tools/",
-            "type": "path",
-            "options": {
-                "symlink": true,
-                "versions": {
-                    "magicoli/container-tools": "dev-master"
-                }
-            }
-        },
-        {
             "name": "magicoli/build-tools",
             "url": "../build-tools/",
             "type": "path",
@@ -50,6 +39,14 @@
         {
             "name": "magicoli/opensim-engine",
             "url": "../opensim-engine/",
+            "type": "path",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "name": "magicoli/container-tools",
+            "url": "../container-tools/",
             "type": "path",
             "options": {
                 "symlink": true
