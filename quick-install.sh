@@ -20,6 +20,7 @@
 #           --mariadb | --mysql   install/configure the requested SQL server
 #           --dotnet              install the .NET runtime without OpenSim packages
 #           --opensim             install OpenSimulator and its management packages (or prepare the clone)
+#           --remote SSH_TARGET   run this installation on a server over SSH
 # Environment: OPENSIM_KIT_DEBS=folder       install packages (*.deb) from a local folder
 #             OPENSIM_KIT_APT_DIST=charm-tests select the unsigned test distribution (default: charm)
 #             OPENSIM_KIT_APT_COMPONENT=dev    select its component (default: stable, or dev for charm-tests)
@@ -83,6 +84,8 @@ INSTALL_PHASE=all
 DATABASE_CHOICE=mariadb
 PHASE_SELECTED=no
 RUN_CLEANUP=no
+REMOTE_TARGET=
+REMOTE_ARGS=()
 
 # === Define helper functions first ===
 
@@ -117,6 +120,26 @@ as_root() {
 	else
 		die "this needs administrator rights: run it as root, or install sudo"
 	fi
+}
+
+run_remote_install() {
+	local target=$1 source_script=${BASH_SOURCE[0]} remote_script command status quoted
+	shift
+	[[ -f "$source_script" ]] || die "--remote requires quick-install.sh to be run from a local file"
+	command -v scp >/dev/null 2>&1 || die "scp is required for --remote"
+	command -v ssh >/dev/null 2>&1 || die "ssh is required for --remote"
+	source_script=$(cd -- "$(dirname -- "$source_script")" && pwd)/$(basename -- "$source_script")
+	remote_script="/tmp/quick-install-${USER:-user}-$$-${RANDOM}.sh"
+	scp -- "$source_script" "$target:$remote_script" || die "could not copy quick-install.sh to $target"
+	printf -v command 'bash %q' "$remote_script"
+	for quoted in "$@"; do
+		printf -v quoted ' %q' "$quoted"
+		command+=$quoted
+	done
+	ssh -t "$target" "$command" || status=$?
+	status=${status:-0}
+	ssh "$target" "rm -f -- '$remote_script'" >/dev/null 2>&1 || true
+	return "$status"
 }
 
 start_setup() { # the library of the questions, then the command to run, which gets the keyboard even when this script came through a pipe
@@ -613,6 +636,17 @@ while (($#)); do
 	argument=$1
 	shift
 	case "$argument" in
+		--remote)
+			[[ -z "$REMOTE_TARGET" ]] || die "--remote can be specified only once"
+			(($#)) || die "--remote requires an SSH target"
+			REMOTE_TARGET=$1
+			shift
+			;;
+		--remote=*)
+			[[ -z "$REMOTE_TARGET" ]] || die "--remote can be specified only once"
+			REMOTE_TARGET=${argument#*=}
+			[[ -n "$REMOTE_TARGET" ]] || die "--remote requires an SSH target"
+			;;
 		-y | --yes) ASSUME_YES=yes ;;
 		--cleanup) RUN_CLEANUP=yes ;;
 	--setup) RUN_SETUP=yes ;;
@@ -639,12 +673,20 @@ while (($#)); do
 		exit 2
 		;;
 	esac
+	if [[ "$argument" != --remote && "$argument" != --remote=* ]]; then
+		REMOTE_ARGS+=("$argument")
+	fi
 done
 case "$INSTALL_PHASE" in
 	all | dependencies | mariadb | mysql | dotnet | opensim) ;;
 	*) die "invalid installation phase $INSTALL_PHASE" ;;
 esac
 [[ "$INSTALL_PHASE" == all || "$INSTALL_PHASE" == opensim ]] || [[ -z "$RUN_SETUP" ]] || die "--setup is only valid for the full install or --opensim"
+
+if [[ -n "$REMOTE_TARGET" ]]; then
+	run_remote_install "$REMOTE_TARGET" "${REMOTE_ARGS[@]}"
+	exit $?
+fi
 
 # Check if in a clone of the repository
 here=

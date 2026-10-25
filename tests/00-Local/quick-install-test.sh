@@ -29,6 +29,31 @@ function test_00_quick_install_has_valid_bash_syntax() {
 	assert_exec "bash -n '$QUICK_INSTALL'"
 }
 
+function test_remote_install_copies_script_and_forwards_install_options() {
+	quick_install_load_library || return
+	local fake_bin=$WORK/bin calls=$WORK/remote-calls
+	mkdir -p "$fake_bin"
+	cat >"$fake_bin/scp" <<'SCP'
+#!/usr/bin/env bash
+printf 'scp' >>"$CALL_LOG"
+printf ' <%s>' "$@" >>"$CALL_LOG"
+printf '\n' >>"$CALL_LOG"
+SCP
+	cat >"$fake_bin/ssh" <<'SSH'
+#!/usr/bin/env bash
+printf 'ssh' >>"$CALL_LOG"
+printf ' <%s>' "$@" >>"$CALL_LOG"
+printf '\n' >>"$CALL_LOG"
+SSH
+	chmod +x "$fake_bin/scp" "$fake_bin/ssh"
+
+	assert_exec "CALL_LOG='$calls' PATH='$fake_bin:$PATH' bash '$QUICK_INSTALL' --remote root@example.test --cleanup --opensim"
+	assert_contains 'root@example.test' "$(cat "$calls")"
+	assert_contains '--cleanup --opensim' "$(cat "$calls")"
+	assert_contains 'scp' "$(cat "$calls")"
+	assert_equals 2 "$(grep -c '^ssh ' "$calls")"
+}
+
 function test_default_source_replaces_old_magiiic_distributions_and_preserves_other_sources() {
 	quick_install_load_library || return
 	cat <<'SOURCES' >"$MAGIIIC_SOURCE_FILE"
