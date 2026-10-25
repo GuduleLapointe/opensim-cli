@@ -15,3 +15,4 @@ tests/.env
 .lerd.yaml
 .node-version
 *.log
+.DS_Store
