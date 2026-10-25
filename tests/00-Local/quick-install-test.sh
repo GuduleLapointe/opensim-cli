@@ -11,13 +11,13 @@ function quick_install_load_library() {
 	fi
 	QUICK_INSTALL_LIBRARY_ONLY=yes OPENSIM_RC=/dev/null source "$QUICK_INSTALL"
 	QUICK_INSTALL_LIBRARY_LOADED=yes
-	# write_magiiic_repositories normally installs the generated file as root.
+	# write_apt_repositories normally installs the generated file as root.
 	as_root() { "$@"; }
 }
 
 function set_up() {
 	WORK=$(mktemp -d)
-	MAGIIIC_SOURCE_FILE=$WORK/magiiic.list
+	APT_SOURCE_FILE=$WORK/magiiic.list
 	TMP=$WORK/quick-install
 }
 
@@ -47,9 +47,13 @@ printf '\n' >>"$CALL_LOG"
 SSH
 	chmod +x "$fake_bin/scp" "$fake_bin/ssh"
 
-	assert_exec "CALL_LOG='$calls' PATH='$fake_bin:$PATH' bash '$QUICK_INSTALL' --remote root@example.test --cleanup --opensim"
+	assert_exec "CALL_LOG='$calls' PATH='$fake_bin:$PATH' APT_SOURCE='deb https://packages.example.test/debian bookworm main' APT_SOURCE_TESTS='deb https://test.example.test/debian bookworm main' bash '$QUICK_INSTALL' --remote root@example.test --cleanup --opensim"
 	assert_contains 'root@example.test' "$(cat "$calls")"
 	assert_contains '--cleanup --opensim' "$(cat "$calls")"
+	assert_contains 'APT_SOURCE=deb' "$(cat "$calls")"
+	assert_contains 'packages.example.test/debian' "$(cat "$calls")"
+	assert_contains 'APT_SOURCE_TESTS=deb' "$(cat "$calls")"
+	assert_contains 'test.example.test/debian' "$(cat "$calls")"
 	assert_contains 'scp' "$(cat "$calls")"
 	assert_equals 2 "$(grep -c '^ssh ' "$calls")"
 }
@@ -72,13 +76,16 @@ CLI
 }
 
 function test_podman_install_uses_connection_image_and_forwards_install_options() {
-	local fake_bin=$WORK/tools calls=$WORK/podman-calls
+	local fake_bin=$WORK/tools calls=$WORK/podman-calls debs=$WORK/local-debs
+	mkdir -p "$debs"
 	create_container_tools_stub "$fake_bin"
-	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=ursull bash '$QUICK_INSTALL' --podman --connection=ursull --image=docker.io/library/ubuntu:24.04 --opensim --yes"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=ursull APT_SOURCE_DIR='$debs' bash '$QUICK_INSTALL' --podman --connection=ursull --image=docker.io/library/ubuntu:24.04 --opensim --yes"
 	assert_contains '<--name> <opensim>' "$(cat "$calls")"
 	assert_contains '<--connection> <ursull> <create> <--name> <opensim> <--image> <docker.io/library/ubuntu:24.04>' "$(cat "$calls")"
 	assert_contains '<cp> ' "$(cat "$calls")"
+	assert_contains '<cp> <'"$debs"'> <test-opensim:/tmp/opensim-kit-debs>' "$(cat "$calls")"
 	assert_contains '<exec> <test-opensim> <-->' "$(cat "$calls")"
+	assert_contains '<APT_SOURCE_DIR=/tmp/opensim-kit-debs>' "$(cat "$calls")"
 	assert_contains '<bash> </tmp/quick-install.sh> <--opensim> <--yes>' "$(cat "$calls")"
 }
 
@@ -136,10 +143,11 @@ function test_podman_setup_requires_interactive_container_terminal() {
 
 function test_default_source_replaces_old_magiiic_distributions_and_preserves_other_sources() {
 	quick_install_load_library || return
-	cat <<'SOURCES' >"$MAGIIIC_SOURCE_FILE"
+	cat <<'SOURCES' >"$APT_SOURCE_FILE"
 deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com stable main
 deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com unstable main
 deb [trusted=yes] https://apt.magiiic.com tests main
+deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com main stable
 deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable
 deb [trusted=yes] https://apt.magiiic.com charm-tests dev
 deb https://archive.ubuntu.com/ubuntu resolute main
@@ -147,27 +155,105 @@ SOURCES
 
 	OPENSIM_KIT_APT_DIST=charm
 	OPENSIM_KIT_APT_COMPONENT=stable
-	MAGIIIC_REPOSITORIES=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable")
-	write_magiiic_repositories "$MAGIIIC_SOURCE_FILE" "$TMP.sources"
+	APT_REPOSITORIES=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable")
+	write_apt_repositories "$APT_SOURCE_FILE" "$TMP.sources"
 
-	assert_contains 'deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable' "$(cat "$MAGIIIC_SOURCE_FILE")"
-	assert_contains 'deb [trusted=yes] https://apt.magiiic.com charm-tests dev' "$(cat "$MAGIIIC_SOURCE_FILE")"
-	assert_contains 'deb https://archive.ubuntu.com/ubuntu resolute main' "$(cat "$MAGIIIC_SOURCE_FILE")"
-	assert_not_contains 'https://apt.magiiic.com stable ' "$(cat "$MAGIIIC_SOURCE_FILE")"
-	assert_not_contains 'https://apt.magiiic.com unstable ' "$(cat "$MAGIIIC_SOURCE_FILE")"
-	assert_not_contains 'https://apt.magiiic.com tests ' "$(cat "$MAGIIIC_SOURCE_FILE")"
-	assert_not_contains 'https://apt.magiiic.com main ' "$(cat "$MAGIIIC_SOURCE_FILE")"
+	assert_contains 'deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable' "$(cat "$APT_SOURCE_FILE")"
+	assert_contains 'deb [trusted=yes] https://apt.magiiic.com charm-tests dev' "$(cat "$APT_SOURCE_FILE")"
+	assert_contains 'deb https://archive.ubuntu.com/ubuntu resolute main' "$(cat "$APT_SOURCE_FILE")"
+	assert_not_contains 'https://apt.magiiic.com stable ' "$(cat "$APT_SOURCE_FILE")"
+	assert_not_contains 'https://apt.magiiic.com unstable ' "$(cat "$APT_SOURCE_FILE")"
+	assert_not_contains 'https://apt.magiiic.com tests ' "$(cat "$APT_SOURCE_FILE")"
+	assert_not_contains 'https://apt.magiiic.com main ' "$(cat "$APT_SOURCE_FILE")"
 }
 
 function test_existing_components_are_merged_without_duplicates() {
 	quick_install_load_library || return
-	cat <<'SOURCES' >"$MAGIIIC_SOURCE_FILE"
+	cat <<'SOURCES' >"$APT_SOURCE_FILE"
 deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable
 SOURCES
-	MAGIIIC_REPOSITORIES=('deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable')
-	write_magiiic_repositories "$MAGIIIC_SOURCE_FILE" "$TMP.sources"
+	APT_REPOSITORIES=('deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable')
+	write_apt_repositories "$APT_SOURCE_FILE" "$TMP.sources"
 
-	assert_equals 1 "$(grep -Fc 'https://apt.magiiic.com charm stable unstable' "$MAGIIIC_SOURCE_FILE")"
+	assert_equals 1 "$(grep -Fc 'https://apt.magiiic.com charm stable unstable' "$APT_SOURCE_FILE")"
+}
+
+function test_default_apt_repository_is_charm_stable() {
+	quick_install_load_library || return
+	assert_equals 1 "${#APT_REPOSITORIES[@]}"
+	assert_equals 'deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable' "${APT_REPOSITORIES[0]}"
+}
+
+function test_apt_source_parser_accepts_multiword_options() {
+	quick_install_load_library || return
+	local source='deb [arch=amd64 signed-by=/usr/share/keyrings/example.gpg] https://packages.example.test/debian bookworm main'
+	assert_equals 3 "$(apt_source_uri_index "$source")"
+	APT_REPOSITORIES=("$source")
+	write_apt_repositories "$APT_SOURCE_FILE" "$TMP.sources"
+	assert_equals "$source" "$(cat "$APT_SOURCE_FILE")"
+}
+
+function test_apt_source_settings_build_primary_and_test_entries() {
+	local fixture=$WORK/project-sources output
+	mkdir -p "$fixture/tests"
+	cp "$QUICK_INSTALL" "$fixture/quick-install.sh"
+	cat >"$fixture/.env" <<'ENV'
+APT_SOURCE="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable"
+ENV
+	cat >"$fixture/tests/.env" <<'ENV'
+APT_SOURCE_TESTS="deb [trusted=yes] https://apt.magiiic.com charm-tests dev"
+ENV
+	output=$(QUICK_INSTALL_LIBRARY_ONLY=yes OPENSIM_RC=/dev/null bash -c 'script=$1; set -- --podman; source "$script"; printf "%s\n" "${APT_REPOSITORIES[@]}"' bash "$fixture/quick-install.sh")
+	assert_contains 'https://apt.magiiic.com charm stable unstable' "$output"
+	assert_contains 'https://apt.magiiic.com charm-tests dev' "$output"
+}
+
+function test_podman_install_loads_project_and_test_apt_repositories() {
+	local fixture=$WORK/project calls=$WORK/podman-repository-calls
+	mkdir -p "$fixture/tests" "$fixture/tools"
+	cp "$QUICK_INSTALL" "$fixture/quick-install.sh"
+	cat >"$fixture/.env" <<'ENV'
+APT_SOURCE="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable"
+ENV
+	cat >"$fixture/tests/.env" <<'ENV'
+APT_SOURCE_TESTS="deb [trusted=yes] https://apt.magiiic.com charm-tests dev"
+ENV
+	create_container_tools_stub "$fixture/tools"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fixture/tools/container-tools' OPENSIM_RC=/dev/null bash '$fixture/quick-install.sh' --podman --yes"
+	local output
+	output=$(cat "$calls")
+	assert_contains 'apt.magiiic.com charm stable unstable' "$output"
+	assert_contains 'apt.magiiic.com charm-tests dev' "$output"
+}
+
+function test_podman_caller_apt_repositories_override_test_environment() {
+	local fixture=$WORK/project-override calls=$WORK/podman-repository-override-calls
+	mkdir -p "$fixture/tests" "$fixture/tools"
+	cp "$QUICK_INSTALL" "$fixture/quick-install.sh"
+	cat >"$fixture/tests/.env" <<'ENV'
+APT_SOURCE="deb https://packages.example.test/debian bookworm main"
+ENV
+	create_container_tools_stub "$fixture/tools"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fixture/tools/container-tools' OPENSIM_RC=/dev/null APT_SOURCE='deb https://caller.example.test/debian trixie main' bash '$fixture/quick-install.sh' --podman --yes"
+	assert_contains 'caller.example.test/debian trixie main' "$(cat "$calls")"
+	assert_not_contains 'packages.example.test' "$(cat "$calls")"
+}
+
+function test_custom_apt_source_does_not_fetch_magiiic_signing_key() {
+	quick_install_load_library || return
+	local key_downloaded=no
+	APT_REPOSITORIES=('deb https://packages.example.test/debian bookworm main')
+	APT_SOURCE_FILE=$WORK/custom.list
+	PACKAGE_SOURCES_READY=no
+	apt-get() { return 0; }
+	dpkg-query() { printf 'installed\n'; }
+	apt_update() { return 0; }
+	as_root() { return 0; }
+	uname() { printf 'Linux\n'; }
+	curl() { key_downloaded=yes; return 1; }
+	configure_package_sources
+	unset -f apt-get dpkg-query apt_update as_root uname curl
+	assert_equals no "$key_downloaded"
 }
 
 function test_dotnet_phase_requests_libgdiplus_directly_from_apt_when_missing() {

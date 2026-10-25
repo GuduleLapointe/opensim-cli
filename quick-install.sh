@@ -27,12 +27,26 @@
 #           --connection NAME     use a configured Podman connection; local|none forces local Podman
 #           --image IMAGE         container image (default: $OPENSIM_CONTAINER_IMAGE or Ubuntu 26.04)
 #           --config FILE         quick setup answers in JSON
-# Environment: OPENSIM_KIT_DEBS=folder       install packages (*.deb) from a local folder
-#             OPENSIM_KIT_APT_DIST=charm-tests select the unsigned test distribution (default: charm)
-#             OPENSIM_KIT_APT_COMPONENT=dev    select its component (default: stable, or dev for charm-tests)
+# Environment: APT_SOURCE_DIR=folder         install local packages (*.deb) from a folder
+#             APT_SOURCE=...                  complete primary APT source line (default: charm stable)
+#             APT_SOURCE_TESTS=...            optional additional APT source line
+#             OPENSIM_KIT_APT_DIST=...         legacy distribution override
+#             OPENSIM_KIT_APT_COMPONENT=...    legacy component override
 #             OPENSIM_CONTAINER_IMAGE=IMAGE    default image for --podman (Ubuntu 26.04)
 
 set -euo pipefail
+
+apt_source_uri_index() {
+	local source=$1 index
+	local -a fields
+	read -r -a fields <<<"$source"
+	for ((index = 1; index < ${#fields[@]}; index++)); do
+		case "${fields[$index]}" in
+			http://* | https://* | ftp://* | file:* | cdrom:*) printf '%s\n' "$index"; return 0 ;;
+		esac
+	done
+	return 1
+}
 
 INSTALLER_HOME=${HOME:-/root}
 if [[ -n "${SUDO_USER:-}" && "$SUDO_USER" != root ]] && command -v getent >/dev/null 2>&1; then
@@ -43,6 +57,12 @@ OPENSIM_KIT_APT_DIST_WAS_SET=${OPENSIM_KIT_APT_DIST+x}
 OPENSIM_KIT_APT_DIST_FROM_ENV=${OPENSIM_KIT_APT_DIST:-}
 OPENSIM_KIT_APT_COMPONENT_WAS_SET=${OPENSIM_KIT_APT_COMPONENT+x}
 OPENSIM_KIT_APT_COMPONENT_FROM_ENV=${OPENSIM_KIT_APT_COMPONENT:-}
+APT_SOURCE_WAS_SET=${APT_SOURCE+x}
+APT_SOURCE_FROM_ENV=${APT_SOURCE:-}
+APT_SOURCE_TESTS_WAS_SET=${APT_SOURCE_TESTS+x}
+APT_SOURCE_TESTS_FROM_ENV=${APT_SOURCE_TESTS:-}
+APT_SOURCE_DIR_WAS_SET=${APT_SOURCE_DIR+x}
+APT_SOURCE_DIR_FROM_ENV=${APT_SOURCE_DIR:-}
 CONTAINER_CONNECTION_WAS_SET=${CONTAINER_CONNECTION+x}
 CONTAINER_CONNECTION_FROM_ENV=${CONTAINER_CONNECTION:-}
 CONTAINER_HOST_WAS_SET=${CONTAINER_HOST+x}
@@ -50,10 +70,20 @@ CONTAINER_HOST_FROM_ENV=${CONTAINER_HOST:-}
 OPENSIM_CONTAINER_IMAGE_WAS_SET=${OPENSIM_CONTAINER_IMAGE+x}
 OPENSIM_CONTAINER_IMAGE_FROM_ENV=${OPENSIM_CONTAINER_IMAGE:-}
 
-for file in "${1:+$1/.env}" "$OPENSIM_RC_PATH"; do
+SCRIPT_DIR=
+if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
+	SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+fi
+for file in "$SCRIPT_DIR/.env" "$OPENSIM_RC_PATH"; do
 	# shellcheck disable=SC1090
 	[[ -n "$file" && -r "$file" ]] && source "$file"
 done
+# Podman installs are also used by the compatibility suite. Let its ignored
+# config add test repositories, with explicit caller environment taking priority.
+if [[ " ${*:-} " == *" --podman "* && -n "$SCRIPT_DIR" && -r "$SCRIPT_DIR/tests/.env" ]]; then
+	# shellcheck disable=SC1090
+	source "$SCRIPT_DIR/tests/.env"
+fi
 if [[ "$CONTAINER_CONNECTION_WAS_SET" == x ]]; then CONTAINER_CONNECTION=$CONTAINER_CONNECTION_FROM_ENV; fi
 if [[ "$CONTAINER_HOST_WAS_SET" == x ]]; then CONTAINER_HOST=$CONTAINER_HOST_FROM_ENV; fi
 if [[ "$OPENSIM_CONTAINER_IMAGE_WAS_SET" == x ]]; then OPENSIM_CONTAINER_IMAGE=$OPENSIM_CONTAINER_IMAGE_FROM_ENV; fi
@@ -68,11 +98,16 @@ fi
 if [[ "$OPENSIM_KIT_APT_COMPONENT_WAS_SET" == x ]]; then
 	OPENSIM_KIT_APT_COMPONENT=$OPENSIM_KIT_APT_COMPONENT_FROM_ENV
 fi
+if [[ "$APT_SOURCE_WAS_SET" == x ]]; then APT_SOURCE=$APT_SOURCE_FROM_ENV; fi
+if [[ "$APT_SOURCE_TESTS_WAS_SET" == x ]]; then APT_SOURCE_TESTS=$APT_SOURCE_TESTS_FROM_ENV; fi
+if [[ "$APT_SOURCE_DIR_WAS_SET" == x ]]; then APT_SOURCE_DIR=$APT_SOURCE_DIR_FROM_ENV; fi
 unset OPENSIM_KIT_APT_DIST_WAS_SET OPENSIM_KIT_APT_DIST_FROM_ENV
 unset OPENSIM_KIT_APT_COMPONENT_WAS_SET OPENSIM_KIT_APT_COMPONENT_FROM_ENV
+unset APT_SOURCE_WAS_SET APT_SOURCE_FROM_ENV APT_SOURCE_TESTS_WAS_SET APT_SOURCE_TESTS_FROM_ENV
+unset APT_SOURCE_DIR_WAS_SET APT_SOURCE_DIR_FROM_ENV
 
 MAGIIIC_KEY=https://apt.magiiic.com/magiiic-packaging.asc
-MAGIIIC_SOURCE_FILE=${MAGIIIC_SOURCE_FILE:-/etc/apt/sources.list.d/magiiic.list}
+APT_SOURCE_FILE=${APT_SOURCE_FILE:-/etc/apt/sources.list.d/magiiic.list}
 OPENSIM_KIT_APT_DIST=${OPENSIM_KIT_APT_DIST:-charm}
 if [[ -z "${OPENSIM_KIT_APT_COMPONENT:-}" ]]; then
 	if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
@@ -81,20 +116,32 @@ if [[ -z "${OPENSIM_KIT_APT_COMPONENT:-}" ]]; then
 		OPENSIM_KIT_APT_COMPONENT=stable
 	fi
 fi
-MAGIIIC_REPOSITORIES=()
-if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
-	MAGIIIC_REPOSITORIES+=("deb [trusted=yes] https://apt.magiiic.com charm-tests $OPENSIM_KIT_APT_COMPONENT")
-	# Test packages may depend on released OpenSim packages. Keep their signed
-	# stable and unstable components available while testing charm-tests/dev.
-	MAGIIIC_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable")
+APT_REPOSITORIES=()
+
+if [[ -n "${APT_SOURCE:-}" ]]; then
+	APT_REPOSITORIES+=("$APT_SOURCE")
+	if [[ -n "${APT_SOURCE_TESTS:-}" ]]; then APT_REPOSITORIES+=("$APT_SOURCE_TESTS"); fi
 else
-	MAGIIIC_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $OPENSIM_KIT_APT_DIST $OPENSIM_KIT_APT_COMPONENT")
+	if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
+		APT_REPOSITORIES+=("deb [trusted=yes] https://apt.magiiic.com charm-tests $OPENSIM_KIT_APT_COMPONENT")
+		APT_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable")
+	else
+		APT_SOURCE="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $OPENSIM_KIT_APT_DIST $OPENSIM_KIT_APT_COMPONENT"
+		APT_REPOSITORIES+=("$APT_SOURCE")
+	fi
 fi
+for repository in "${APT_REPOSITORIES[@]}"; do
+	read -r -a fields <<<"$repository"
+	if [[ "${fields[0]:-}" != deb && "${fields[0]:-}" != deb-src ]] || ! uri_index=$(apt_source_uri_index "$repository") || (( ${#fields[@]} <= uri_index + 1 )); then
+		printf 'quick-install: [ERROR] invalid APT source line: %s\n' "$repository" >&2
+		exit 1
+	fi
+done
 # What the tools need on a machine that does not have the packages (a clone): the same as the package opensim-tools
 PHP_PACKAGES=(php-cli php-curl php-intl php-mbstring php-mysql php-xml)
 OPENSIM_PACKAGES=(opensim opensim-cli opensim-helpers)
 
-OPENSIM_KIT_DEBS=${OPENSIM_KIT_DEBS:-}
+APT_SOURCE_DIR=${APT_SOURCE_DIR:-}
 ASSUME_YES=${ASSUME_YES:-}
 RUN_SETUP=${RUN_SETUP:-}
 DPKG_CONFIGURED=no
@@ -163,7 +210,7 @@ run_remote_install() {
 	source_script=$(cd -- "$(dirname -- "$source_script")" && pwd)/$(basename -- "$source_script")
 	remote_script="/tmp/quick-install-$$-${RANDOM}.sh"
 	scp -- "$source_script" "$target:$remote_script" || die "could not copy quick-install.sh to $target"
-	printf -v command 'bash %q' "$remote_script"
+	printf -v command 'env APT_SOURCE=%q APT_SOURCE_TESTS=%q bash %q' "${APT_SOURCE:-}" "${APT_SOURCE_TESTS:-}" "$remote_script"
 	for quoted in "$@"; do
 		printf -v quoted ' %q' "$quoted"
 		command+=$quoted
@@ -202,13 +249,14 @@ run_podman_install() {
 	say "Install OpenSim in container $name"
 	run_container_tool cp "$source_script" "$name:/tmp/quick-install.sh" || die "could not copy quick-install.sh to container $name"
 	run_container_tool cp "$SETUP_CONFIG_FILE" "$name:/tmp/opensim-setup.json" || die "could not copy setup config to container $name"
-	if [[ -n "$OPENSIM_KIT_DEBS" ]]; then
-		[[ -d "$OPENSIM_KIT_DEBS" ]] || die "OPENSIM_KIT_DEBS must be a local directory when installing in a container"
+	if [[ -n "$APT_SOURCE_DIR" ]]; then
+		[[ -d "$APT_SOURCE_DIR" ]] || die "APT_SOURCE_DIR must be a local directory when installing in a container"
 		debs_in_container=/tmp/opensim-kit-debs
-		run_container_tool cp "$OPENSIM_KIT_DEBS" "$name:$debs_in_container" || die "could not copy local packages to container $name"
-		environment+=(OPENSIM_KIT_DEBS="$debs_in_container")
+		run_container_tool cp "$APT_SOURCE_DIR" "$name:$debs_in_container" || die "could not copy local packages to container $name"
+		environment+=(APT_SOURCE_DIR="$debs_in_container")
 	fi
 	environment+=(OPENSIM_KIT_APT_DIST="$OPENSIM_KIT_APT_DIST" OPENSIM_KIT_APT_COMPONENT="$OPENSIM_KIT_APT_COMPONENT")
+	environment+=(APT_SOURCE="${APT_SOURCE:-}" APT_SOURCE_TESTS="${APT_SOURCE_TESTS:-}")
 	environment+=(OPENSIM_SETUP_CONFIG_FILE=/tmp/opensim-setup.json)
 	[[ -z "$ASSUME_YES" ]] || environment+=(ASSUME_YES="$ASSUME_YES")
 	[[ -z "$RUN_SETUP" ]] || environment+=(RUN_SETUP="$RUN_SETUP")
@@ -361,23 +409,37 @@ apt_accessible_local_repository() {
 }
 
 merge_magiiic_repository_components() {
-	local repository=$1 source_file=$MAGIIIC_SOURCE_FILE
+	local repository=$1 source_file=$APT_SOURCE_FILE
 	local -a fields components
-	local component existing_components
+	local component existing_components uri_index
 	local -A seen_components=()
 
 	read -r -a fields <<<"$repository"
-	# The repository lines generated above have one option field, then URI and distribution.
-	[[ ${#fields[@]} -ge 5 && "${fields[0]}" == deb ]] || {
+	[[ "${fields[0]:-}" == deb || "${fields[0]:-}" == deb-src ]] || {
+		printf '%s\n' "$repository"
+		return
+	}
+	uri_index=$(apt_source_uri_index "$repository") || {
+		printf '%s\n' "$repository"
+		return
+	}
+	if [[ "${fields[$uri_index]:-}" != https://apt.magiiic.com ]]; then
+		printf '%s\n' "$repository"
+		return
+	fi
+	(( ${#fields[@]} > uri_index + 2 )) || {
 		printf '%s\n' "$repository"
 		return
 	}
 
-	components=("${fields[@]:4}")
-	existing_components=$(awk -v distribution="${fields[3]}" '
+	components=("${fields[@]:$((uri_index + 2))}")
+	existing_components=$(awk -v distribution="${fields[$((uri_index + 1))]}" '
 		$1 == "deb" {
 			uri_index = 2
-			if ($2 ~ /^\[/) uri_index++
+			if ($2 ~ /^\[/) {
+				while (uri_index < NF && $uri_index !~ /\]$/) uri_index++
+				uri_index++
+			}
 			if ($(uri_index) == "https://apt.magiiic.com" && $(uri_index + 1) == distribution) {
 				for (field = uri_index + 2; field <= NF; field++) print $field
 			}
@@ -393,18 +455,23 @@ merge_magiiic_repository_components() {
 		seen_components[$component]=1
 		unique_components+=("$component")
 	done
-	printf '%s %s %s %s' "${fields[0]}" "${fields[1]}" "${fields[2]}" "${fields[3]}"
+	printf '%s' "${fields[0]}"
+	for ((component = 1; component < uri_index + 2; component++)); do
+		printf ' %s' "${fields[$component]}"
+	done
 	printf ' %s' "${unique_components[@]}"
 	printf '\n'
 }
 
-write_magiiic_repositories() {
+write_apt_repositories() {
 	local source_file=$1 temporary_file=$2 repository distribution
 	local desired_distributions=''
 	local -a fields
-	for repository in "${MAGIIIC_REPOSITORIES[@]}"; do
+	for repository in "${APT_REPOSITORIES[@]}"; do
 		read -r -a fields <<<"$repository"
-		desired_distributions+=" ${fields[3]}"
+		local uri_index
+		uri_index=$(apt_source_uri_index "$repository") || return $?
+		desired_distributions+=" ${fields[$((uri_index + 1))]:-}"
 	done
 	if [[ -r "$source_file" ]]; then
 		awk -v desired_distributions="$desired_distributions" '
@@ -417,12 +484,15 @@ write_magiiic_repositories() {
 					next
 				}
 				uri_index = 2
-				if ($2 ~ /^\[/) uri_index++
+				if ($2 ~ /^\[/) {
+					while (uri_index < NF && $uri_index !~ /\]$/) uri_index++
+					uri_index++
+				}
 				uri = $(uri_index)
 				distribution = $(uri_index + 1)
 				if (uri ~ /^file:/) next
 				if (uri == "https://apt.magiiic.com") {
-					if (distribution == "stable" || distribution == "unstable" || distribution == "tests") next
+					if (distribution == "main" || distribution == "stable" || distribution == "unstable" || distribution == "tests") next
 					for (i = 1; i <= desired_count; i++) {
 						if (distribution == desired[i]) next
 					}
@@ -433,7 +503,7 @@ write_magiiic_repositories() {
 	else
 		: >"$temporary_file" || return $?
 	fi
-	for repository in "${MAGIIIC_REPOSITORIES[@]}"; do
+	for repository in "${APT_REPOSITORIES[@]}"; do
 		merge_magiiic_repository_components "$repository" >>"$temporary_file" || return $?
 	done
 	[[ -z "${apt_debs:-}" ]] || printf 'deb [trusted=yes] file:%s ./\n' "$apt_debs" >>"$temporary_file"
@@ -444,11 +514,11 @@ configure_package_sources() {
 	[[ "$PACKAGE_SOURCES_READY" == yes ]] && return 0
 	[[ $(uname -s) == Linux ]] || die "packages are for Debian and Ubuntu"
 	command -v apt-get >/dev/null 2>&1 || die "no apt-get here: this works on Debian and Ubuntu"
-	local source_file=$MAGIIIC_SOURCE_FILE
+	local source_file=$APT_SOURCE_FILE
 	local -a bootstrap_packages=(ca-certificates curl gpg openssl)
 	local package local_debs= refresh_local_index=no
-	if [[ -n "$OPENSIM_KIT_DEBS" ]]; then
-		local_debs=$(cd "$OPENSIM_KIT_DEBS" && pwd) || die "$OPENSIM_KIT_DEBS is not a folder"
+	if [[ -n "$APT_SOURCE_DIR" ]]; then
+		local_debs=$(cd "$APT_SOURCE_DIR" && pwd) || die "$APT_SOURCE_DIR is not a folder"
 		if [[ ! -s "$local_debs/Packages.gz" ]] || [[ $(ls -rt "$local_debs"/*.deb "$local_debs/Packages.gz" 2>/dev/null | tail -n 1) != "$local_debs/Packages.gz" ]]; then
 			refresh_local_index=yes
 			command -v dpkg-scanpackages >/dev/null 2>&1 || bootstrap_packages+=(dpkg-dev)
@@ -478,7 +548,7 @@ configure_package_sources() {
 	local apt_debs=
 	[[ "$OPENSIM_KIT_APT_DIST" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid OPENSIM_KIT_APT_DIST: $OPENSIM_KIT_APT_DIST"
 	[[ "$OPENSIM_KIT_APT_COMPONENT" =~ ^[A-Za-z0-9._-]+$ ]] || die "invalid OPENSIM_KIT_APT_COMPONENT: $OPENSIM_KIT_APT_COMPONENT"
-	if [[ -n "$OPENSIM_KIT_DEBS" ]]; then
+	if [[ -n "$APT_SOURCE_DIR" ]]; then
 		say "Use local packages from $local_debs"
 		if [[ "$refresh_local_index" == yes ]]; then
 			say "Refresh the local package index"
@@ -486,10 +556,14 @@ configure_package_sources() {
 		fi
 		apt_debs=$(apt_accessible_local_repository "$local_debs") || return $?
 	fi
-	if [[ ! -s /usr/share/keyrings/magiiic-packaging.gpg ]]; then
+	local needs_magiiic_key=no
+	for repository in "${APT_REPOSITORIES[@]}"; do
+		[[ "$repository" == *https://apt.magiiic.com* ]] && needs_magiiic_key=yes
+	done
+	if [[ "$needs_magiiic_key" == yes && ! -s /usr/share/keyrings/magiiic-packaging.gpg ]]; then
 		curl -fsSL "$MAGIIIC_KEY" | as_root gpg --dearmor --yes -o /usr/share/keyrings/magiiic-packaging.gpg || return $?
 	fi
-	write_magiiic_repositories "$source_file" "$TMP.magiiic.sources" || return $?
+	write_apt_repositories "$source_file" "$TMP.magiiic.sources" || return $?
 	APT_UPDATED=no
 	apt_update || return $?
 	PACKAGE_SOURCES_READY=yes
@@ -740,7 +814,7 @@ phase_cleanup() {
 }
 
 phase_opensim() {
-	if [[ -n "$clone" && -z "$OPENSIM_KIT_DEBS" ]]; then
+	if [[ -n "$clone" && -z "$APT_SOURCE_DIR" ]]; then
 		say "Use OpenSim from clone $clone"
 		php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || die "PHP 8.2 or newer is needed"
 		[[ -f "$clone/vendor/autoload.php" ]] || (cd "$clone" && composer install --no-dev --no-interaction --prefer-dist)
