@@ -22,6 +22,7 @@ See `./quick-install.sh --help` for other options.
 - PHP CLI 8.2+ with cURL, intl, mbstring, MySQL and XML extensions
 - `jq`
 - MySQL or MariaDB server and client
+- Root access or `sudo`
 - Podman and `podman-compose` (container support)
 - `dialog` (optional; plain prompts are supported)
 
@@ -35,6 +36,7 @@ See `./quick-install.sh --help` for other options.
 - [x] multi-platform testing through `container-tools` on Podman
 - [ ] install as podman container
 - [ ] install as docker container
+- [ ] remote shortcut to install on a distant server
 - [ ] advanced/expert install
 - [ ] support Homebrew (macos)
 - [ ] support [Alpine container](https://hub.docker.com/r/soupbowl/opensimulator)
