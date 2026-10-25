@@ -75,16 +75,39 @@ function test_podman_install_uses_connection_image_and_forwards_install_options(
 	local fake_bin=$WORK/tools calls=$WORK/podman-calls
 	create_container_tools_stub "$fake_bin"
 	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=ursull bash '$QUICK_INSTALL' --podman --connection=ursull --image=docker.io/library/ubuntu:24.04 --opensim --yes"
-	assert_contains '<--connection> <ursull> <create> <--image> <docker.io/library/ubuntu:24.04>' "$(cat "$calls")"
+	assert_contains '<--name> <opensim>' "$(cat "$calls")"
+	assert_contains '<--connection> <ursull> <create> <--name> <opensim> <--image> <docker.io/library/ubuntu:24.04>' "$(cat "$calls")"
 	assert_contains '<cp> ' "$(cat "$calls")"
 	assert_contains '<exec> <test-opensim> <-->' "$(cat "$calls")"
 	assert_contains '<bash> </tmp/quick-install.sh> <--opensim> <--yes>' "$(cat "$calls")"
 }
 
+function test_podman_config_names_container_and_is_copied_for_setup() {
+	local fake_bin=$WORK/tools calls=$WORK/podman-config-calls config=$WORK/setup.json
+	create_container_tools_stub "$fake_bin"
+cat >"$config" <<'JSON'
+{"type":"standalone","name":"Ile de Re"}
+JSON
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --config '$config' --connection=local --opensim"
+	assert_contains '<--name> <ile-de-re>' "$(cat "$calls")"
+	assert_contains '<cp> <'"$config"'> <test-opensim:/tmp/opensim-setup.json>' "$(cat "$calls")"
+	assert_contains '<OPENSIM_SETUP_CONFIG_FILE=/tmp/opensim-setup.json>' "$(cat "$calls")"
+}
+
+function test_podman_config_rejects_missing_setup_identity_before_create() {
+	local fake_bin=$WORK/tools calls=$WORK/podman-bad-config-calls config=$WORK/setup.json status=0 output
+	create_container_tools_stub "$fake_bin"
+	printf '{"type":"grid"}\n' >"$config"
+	output=$(CALL_LOG="$calls" CONTAINER_TOOLS_CLI="$fake_bin/container-tools" OPENSIM_RC=/dev/null bash "$QUICK_INSTALL" --podman --config "$config" 2>&1) || status=$?
+	assert_not_equals 0 "$status"
+	assert_contains 'invalid setup config' "$output"
+	assert_not_contains '<create>' "$(cat "$calls" 2>/dev/null || true)"
+}
+
 function test_podman_connection_local_forces_local_engine() {
 	local fake_bin=$WORK/tools calls=$WORK/podman-local-calls
 	create_container_tools_stub "$fake_bin"
-	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=ursull bash '$QUICK_INSTALL' --podman --connection=local"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=ursull bash '$QUICK_INSTALL' --podman --connection=local --yes"
 	assert_contains 'connection=<unset>' "$(cat "$calls")"
 	assert_contains '<--image> <docker.io/library/ubuntu:26.04>' "$(cat "$calls")"
 	assert_not_contains '<--connection>' "$(cat "$calls")"
@@ -97,7 +120,7 @@ function test_podman_environment_overrides_opensimrc() {
 CONTAINER_CONNECTION=other
 OPENSIM_CONTAINER_IMAGE=docker.io/library/ubuntu:24.04
 RC
-	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC='$rc' CONTAINER_CONNECTION=ursull OPENSIM_CONTAINER_IMAGE=docker.io/library/debian:13-slim bash '$QUICK_INSTALL' --podman"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC='$rc' CONTAINER_CONNECTION=ursull OPENSIM_CONTAINER_IMAGE=docker.io/library/debian:13-slim bash '$QUICK_INSTALL' --podman --yes"
 	assert_contains 'connection=ursull' "$(cat "$calls")"
 	assert_contains '<--image> <docker.io/library/debian:13-slim>' "$(cat "$calls")"
 }
@@ -163,5 +186,23 @@ function test_dotnet_phase_requests_libgdiplus_directly_from_apt_when_missing() 
 	phase_dotnet
 	assert_contains 'dotnet-runtime-10.0' "$installed_packages"
 	assert_contains 'libgdiplus' "$installed_packages"
+}
+
+function test_dotnet_runtime_detection_accepts_apt_candidate_with_pipefail() {
+	quick_install_load_library || return
+	local runtime= status=0 line
+	apt-cache() {
+		case "$1" in
+		pkgnames) printf 'dotnet-runtime-10.0\n' ;;
+		policy)
+			printf 'dotnet-runtime-10.0:\n  Installed: (none)\n  Candidate: 10.0.13-0ubuntu1~26.04.1\n  Version table:\n'
+			for ((line = 0; line < 4096; line++)); do printf '    available version %s\n' "$line"; done
+			;;
+		esac
+	}
+	runtime=$(dotnet_runtime_package) || status=$?
+	unset -f apt-cache
+	assert_equals 0 "$status"
+	assert_equals 'dotnet-runtime-10.0' "$runtime"
 }
 

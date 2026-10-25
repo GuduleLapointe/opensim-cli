@@ -5,6 +5,7 @@
 # Run with: composer test
 
 OPENSIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bin/opensim"
+SETUP_CONFIG=
 
 # The screens of the engine, as it gives them
 MENU='{"data":{"attributes":{"action":"screen","kind":"menu","name":"type","title":"OpenSim setup","text":"","notice":"","items":[{"key":"grid","label":"Grid","note":""},{"key":"standalone","label":"Standalone","note":""},{"key":"speculoos","label":"Speculoos","note":"not implemented"}],"value":"","buttons":{"next":"OK","back":"Quit"},"state":"s1"}}}'
@@ -52,7 +53,11 @@ function setup_with() {
 	(
 		exec 7<"$WORK/answers"
 		export FE_INPUT_FD=7 FE_TTY="$WORK/none" OPENSIM_SETUP_UI=plain
-		"$OPENSIM" setup 2>&1
+		if [[ -n "$SETUP_CONFIG" ]]; then
+			"$OPENSIM" setup --config "$SETUP_CONFIG" 2>&1
+		else
+			"$OPENSIM" setup 2>&1
+		fi
 	)
 }
 
@@ -100,6 +105,22 @@ function test_setup_screens_drawn_and_sent_back_filled() {
 	assert_equals "s4" "$(request 5 .state)"
 	assert_equals "next" "$(request 5 .button)"
 	assert_equals 5 "$(grep -c '' "$ENGINE_LOG")"
+}
+
+function test_setup_config_selects_type_and_prefills_answers() {
+	local out
+	SETUP_CONFIG=$WORK/setup.json
+	cat >"$WORK/setup.json" <<'JSON'
+{"type":"grid","name":"Config Grid","password":"secret-pass","hypergrid":false}
+JSON
+	engine_says "$MENU" "$FORM" "$CHECKS" "$REVIEW" "$QUIT"
+	out=$(setup_with '' no no '')
+	assert_contains 'Grid name:  Amy' "$out"
+	assert_equals 'grid' "$(request 2 '.answers.type')"
+	assert_equals 'Config Grid' "$(request 3 '.answers.name')"
+	assert_equals 'secret-pass' "$(request 3 '.answers.password')"
+	assert_equals false "$(request 4 '.answers.hypergrid')"
+	SETUP_CONFIG=
 }
 
 function test_setup_screens_mark_unimplemented_options_properly() {

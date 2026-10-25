@@ -26,6 +26,7 @@
 #           --podman              install in a persistent Podman container
 #           --connection NAME     use a configured Podman connection; local|none forces local Podman
 #           --image IMAGE         container image (default: $OPENSIM_CONTAINER_IMAGE or Ubuntu 26.04)
+#           --config FILE         quick setup answers in JSON
 # Environment: OPENSIM_KIT_DEBS=folder       install packages (*.deb) from a local folder
 #             OPENSIM_KIT_APT_DIST=charm-tests select the unsigned test distribution (default: charm)
 #             OPENSIM_KIT_APT_COMPONENT=dev    select its component (default: stable, or dev for charm-tests)
@@ -113,6 +114,9 @@ PODMAN_IMAGE=${OPENSIM_CONTAINER_IMAGE:-docker.io/library/ubuntu:26.04}
 PODMAN_IMAGE_SELECTED=no
 PODMAN_INSTALL_ARGS=()
 CONTAINER_TOOLS_CLI_SELECTED=
+SETUP_CONFIG_FILE=${OPENSIM_SETUP_CONFIG_FILE:-${OPENSIM_SETUP_CONFIG:-}}
+SETUP_CONFIG_TEMP=
+PODMAN_CONTAINER_NAME=
 
 # === Define helper functions first ===
 
@@ -173,6 +177,7 @@ run_remote_install() {
 run_podman_install() {
 	local source_script=${BASH_SOURCE[0]} source_dir output name status=0 debs_in_container=
 	local -a environment=()
+	prepare_podman_setup_config
 	if [[ -n "${CONTAINER_TOOLS_CLI:-}" ]]; then
 		CONTAINER_TOOLS_CLI_SELECTED=$CONTAINER_TOOLS_CLI
 	else
@@ -189,13 +194,14 @@ run_podman_install() {
 	fi
 	[[ -x "$CONTAINER_TOOLS_CLI_SELECTED" ]] || die "container-tools is not executable: $CONTAINER_TOOLS_CLI_SELECTED"
 	[[ -f "$source_script" ]] || die "--podman requires quick-install.sh to be run from a local file"
-	output=$(run_container_tool create --image "$PODMAN_IMAGE" -- sh -c 'while :; do sleep 3600; done') || status=$?
+	output=$(run_container_tool create --name "$PODMAN_CONTAINER_NAME" --image "$PODMAN_IMAGE" -- sh -c 'while :; do sleep 3600; done') || status=$?
 	printf '%s\n' "$output"
 	((status == 0)) || die "could not create the Podman container"
 	name=$(sed -n 's/^Name: //p' <<<"$output" | tail -n 1)
 	[[ -n "$name" ]] || die "container-tools did not report the created container name"
 	say "Install OpenSim in container $name"
 	run_container_tool cp "$source_script" "$name:/tmp/quick-install.sh" || die "could not copy quick-install.sh to container $name"
+	run_container_tool cp "$SETUP_CONFIG_FILE" "$name:/tmp/opensim-setup.json" || die "could not copy setup config to container $name"
 	if [[ -n "$OPENSIM_KIT_DEBS" ]]; then
 		[[ -d "$OPENSIM_KIT_DEBS" ]] || die "OPENSIM_KIT_DEBS must be a local directory when installing in a container"
 		debs_in_container=/tmp/opensim-kit-debs
@@ -203,11 +209,41 @@ run_podman_install() {
 		environment+=(OPENSIM_KIT_DEBS="$debs_in_container")
 	fi
 	environment+=(OPENSIM_KIT_APT_DIST="$OPENSIM_KIT_APT_DIST" OPENSIM_KIT_APT_COMPONENT="$OPENSIM_KIT_APT_COMPONENT")
+	environment+=(OPENSIM_SETUP_CONFIG_FILE=/tmp/opensim-setup.json)
 	[[ -z "$ASSUME_YES" ]] || environment+=(ASSUME_YES="$ASSUME_YES")
 	[[ -z "$RUN_SETUP" ]] || environment+=(RUN_SETUP="$RUN_SETUP")
 	[[ -z "$DEBUG" ]] || environment+=(DEBUG="$DEBUG")
 	run_container_tool exec "$name" -- env "${environment[@]}" bash /tmp/quick-install.sh "$@" || status=$?
 	return "$status"
+}
+
+prepare_podman_setup_config() {
+	local type name slug parsed
+	if [[ -n "$SETUP_CONFIG_FILE" ]]; then
+		[[ -r "$SETUP_CONFIG_FILE" ]] || die "cannot read setup config: $SETUP_CONFIG_FILE"
+		command -v jq >/dev/null 2>&1 || die "jq is required to read the setup config"
+		type=$(jq -er '.type // .answers.type // empty' "$SETUP_CONFIG_FILE") || die "invalid setup config: expected JSON answers with type and name"
+		name=$(jq -er '.name // .answers.name // empty' "$SETUP_CONFIG_FILE") || die "invalid setup config: expected JSON answers with type and name"
+	else
+		type=${OPENSIM_SETUP_TYPE:-grid}
+		name=${OPENSIM_SETUP_NAME:-}
+		if [[ -z "$name" && -z "$ASSUME_YES" && -r /dev/tty ]]; then
+			printf 'Setup type [grid/standalone/simulator] (grid): ' >/dev/tty
+			IFS= read -r type </dev/tty || die "could not read setup type"
+			type=${type:-grid}
+			printf 'Grid or simulator name: ' >/dev/tty
+			IFS= read -r name </dev/tty || die "could not read setup name"
+		fi
+		name=${name:-OpenSim}
+		SETUP_CONFIG_TEMP="$TMP.setup.json"
+		command -v jq >/dev/null 2>&1 || die "jq is required to write the setup config"
+		jq -cn --arg type "$type" --arg name "$name" '{type:$type,name:$name}' >"$SETUP_CONFIG_TEMP" || die "could not write setup config"
+		SETUP_CONFIG_FILE=$SETUP_CONFIG_TEMP
+	fi
+	case "$type" in grid | standalone | simulator) ;; *) die "setup type must be grid, standalone, or simulator" ;; esac
+	slug=$(printf '%s' "$name" | iconv -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
+	[[ -n "$slug" ]] || die "setup name must contain letters or numbers"
+	PODMAN_CONTAINER_NAME=$slug
 }
 
 run_container_tool() {
@@ -264,7 +300,7 @@ dotnet_runtime_package() {
 	while IFS= read -r package; do
 		[[ "$package" =~ ^dotnet-runtime-([0-9]+)\.0$ ]] || continue
 		(( BASH_REMATCH[1] >= 8 )) || continue
-		if LC_ALL=C apt-cache policy "$package" 2>/dev/null | grep -Eq 'Candidate: [^()]'; then
+		if LC_ALL=C apt-cache policy "$package" 2>/dev/null | awk '$1 == "Candidate:" && $2 != "(none)" { found = 1 } END { exit !found }'; then
 			printf '%s\n' "$package"
 			return 0
 		fi
@@ -561,7 +597,7 @@ phase_database() {
 
 # Installation completed, give proper instructions and run opensim setup if RUN_SETUP=yes
 end_installation() {
-	local basedir opensim_path
+	local basedir opensim_path setup_config=${OPENSIM_SETUP_CONFIG_FILE:-$SETUP_CONFIG_FILE} setup_config_path= setup_command
 
 	if [ -n "${clone:-}" ]; then
 		basedir=$clone
@@ -569,13 +605,31 @@ end_installation() {
 		opensim_path=$(command -v opensim) || die "opensim is not available after installation"
 		basedir=$(cd "$(dirname "$(realpath "$opensim_path")")/.." && pwd) || die "could not locate the opensim installation"
 	fi
+	if [[ -n "$setup_config" && -r "$setup_config" ]]; then
+		if [[ $(uname -s) == Linux ]]; then
+			as_root mkdir -p /etc/opensim || die "could not create /etc/opensim"
+			as_root install -m 600 "$setup_config" /etc/opensim/setup.json || die "could not install the setup config"
+			if getent passwd opensim >/dev/null 2>&1; then
+				as_root chown opensim:opensim /etc/opensim/setup.json || die "could not assign the setup config to opensim"
+			fi
+			setup_config_path=/etc/opensim/setup.json
+		else
+			setup_config_path=$setup_config
+		fi
+	fi
+	setup_command="$basedir/bin/opensim setup"
+	[[ -z "$setup_config_path" ]] || setup_command+=" --config $(shell_quote "$setup_config_path")"
 	cat <<-INSTALL_COMPLETED
 		Installation completed, execute:
 		    source ${basedir}/share/bash-completion/opensim
-		    $basedir/bin/opensim setup
+		    $setup_command
 	INSTALL_COMPLETED
 	if [[ "${RUN_SETUP:-}" =~ ^(yes|true|1)$ ]]; then
-		$basedir/bin/opensim setup || die Error $? while executing opensim setup
+		if [[ -n "$setup_config_path" ]]; then
+			$basedir/bin/opensim setup --config "$setup_config_path" || die "Error $? while executing opensim setup"
+		else
+			$basedir/bin/opensim setup || die "Error $? while executing opensim setup"
+		fi
 	fi
 	exit 0
 }
@@ -708,7 +762,7 @@ fi
 PGM=$(basename "$0")
 TMP=/tmp/$PGM.$$
 DEBUG=${DEBUG:-}
-trap "rm -rf $TMP $TMP.$$" EXIT
+trap 'rm -rf "$TMP" "$TMP.$$" "$TMP.setup.json"' EXIT
 
 while (($#)); do
 	argument=$1
@@ -762,6 +816,13 @@ while (($#)); do
 		-y | --yes) ASSUME_YES=yes; PODMAN_INSTALL_ARGS+=("$argument") ;;
 		--cleanup) RUN_CLEANUP=yes; PODMAN_INSTALL_ARGS+=("$argument") ;;
 	--setup) RUN_SETUP=yes; PODMAN_INSTALL_ARGS+=("$argument") ;;
+	--config)
+		(($#)) || die "--config requires a JSON setup file"
+		[[ "$1" != -* ]] || die "--config requires a JSON setup file"
+		SETUP_CONFIG_FILE=$1
+		shift
+		;;
+	--config=*) SETUP_CONFIG_FILE=${argument#*=}; [[ -n "$SETUP_CONFIG_FILE" ]] || die "--config requires a JSON setup file" ;;
 	--dependencies | --mariadb | --mysql | --dotnet | --opensim)
 		[[ "$PHASE_SELECTED" == no ]] || die "choose only one installation phase"
 		PHASE_SELECTED=yes

@@ -8,6 +8,27 @@ HELP="Shows the screens of the engine, which asks what to set up, the few questi
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 source "$CLI_ROOT/src/lib/ui"
 
+setup_config=${OPENSIM_SETUP_CONFIG_FILE:-}
+while (($#)); do
+	case "$1" in
+		--config)
+			(($# > 1)) || die "opensim setup --config requires a JSON file"
+			setup_config=$2
+			shift 2
+			;;
+		--config=*) setup_config=${1#*=}; [[ -n "$setup_config" ]] || die "opensim setup --config requires a JSON file"; shift ;;
+		*) shift ;;
+	esac
+done
+setup_prefill='{}'
+setup_prefill_type=
+if [[ -n "$setup_config" ]]; then
+	[[ -r "$setup_config" ]] || die "cannot read setup config: $setup_config"
+	setup_prefill=$(jq -ce 'if (.answers | type) == "object" then .answers elif type == "object" then . else error("expected object") end' "$setup_config") || die "setup config must be a JSON object"
+	setup_prefill_type=$(jq -r '.type // empty' <<<"$setup_prefill")
+	[[ -z "$setup_prefill_type" || "$setup_prefill_type" =~ ^(grid|standalone|simulator)$ ]] || die "setup config type must be grid, standalone, or simulator"
+fi
+
 state= button=next answers='{}'
 errors=$(mktemp) answer=$(mktemp)
 trap 'rm -f "$errors" "$answer"' EXIT
@@ -58,8 +79,20 @@ while :; do
 	reply=$(<"$answer")
 	screen=$(jq -c '.data.attributes' 2>/dev/null <<<"$reply") && [[ "$(jq -r '.action // empty' <<<"$screen")" != "" ]] ||
 		fail_engine "$reply"
+	if [[ "$(jq -r '.action + ":" + (.kind // "")' <<<"$screen")" == screen:menu && -n "$setup_prefill_type" ]]; then
+		state=$(jq -r '.state' <<<"$screen")
+		answers=$(jq -cn --arg type "$setup_prefill_type" '{type:$type}')
+		setup_prefill_type=
+		continue
+	fi
 	case "$(jq -r .action <<<"$screen")" in
-	screen) ui_screen "$screen" ;;
+	screen)
+		case "$(jq -r .kind <<<"$screen")" in
+			form) screen=$(jq -c --argjson prefill "$setup_prefill" '.fields |= map(if ($prefill[.name] // null) != null then .value = ($prefill[.name] | tostring) else . end)' <<<"$screen") ;;
+			checks) screen=$(jq -c --argjson prefill "$setup_prefill" '.items |= map(if ($prefill[.name] // null) != null then .checked = (($prefill[.name] | tostring | ascii_downcase) == "true" or ($prefill[.name] | tostring | ascii_downcase) == "yes" or ($prefill[.name] | tostring) == "1") else . end)' <<<"$screen") ;;
+		esac
+		ui_screen "$screen"
+		;;
 	quit)
 		jq -r .message <<<"$screen"
 		exit 0
