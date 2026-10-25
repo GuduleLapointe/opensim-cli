@@ -104,19 +104,11 @@ deploy_load_platform() {
 	fi
 }
 
-deploy_skip_unless_running() {
-	local platform=$1 name state
+assert_deployment_container_running() {
+	local platform=$1 name status_command
 	name=$(deploy_name "$platform")
-	if ! deploy_select_engine || ! deploy_command status "$name" >/dev/null 2>&1; then
-		bashunit::skip "$platform not created"
-		return 0
-	fi
-	state=$(deploy_command status "$name" 2>/dev/null | sed -n 's/^Status: //p') || state=
-	if [[ "$state" != running ]]; then
-		bashunit::skip "$platform not running"
-		return 0
-	fi
-	return 1
+	printf -v status_command 'deploy_command status %q 2>&1' "$name"
+	deploy_assert_exec "$status_command" --stdout-contains 'Status: running'
 }
 
 deploy_installation_is_current() {
@@ -308,7 +300,7 @@ deploy_run_step() {
 
 	case "$step" in
 	apt_source_family | apt_source_tests | apt_source_no_main)
-		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+		if ! assert_deployment_container_running "$DEPLOY_PLATFORM"; then return; fi
 		local expected
 		case "$step" in
 		apt_source_family) expected='deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable' ;;
@@ -363,15 +355,15 @@ deploy_run_step() {
 		fi
 		;;
 	started)
-		if ! deploy_select_engine || ! deploy_command status "$name" >/dev/null 2>&1; then
-			bashunit::skip "$DEPLOY_PLATFORM container has not been created"
+		local status_command status_output current_status
+		printf -v status_command 'deploy_command status %q 2>&1' "$name"
+		if ! status_output=$(deploy_command status "$name" 2>&1); then
+			deploy_assert_exec "$status_command" --stdout-contains "Image: $DEPLOY_IMAGE"
 			return
 		fi
-		local current_status
-		current_status=$(deploy_command status "$name" 2>/dev/null | sed -n 's/^Status: //p') || current_status=
+		current_status=$(printf '%s\n' "$status_output" | sed -n 's/^Status: //p')
 		if [[ "$current_status" == running ]]; then
-			printf -v start_command 'deploy_command status %q' "$name"
-			deploy_assert_exec "$start_command" --stdout-contains 'Status: running'
+			deploy_assert_exec "$status_command" --stdout-contains 'Status: running'
 			return
 		fi
 		local start_command
@@ -380,21 +372,21 @@ deploy_run_step() {
 		return
 		;;
 	running)
-		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+		if ! assert_deployment_container_running "$DEPLOY_PLATFORM"; then return; fi
 		local running_command
 		printf -v running_command 'deploy_command status %q 2>&1' "$name"
 		deploy_assert_exec "$running_command" --stdout-contains 'Status: running'
 		return
 		;;
 	ready)
-		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+		if ! assert_deployment_container_running "$DEPLOY_PLATFORM"; then return; fi
 		local ready_command
 		printf -v ready_command 'deploy_command exec %q -- sh -c %q' "$name" 'test -r /etc/os-release && test -x /bin/sh && command -v tar >/dev/null'
 		deploy_assert_exec "$ready_command"
 		return
 		;;
 	id)
-		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+		if ! assert_deployment_container_running "$DEPLOY_PLATFORM"; then return; fi
 		local id_command id_check
 		id_check=' . /etc/os-release; if [ "${ID:-}" != "$1" ]; then printf "OS_RELEASE_MISMATCH expected ID=%s, got ID=%s\n" "$1" "${ID:-missing}" >&2; exit 1; fi'
 		printf -v id_command 'deploy_command exec %q -- sh -c %q sh %q 2>&1' "$name" "$id_check" "$DEPLOY_EXPECTED_ID"
@@ -402,7 +394,7 @@ deploy_run_step() {
 		return
 		;;
 	version)
-		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+		if ! assert_deployment_container_running "$DEPLOY_PLATFORM"; then return; fi
 		local version_command version_check
 		version_check=' . /etc/os-release; if [ "${ID:-}" != "$1" ] || [ "${VERSION_ID:-}" != "$2" ]; then printf "OS_RELEASE_MISMATCH expected ID=%s VERSION_ID=%s, got ID=%s VERSION_ID=%s\n" "$1" "$2" "${ID:-missing}" "${VERSION_ID:-missing}" >&2; exit 1; fi'
 		printf -v version_command 'deploy_command exec %q -- sh -c %q sh %q %q 2>&1' "$name" "$version_check" "$DEPLOY_EXPECTED_ID" "$DEPLOY_EXPECTED_VERSION"
@@ -410,7 +402,7 @@ deploy_run_step() {
 		return
 		;;
 	dependencies | mariadb | dotnet | opensim)
-		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+		if ! assert_deployment_container_running "$DEPLOY_PLATFORM"; then return; fi
 		local log_dir log_file install_stamp installed_stamp container_log install_step option execute_install=1
 		install_step=$step
 		if [[ "$DEPLOY_INSTALL_MODE" == single ]]; then
@@ -485,22 +477,22 @@ deploy_run_step() {
 		fi
 		;;
 	accounts)
-		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+		if ! assert_deployment_container_running "$DEPLOY_PLATFORM"; then return; fi
 		printf -v command 'deploy_command exec %q -- sh -c %q 2>&1' "$name" 'count=$(mysql -Nse "SELECT COUNT(*) FROM mysql.user WHERE User IN (0x6f70656e73696d5f61646d696e,0x6f70656e73696d) AND Host=0x6c6f63616c686f7374"); printf "OpenSim SQL accounts found: %s\n" "$count"'
 		deploy_assert_exec "$command" --stdout-contains 'OpenSim SQL accounts found: 2'
 		;;
 	credentials)
-		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+		if ! assert_deployment_container_running "$DEPLOY_PLATFORM"; then return; fi
 		printf -v command 'deploy_command exec %q -- sh -c %q 2>&1' "$name" 'count=$(grep -Ec "^export OPENSIM_DB_(HOST|ADMIN_USER|ADMIN_PASS|USER|PASS)=" /root/.opensimrc); printf "saved database setting count: %s\n" "$count"; test "$count" -eq 5'
 		deploy_assert_exec "$command" --stdout-contains 'saved database setting count: 5'
 		;;
 	packages)
-		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+		if ! assert_deployment_container_running "$DEPLOY_PLATFORM"; then return; fi
 		printf -v command 'deploy_command exec %q -- sh -c %q 2>&1' "$name" "count=\$(dpkg-query -W -f='\${db:Status-Status}\\n' bash-tools opensim opensim-cli opensim-engine opensim-helpers opensim-rest-php | grep -Ec '^installed\$'); printf 'Installed OpenSim package count: %s\\n' \"\$count\""
 		deploy_assert_exec "$command" --stdout-contains 'Installed OpenSim package count: 6'
 		;;
 	setup_credentials)
-		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
+		if ! assert_deployment_container_running "$DEPLOY_PLATFORM"; then return; fi
 		local setup_script setup_command
 		setup_script="$DEPLOY_RUN_DIR/setup-credentials-$DEPLOY_PLATFORM.sh"
 		mkdir -p "$DEPLOY_RUN_DIR"

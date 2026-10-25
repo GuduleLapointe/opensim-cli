@@ -53,3 +53,14 @@ function test_deploy_platform_filter_skips_other_platforms() {
 function test_deploy_platform_filter_does_not_leak_between_platforms() {
 	assert_exec "bash -c 'source \"\$1\"; deploy_load_platform debian-12; source \"\$1\"; deploy_load_platform ubuntu-24.04' _ '$DEPLOY_HELPERS'"
 }
+
+function test_container_status_failure_is_asserted() {
+	assert_exec "bash -c 'source \"\$1\"; deploy_select_engine() { return 0; }; deploy_command() { printf \"Podman tunnel timed out\\n\"; return 255; }; deploy_assert_exec() { printf \"ASSERTED: %s\\n\" \"\$1\"; return 1; }; assert_deployment_container_running sample' _ '$DEPLOY_HELPERS'" \
+		--exit 1 \
+		--stdout-contains 'ASSERTED: deploy_command status opensim-deploy-'
+}
+
+function test_container_start_status_failure_is_asserted() {
+	assert_exec "bash -c 'source \"\$1\"; DEPLOY_PLATFORM=sample; DEPLOY_IMAGE=debian:12; bashunit::set_test_title() { :; }; deploy_command() { printf \"Podman tunnel timed out\\n\"; return 255; }; deploy_assert_exec() { printf \"ASSERTED: %s\\n\" \"\$1\"; return 0; }; deploy_run_step started' _ '$DEPLOY_HELPERS'" \
+		--stdout-contains 'ASSERTED: deploy_command status opensim-deploy-'
+}
