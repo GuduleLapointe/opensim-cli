@@ -15,7 +15,7 @@
 - Dependencies are composer's (or the packages' links in `vendor/magicoli/`): nothing is searched in the PATH or beside the project. `OPENSIM_API` names another engine, which is how the tests use a stand-in.
 - Scripts source `src/lib/common` (it sources bash-tools, reads `~/.opensimrc` through the engine's `lib/rc-helpers`) and use the functions of bash-tools (`die`, `require`, `debug`...).
 - All the questions of a setup are one form, never one question at a time. A label is the shortest word that says it.
-- Dependencies stay `bash`, `jq`, `php-cli`, bash-tools and the engine.
+- Dependencies stay `bash`, `jq`, `php-cli`, `podman-compose`, bash-tools and the engine.
 
 ## Tests
 

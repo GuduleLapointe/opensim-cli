@@ -34,6 +34,7 @@ depends:
     - php-mbstring
     - php-mysql
     - php-xml
+    - podman-compose
     - sudo
 
 recommends:

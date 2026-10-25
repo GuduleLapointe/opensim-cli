@@ -18,6 +18,9 @@ function test_build_sh_produces_deb_and_zip() {
 		'.zip package should be produced by this build'
 	assert_exec "test \$(find '$DEPLOY_STAGE/debs' -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ') -eq 1" \
 		'the current OpenSim CLI .deb should be staged'
+	deb_file=$(find "$DEPLOY_STAGE/debs" -maxdepth 1 -type f -name '*.deb' -print -quit)
+	assert_exec "ar p '$deb_file' control.tar.gz | tar -xzOf - ./control | grep -q '^Depends:.*podman-compose'" \
+		'the OpenSim CLI .deb should depend on podman-compose'
 	assert_exec "test -s '$DEPLOY_STAGE/MANIFEST'" \
 		'package manifest should be created for deployment'
 }
