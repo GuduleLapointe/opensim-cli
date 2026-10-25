@@ -73,11 +73,10 @@ and user. Titles stay short (for example, `debian-12 created`). Deployment does
 not depend on local test or build results. A platform creation
 or installation failure skips only that platform; other platforms continue.
 
-Podman is preferred and Docker is the fallback. To select an engine explicitly,
-set `DEPLOY_ENGINE=podman` or `DEPLOY_ENGINE=docker` in the caller's environment
-or `tests/.env`. `CONTAINER_CONNECTION` and optional `MEMORY` are also read by the
-existing `tests/bootstrap.sh`. No memory cap is applied unless `MEMORY` is set
-in the environment or `tests/.env`. `DEPLOY_QUICK_INSTALL_TIMEOUT` sets the
+Deployment tests manage containers through `vendor/bin/container-tools`; Podman
+is its current backend. `CONTAINER_CONNECTION` and optional `MEMORY` are read by
+`tests/bootstrap.sh`. No memory cap is applied unless `MEMORY` is set in the
+environment or `tests/.env`. `DEPLOY_QUICK_INSTALL_TIMEOUT` sets the
 per-platform install timeout in seconds (default: 900).
 
 The platform image is checked explicitly and pulled from its configured source

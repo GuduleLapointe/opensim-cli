@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Tries the packages on a clean machine (podman): a user with sudo runs `opensim setup` on a machine that has the packages and nothing
+# Tries the packages on a clean container: a user with sudo runs `opensim setup` on a machine that has the packages and nothing
 # else. The engine makes the account and the folders, the grid comes up as the user opensim. Exits non-zero when a check fails.
 #
 #   tests/Packaging/check [base image]       default: Debian 12
-#   CONTAINER_CONNECTION=name                run it on the podman of another machine
-#   MEMORY=400m                             memory of the container
-#   KEEP=1                                  leave the container running to look at it (podman exec)
+#   CONTAINER_CONNECTION=name                run it on the selected Podman host
+#   MEMORY=400m                             optional memory limit (unset means no limit)
+#   KEEP=1                                  leave the container running to inspect with container-tools exec
 
 set -eo pipefail
 BASE=${1:-docker.io/library/debian:bookworm}
@@ -14,11 +14,27 @@ cd "$(dirname "$0")/../.."
 # Source the test environment
 source tests/bootstrap.sh
 
+CONTAINER_TOOLS_CLI=${CONTAINER_TOOLS_CLI:-vendor/bin/container-tools}
+[[ -x "$CONTAINER_TOOLS_CLI" ]] || { echo "container-tools not found: $CONTAINER_TOOLS_CLI" >&2; exit 1; }
+
 newest() { ls -t "$1"/$2 2>/dev/null | head -1; }
 P=$(cd .. && pwd)
 
 stage=$(mktemp -d)
-trap 'rm -rf "$stage"' EXIT
+container_host=$(hostname -s 2>/dev/null || hostname)
+container_host=$(printf '%s' "$container_host" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g; s/^-+//; s/-+$//')
+container_name="opensim-package-test-${container_host:-host}-$$"
+cleanup() {
+	local status=$?
+	if [[ "${KEEP:-0}" == 1 ]]; then
+		printf 'Keeping container %s for inspection\n' "$container_name"
+	else
+		"$CONTAINER_TOOLS_CLI" destroy "$container_name" >/dev/null 2>&1 || true
+	fi
+	rm -rf "$stage"
+	exit "$status"
+}
+trap cleanup EXIT
 mkdir "$stage/debs"
 
 # Collect all dependencies
@@ -34,5 +50,12 @@ done
 
 cp tests/Packaging/inside "$stage/inside"
 
-# Run the test inside the container
-COPYFILE_DISABLE=1 tar -chf - -C "$stage" debs inside | podman run --rm -i --memory="${MEMORY:-400m}" "$BASE" bash -c 'tar -xf - --no-same-owner --warning=no-unknown-keyword -C /tmp && exec bash /tmp/inside'
+# Create the clean test container and transfer the current package set.
+create_args=(create --no-start --name "$container_name" --image "$BASE")
+[[ -n "${MEMORY:-}" ]] && create_args+=(--memory "$MEMORY")
+create_args+=(-- sh -c 'while :; do sleep 3600; done')
+"$CONTAINER_TOOLS_CLI" "${create_args[@]}"
+"$CONTAINER_TOOLS_CLI" start "$container_name"
+"$CONTAINER_TOOLS_CLI" cp "$stage/debs" "$container_name:/tmp/debs"
+"$CONTAINER_TOOLS_CLI" cp "$stage/inside" "$container_name:/tmp/inside"
+"$CONTAINER_TOOLS_CLI" exec "$container_name" -- bash /tmp/inside

@@ -4,8 +4,7 @@
 # Nothing specific to a machine is written in the tests: what is, is in tests/.env (see tests/.env.example), which is made from the
 # example the first time.
 #
-#   CONTAINER_CONNECTION  the podman connection every container of the tests goes to, the machine that has the CPU and not the
-#                         one the tests are started from. Every podman command that follows goes there, whoever runs it.
+#   CONTAINER_CONNECTION  the Podman connection every container-tools operation uses; it may target a remote host.
 #   MEMORY                optional memory limit for a container; unset means no limit
 #
 # The project's rc-helpers read the project .env and ~/.opensimrc; tests/.env then adds test-specific defaults. What the caller

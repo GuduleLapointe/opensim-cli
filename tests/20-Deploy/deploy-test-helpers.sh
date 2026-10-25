@@ -2,7 +2,7 @@
 
 DEPLOY_PLATFORMS_FILE=${DEPLOY_PLATFORMS_FILE:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/platforms.tsv}
 DEPLOY_PROJECT_ROOT=${DEPLOY_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}
-DEPLOY_CONTAINER_CLI=${DEPLOY_CONTAINER_CLI:-$DEPLOY_PROJECT_ROOT/vendor/magicoli/opensim-engine/bin/opensim-container.php}
+DEPLOY_CONTAINER_CLI=${DEPLOY_CONTAINER_CLI:-$DEPLOY_PROJECT_ROOT/vendor/bin/container-tools}
 DEPLOY_RUN_DIR=${_BASHUNIT_RUN_OUTPUT_DIR:-${TMPDIR:-/tmp}/bashunit/deploy-$$}
 DEPLOY_RUN_ID=${DEPLOY_RUN_ID:-${DEPLOY_RUN_DIR##*/}}
 DEPLOY_HOST_SLUG=${DEPLOY_HOST_SLUG:-$(hostname -s 2>/dev/null || hostname)}
@@ -22,7 +22,6 @@ DEPLOY_EXPECTED_VERSION=
 
 deploy_select_engine() {
 	[[ "${DEPLOY_ENGINE:-podman}" == podman || "${DEPLOY_ENGINE:-podman}" == auto ]] || return 1
-	command -v podman >/dev/null 2>&1 || return 1
 	command -v php >/dev/null 2>&1 || return 1
 	[[ -x "$DEPLOY_CONTAINER_CLI" ]] || return 1
 	DEPLOY_ENGINE_SELECTED=podman
@@ -32,7 +31,20 @@ deploy_command() {
 	deploy_select_engine || return 127
 	local connection_args=()
 	[[ -n "${CONTAINER_CONNECTION:-}" ]] && connection_args=(--connection "$CONTAINER_CONNECTION")
-	php "$DEPLOY_CONTAINER_CLI" "${connection_args[@]}" "$@"
+	"$DEPLOY_CONTAINER_CLI" "${connection_args[@]}" "$@"
+}
+
+deploy_copy_file() {
+	local name=$1 source=$2 destination=$3
+	deploy_command cp "$source" "$name:$destination"
+}
+
+deploy_run_script() {
+	local name=$1 source=$2 destination
+	shift 2
+	destination="/tmp/$(basename "$source")"
+	deploy_copy_file "$name" "$source" "$destination" || return $?
+	deploy_command exec "$name" -- bash "$destination" "$@"
 }
 
 deploy_name() {
@@ -88,12 +100,12 @@ deploy_load_platform() {
 deploy_skip_unless_running() {
 	local platform=$1 name state
 	name=$(deploy_name "$platform")
-	if ! deploy_select_engine || ! deploy_command inspect "$name" >/dev/null 2>&1; then
+	if ! deploy_select_engine || ! deploy_command status "$name" >/dev/null 2>&1; then
 		bashunit::skip "$platform not created"
 		return 0
 	fi
-	state=$(deploy_command running "$name" 2>/dev/null) || state=false
-	if [[ "$state" != true ]]; then
+	state=$(deploy_command status "$name" 2>/dev/null | sed -n 's/^Status: //p') || state=
+	if [[ "$state" != running ]]; then
 		bashunit::skip "$platform not running"
 		return 0
 	fi
@@ -207,7 +219,7 @@ deploy_run_step() {
 		;;
 	created)
 		if ! deploy_select_engine; then status=127; else
-			local create_args=(deploy_command create --name "$name" --image "$DEPLOY_IMAGE"
+			local create_args=(deploy_command create --no-start --name "$name" --image "$DEPLOY_IMAGE"
 				--label org.opensim-cli.deploy=1
 				--label "org.opensim-cli.deploy.platform=$DEPLOY_PLATFORM"
 				--label "org.opensim-cli.deploy.host=$DEPLOY_HOST_SLUG"
@@ -223,7 +235,7 @@ deploy_run_step() {
 		assert_equals 0 "$status" "$DEPLOY_PLATFORM container creation"
 		;;
 	started)
-		if ! deploy_select_engine || ! deploy_command inspect "$name" >/dev/null 2>&1; then
+		if ! deploy_select_engine || ! deploy_command status "$name" >/dev/null 2>&1; then
 			bashunit::skip "$DEPLOY_PLATFORM container has not been created"
 			return
 		fi
@@ -235,8 +247,8 @@ deploy_run_step() {
 	running)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
 		local running_command
-		printf -v running_command 'deploy_command running %q' "$name"
-		assert_exec "$running_command" --stdout true
+		printf -v running_command 'deploy_command status %q' "$name"
+		assert_exec "$running_command" --stdout-contains 'Status: running'
 		return
 		;;
 	ready)
@@ -320,7 +332,7 @@ deploy_run_step() {
 		mkdir -p "$log_dir" || status=$?
 		if [[ "$execute_install" == 1 ]] && ((status == 0)); then
 			container_log="/tmp/$name/$install_step.log"
-			deploy_command exec "$name" --input -- sh -c 'cat > /tmp/quick-install.sh && chmod +x /tmp/quick-install.sh' <"$DEPLOY_PROJECT_ROOT/quick-install.sh" || status=$?
+			deploy_copy_file "$name" "$DEPLOY_PROJECT_ROOT/quick-install.sh" /tmp/quick-install.sh || status=$?
 			if ((status == 0)); then
 				deploy_command exec "$name" -- bash -c '
 					set -o pipefail
@@ -377,7 +389,10 @@ deploy_run_step() {
 		;;
 	setup_credentials)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		deploy_command exec "$name" --input -- bash -s <<-'SETUP_CREDENTIALS_TEST' || status=$?
+		local setup_script setup_command
+		setup_script="$DEPLOY_RUN_DIR/setup-credentials-$DEPLOY_PLATFORM.sh"
+		mkdir -p "$DEPLOY_RUN_DIR"
+		cat >"$setup_script" <<-'SETUP_CREDENTIALS_TEST'
 			set -euo pipefail
 			work=$(mktemp -d)
 			trap 'rm -rf "$work"' EXIT
@@ -424,7 +439,8 @@ deploy_run_step() {
 			jq -e '.data.attributes.answers.admin_user == "manual-admin" and .data.attributes.answers.admin_password == "interactive-secret"' <<<"$request" >/dev/null
 			! grep -Fq 'interactive-secret' "$work/manual-output"
 		SETUP_CREDENTIALS_TEST
-		assert_equals 0 "$status" "$DEPLOY_PLATFORM setup reads saved or interactive SQL credentials"
+		printf -v setup_command 'deploy_run_script %q %q' "$name" "$setup_script"
+		assert_exec "$setup_command"
 		;;
 	esac
 	if ((status != 0)); then deploy_mark_platform_blocked "$DEPLOY_PLATFORM"; fi
@@ -435,6 +451,6 @@ deploy_cleanup_platform() {
 	name=$(deploy_name "$platform")
 	[[ "$DEPLOY_EPHEMERAL" == 1 ]] || return 0
 	deploy_select_engine || return 1
-	deploy_command inspect "$name" >/dev/null 2>&1 || return 0
-	deploy_command remove --force "$name" >/dev/null
+	deploy_command status "$name" >/dev/null 2>&1 || return 0
+	deploy_command destroy "$name" >/dev/null
 }
