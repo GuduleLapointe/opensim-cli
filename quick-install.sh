@@ -8,6 +8,7 @@
 #   Or from a clone of the repository:
 #     git clone https://github.com/GuduleLapointe/opensim-cli.git && cd opensim-cli && ./quick-install.sh
 #     ./quick-install.sh --remote root@server --setup
+#     ./quick-install.sh --podman
 #
 #   Or with the packages only:  sudo apt install opensim opensim-cli opensim-helpers && opensim setup
 #
@@ -22,9 +23,13 @@
 #           --dotnet              install the .NET runtime without OpenSim packages
 #           --opensim             install OpenSimulator and its management packages (or prepare the clone)
 #           --remote SSH_TARGET   run this installation on a server over SSH
+#           --podman              install in a persistent Podman container
+#           --connection NAME     use a configured Podman connection; local|none forces local Podman
+#           --image IMAGE         container image (default: $OPENSIM_CONTAINER_IMAGE or Debian 12 slim)
 # Environment: OPENSIM_KIT_DEBS=folder       install packages (*.deb) from a local folder
 #             OPENSIM_KIT_APT_DIST=charm-tests select the unsigned test distribution (default: charm)
 #             OPENSIM_KIT_APT_COMPONENT=dev    select its component (default: stable, or dev for charm-tests)
+#             OPENSIM_CONTAINER_IMAGE=IMAGE    default image for --podman (Debian 12 slim)
 
 set -euo pipefail
 
@@ -37,11 +42,24 @@ OPENSIM_KIT_APT_DIST_WAS_SET=${OPENSIM_KIT_APT_DIST+x}
 OPENSIM_KIT_APT_DIST_FROM_ENV=${OPENSIM_KIT_APT_DIST:-}
 OPENSIM_KIT_APT_COMPONENT_WAS_SET=${OPENSIM_KIT_APT_COMPONENT+x}
 OPENSIM_KIT_APT_COMPONENT_FROM_ENV=${OPENSIM_KIT_APT_COMPONENT:-}
+CONTAINER_CONNECTION_WAS_SET=${CONTAINER_CONNECTION+x}
+CONTAINER_CONNECTION_FROM_ENV=${CONTAINER_CONNECTION:-}
+CONTAINER_HOST_WAS_SET=${CONTAINER_HOST+x}
+CONTAINER_HOST_FROM_ENV=${CONTAINER_HOST:-}
+OPENSIM_CONTAINER_IMAGE_WAS_SET=${OPENSIM_CONTAINER_IMAGE+x}
+OPENSIM_CONTAINER_IMAGE_FROM_ENV=${OPENSIM_CONTAINER_IMAGE:-}
 
 for file in "${1:+$1/.env}" "$OPENSIM_RC_PATH"; do
 	# shellcheck disable=SC1090
 	[[ -n "$file" && -r "$file" ]] && source "$file"
 done
+if [[ "$CONTAINER_CONNECTION_WAS_SET" == x ]]; then CONTAINER_CONNECTION=$CONTAINER_CONNECTION_FROM_ENV; fi
+if [[ "$CONTAINER_HOST_WAS_SET" == x ]]; then CONTAINER_HOST=$CONTAINER_HOST_FROM_ENV; fi
+if [[ "$OPENSIM_CONTAINER_IMAGE_WAS_SET" == x ]]; then OPENSIM_CONTAINER_IMAGE=$OPENSIM_CONTAINER_IMAGE_FROM_ENV; fi
+unset CONTAINER_CONNECTION_WAS_SET CONTAINER_CONNECTION_FROM_ENV CONTAINER_HOST_WAS_SET CONTAINER_HOST_FROM_ENV
+unset OPENSIM_CONTAINER_IMAGE_WAS_SET OPENSIM_CONTAINER_IMAGE_FROM_ENV
+[[ ! ${CONTAINER_CONNECTION+x} ]] || export CONTAINER_CONNECTION
+[[ ! ${CONTAINER_HOST+x} ]] || export CONTAINER_HOST
 
 if [[ "$OPENSIM_KIT_APT_DIST_WAS_SET" == x ]]; then
 	OPENSIM_KIT_APT_DIST=$OPENSIM_KIT_APT_DIST_FROM_ENV
@@ -87,6 +105,14 @@ PHASE_SELECTED=no
 RUN_CLEANUP=no
 REMOTE_TARGET=
 REMOTE_ARGS=()
+PODMAN_MODE=no
+PODMAN_CONNECTION=
+PODMAN_CONNECTION_SELECTED=no
+PODMAN_FORCE_LOCAL=no
+PODMAN_IMAGE=${OPENSIM_CONTAINER_IMAGE:-docker.io/library/debian:12-slim}
+PODMAN_IMAGE_SELECTED=no
+PODMAN_INSTALL_ARGS=()
+CONTAINER_TOOLS_CLI_SELECTED=
 
 # === Define helper functions first ===
 
@@ -126,11 +152,12 @@ as_root() {
 run_remote_install() {
 	local target=$1 source_script=${BASH_SOURCE[0]} remote_script command status quoted
 	shift
+	[[ "$target" != -* ]] || die "--remote requires an SSH target, not another option"
 	[[ -f "$source_script" ]] || die "--remote requires quick-install.sh to be run from a local file"
 	command -v scp >/dev/null 2>&1 || die "scp is required for --remote"
 	command -v ssh >/dev/null 2>&1 || die "ssh is required for --remote"
 	source_script=$(cd -- "$(dirname -- "$source_script")" && pwd)/$(basename -- "$source_script")
-	remote_script="/tmp/quick-install-${USER:-user}-$$-${RANDOM}.sh"
+	remote_script="/tmp/quick-install-$$-${RANDOM}.sh"
 	scp -- "$source_script" "$target:$remote_script" || die "could not copy quick-install.sh to $target"
 	printf -v command 'bash %q' "$remote_script"
 	for quoted in "$@"; do
@@ -141,6 +168,56 @@ run_remote_install() {
 	status=${status:-0}
 	ssh "$target" "rm -f -- '$remote_script'" >/dev/null 2>&1 || true
 	return "$status"
+}
+
+run_podman_install() {
+	local source_script=${BASH_SOURCE[0]} source_dir output name status=0 debs_in_container=
+	local -a environment=()
+	if [[ -n "${CONTAINER_TOOLS_CLI:-}" ]]; then
+		CONTAINER_TOOLS_CLI_SELECTED=$CONTAINER_TOOLS_CLI
+	else
+		source_dir=$(cd -- "$(dirname -- "$source_script")" && pwd)
+		if [[ -x "$source_dir/vendor/bin/container-tools" ]]; then
+			CONTAINER_TOOLS_CLI_SELECTED=$source_dir/vendor/bin/container-tools
+		elif [[ -x /usr/share/opensim-cli/vendor/bin/container-tools ]]; then
+			CONTAINER_TOOLS_CLI_SELECTED=/usr/share/opensim-cli/vendor/bin/container-tools
+		elif command -v container-tools >/dev/null 2>&1; then
+			CONTAINER_TOOLS_CLI_SELECTED=$(command -v container-tools)
+		else
+			die "container-tools is required for --podman"
+		fi
+	fi
+	[[ -x "$CONTAINER_TOOLS_CLI_SELECTED" ]] || die "container-tools is not executable: $CONTAINER_TOOLS_CLI_SELECTED"
+	[[ -f "$source_script" ]] || die "--podman requires quick-install.sh to be run from a local file"
+	output=$(run_container_tool create --image "$PODMAN_IMAGE" -- sh -c 'while :; do sleep 3600; done') || status=$?
+	printf '%s\n' "$output"
+	((status == 0)) || die "could not create the Podman container"
+	name=$(sed -n 's/^Name: //p' <<<"$output" | tail -n 1)
+	[[ -n "$name" ]] || die "container-tools did not report the created container name"
+	say "Install OpenSim in container $name"
+	run_container_tool cp "$source_script" "$name:/tmp/quick-install.sh" || die "could not copy quick-install.sh to container $name"
+	if [[ -n "$OPENSIM_KIT_DEBS" ]]; then
+		[[ -d "$OPENSIM_KIT_DEBS" ]] || die "OPENSIM_KIT_DEBS must be a local directory when installing in a container"
+		debs_in_container=/tmp/opensim-kit-debs
+		run_container_tool cp "$OPENSIM_KIT_DEBS" "$name:$debs_in_container" || die "could not copy local packages to container $name"
+		environment+=(OPENSIM_KIT_DEBS="$debs_in_container")
+	fi
+	environment+=(OPENSIM_KIT_APT_DIST="$OPENSIM_KIT_APT_DIST" OPENSIM_KIT_APT_COMPONENT="$OPENSIM_KIT_APT_COMPONENT")
+	[[ -z "$ASSUME_YES" ]] || environment+=(ASSUME_YES="$ASSUME_YES")
+	[[ -z "$RUN_SETUP" ]] || environment+=(RUN_SETUP="$RUN_SETUP")
+	[[ -z "$DEBUG" ]] || environment+=(DEBUG="$DEBUG")
+	run_container_tool exec "$name" -- env "${environment[@]}" bash /tmp/quick-install.sh "$@" || status=$?
+	return "$status"
+}
+
+run_container_tool() {
+	if [[ "$PODMAN_FORCE_LOCAL" == yes ]]; then
+		env -u CONTAINER_CONNECTION -u CONTAINER_HOST "$CONTAINER_TOOLS_CLI_SELECTED" "$@"
+	elif [[ "$PODMAN_CONNECTION_SELECTED" == yes ]]; then
+		"$CONTAINER_TOOLS_CLI_SELECTED" --connection "$PODMAN_CONNECTION" "$@"
+	else
+		"$CONTAINER_TOOLS_CLI_SELECTED" "$@"
+	fi
 }
 
 start_setup() { # the library of the questions, then the command to run, which gets the keyboard even when this script came through a pipe
@@ -636,6 +713,9 @@ trap "rm -rf $TMP $TMP.$$" EXIT
 while (($#)); do
 	argument=$1
 	shift
+	if [[ "$argument" != --remote && "$argument" != --remote=* ]]; then
+		REMOTE_ARGS+=("$argument")
+	fi
 	case "$argument" in
 		--remote)
 			[[ -z "$REMOTE_TARGET" ]] || die "--remote can be specified only once"
@@ -648,12 +728,44 @@ while (($#)); do
 			REMOTE_TARGET=${argument#*=}
 			[[ -n "$REMOTE_TARGET" ]] || die "--remote requires an SSH target"
 			;;
-		-y | --yes) ASSUME_YES=yes ;;
-		--cleanup) RUN_CLEANUP=yes ;;
-	--setup) RUN_SETUP=yes ;;
+		--podman) PODMAN_MODE=yes ;;
+		--connection)
+			(($#)) || die "--connection requires a name (or local|none)"
+			[[ "$1" != -* ]] || die "--connection requires a name (or local|none)"
+			[[ "$PODMAN_CONNECTION_SELECTED" == no ]] || die "--connection can be specified only once"
+			PODMAN_CONNECTION=$1
+			REMOTE_ARGS+=("$1")
+			shift
+			PODMAN_CONNECTION_SELECTED=yes
+			case "$PODMAN_CONNECTION" in local | none) PODMAN_FORCE_LOCAL=yes ;; esac
+			;;
+		--connection=*)
+			[[ "$PODMAN_CONNECTION_SELECTED" == no ]] || die "--connection can be specified only once"
+			PODMAN_CONNECTION=${argument#*=}
+			[[ -n "$PODMAN_CONNECTION" ]] || die "--connection requires a name (or local|none)"
+			PODMAN_CONNECTION_SELECTED=yes
+			case "$PODMAN_CONNECTION" in local | none) PODMAN_FORCE_LOCAL=yes ;; esac
+			;;
+		--image)
+			(($#)) || die "--image requires an image name"
+			[[ "$1" != -* ]] || die "--image requires an image name"
+			PODMAN_IMAGE=$1
+			PODMAN_IMAGE_SELECTED=yes
+			REMOTE_ARGS+=("$1")
+			shift
+			;;
+		--image=*)
+			PODMAN_IMAGE=${argument#*=}
+			[[ -n "$PODMAN_IMAGE" ]] || die "--image requires an image name"
+			PODMAN_IMAGE_SELECTED=yes
+			;;
+		-y | --yes) ASSUME_YES=yes; PODMAN_INSTALL_ARGS+=("$argument") ;;
+		--cleanup) RUN_CLEANUP=yes; PODMAN_INSTALL_ARGS+=("$argument") ;;
+	--setup) RUN_SETUP=yes; PODMAN_INSTALL_ARGS+=("$argument") ;;
 	--dependencies | --mariadb | --mysql | --dotnet | --opensim)
 		[[ "$PHASE_SELECTED" == no ]] || die "choose only one installation phase"
 		PHASE_SELECTED=yes
+		PODMAN_INSTALL_ARGS+=("$argument")
 		case "$argument" in
 		--dependencies) INSTALL_PHASE=dependencies ;;
 		--mariadb) INSTALL_PHASE=mariadb ; DATABASE_CHOICE=mariadb ;;
@@ -674,18 +786,23 @@ while (($#)); do
 		exit 2
 		;;
 	esac
-	if [[ "$argument" != --remote && "$argument" != --remote=* ]]; then
-		REMOTE_ARGS+=("$argument")
-	fi
 done
 case "$INSTALL_PHASE" in
 	all | dependencies | mariadb | mysql | dotnet | opensim) ;;
 	*) die "invalid installation phase $INSTALL_PHASE" ;;
 esac
 [[ "$INSTALL_PHASE" == all || "$INSTALL_PHASE" == opensim ]] || [[ -z "$RUN_SETUP" ]] || die "--setup is only valid for the full install or --opensim"
+[[ "$PODMAN_CONNECTION_SELECTED" == no || "$PODMAN_MODE" == yes ]] || die "--connection requires --podman"
+[[ "$PODMAN_IMAGE_SELECTED" == no || "$PODMAN_MODE" == yes ]] || die "--image requires --podman"
+[[ "$PODMAN_MODE" != yes || -z "$RUN_SETUP" ]] || die "--setup needs an interactive container terminal; run opensim setup in the container after installation"
 
 if [[ -n "$REMOTE_TARGET" ]]; then
 	run_remote_install "$REMOTE_TARGET" "${REMOTE_ARGS[@]}"
+	exit $?
+fi
+
+if [[ "$PODMAN_MODE" == yes ]]; then
+	run_podman_install "${PODMAN_INSTALL_ARGS[@]}"
 	exit $?
 fi
 

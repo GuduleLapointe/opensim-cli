@@ -19,6 +19,12 @@ See `./quick-install.sh --help` for other options.
 To run the installer on an SSH server, download it locally first, then run
 `./quick-install.sh --remote root@server --setup`.
 
+For a Podman install, run the downloaded script as a file. It creates a
+persistent Debian 12 container by default; choose another image with
+`--image` or `OPENSIM_CONTAINER_IMAGE`. Podman uses `CONTAINER_CONNECTION` if
+set, or `--connection=local` to force the local engine. Run `opensim setup`
+from the container terminal after installation.
+
 ## Requirements
 
 - Bash 5+
@@ -26,7 +32,8 @@ To run the installer on an SSH server, download it locally first, then run
 - `jq`
 - MySQL or MariaDB server and client
 - Root access or `sudo`
-- Podman and `podman-compose` (container support)
+- `container-tools` and Podman (Podman installs); `podman-compose` (Compose support)
+- `ssh` and `scp` (SSH installs)
 - `dialog` (optional; plain prompts are supported)
 
 ## Features
@@ -37,9 +44,9 @@ To run the installer on an SSH server, download it locally first, then run
 - [x] from local git clone
 - [x] from local deb packages
 - [x] multi-platform testing through `container-tools` on Podman
-- [ ] install as podman container
+- [x] install as podman container
 - [ ] install as docker container
-- [ ] remote shortcut to install on a distant server
+- [x] remote shortcut to install on a distant server
 - [ ] advanced/expert install
 - [ ] support Homebrew (macos)
 - [ ] support [Alpine container](https://hub.docker.com/r/soupbowl/opensimulator)

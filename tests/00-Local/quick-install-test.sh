@@ -54,6 +54,62 @@ SSH
 	assert_equals 2 "$(grep -c '^ssh ' "$calls")"
 }
 
+function create_container_tools_stub() {
+	local fake_bin=$1
+	mkdir -p "$fake_bin"
+	cat >"$fake_bin/container-tools" <<'CLI'
+#!/usr/bin/env bash
+printf 'connection=%s args=' "${CONTAINER_CONNECTION-<unset>}" >>"$CALL_LOG"
+printf ' <%s>' "$@" >>"$CALL_LOG"
+printf '\n' >>"$CALL_LOG"
+action=$1
+[[ "$action" == --connection ]] && { shift 2; action=$1; }
+if [[ "$action" == create ]]; then
+	printf 'Container created\nName: test-opensim\n'
+fi
+CLI
+	chmod +x "$fake_bin/container-tools"
+}
+
+function test_podman_install_uses_connection_image_and_forwards_install_options() {
+	local fake_bin=$WORK/tools calls=$WORK/podman-calls
+	create_container_tools_stub "$fake_bin"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=ursull bash '$QUICK_INSTALL' --podman --connection=ursull --image=docker.io/library/ubuntu:24.04 --opensim --yes"
+	assert_contains '<--connection> <ursull> <create> <--image> <docker.io/library/ubuntu:24.04>' "$(cat "$calls")"
+	assert_contains '<cp> ' "$(cat "$calls")"
+	assert_contains '<exec> <test-opensim> <-->' "$(cat "$calls")"
+	assert_contains '<bash> </tmp/quick-install.sh> <--opensim> <--yes>' "$(cat "$calls")"
+}
+
+function test_podman_connection_local_forces_local_engine() {
+	local fake_bin=$WORK/tools calls=$WORK/podman-local-calls
+	create_container_tools_stub "$fake_bin"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=ursull bash '$QUICK_INSTALL' --podman --connection=local"
+	assert_contains 'connection=<unset>' "$(cat "$calls")"
+	assert_not_contains '<--connection>' "$(cat "$calls")"
+}
+
+function test_podman_environment_overrides_opensimrc() {
+	local fake_bin=$WORK/tools calls=$WORK/podman-env-calls rc=$WORK/opensimrc
+	create_container_tools_stub "$fake_bin"
+	cat >"$rc" <<'RC'
+CONTAINER_CONNECTION=other
+OPENSIM_CONTAINER_IMAGE=docker.io/library/ubuntu:24.04
+RC
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC='$rc' CONTAINER_CONNECTION=ursull OPENSIM_CONTAINER_IMAGE=docker.io/library/debian:13-slim bash '$QUICK_INSTALL' --podman"
+	assert_contains 'connection=ursull' "$(cat "$calls")"
+	assert_contains '<--image> <docker.io/library/debian:13-slim>' "$(cat "$calls")"
+}
+
+function test_podman_setup_requires_interactive_container_terminal() {
+	local fake_bin=$WORK/tools calls=$WORK/podman-setup-calls status=0 output
+	create_container_tools_stub "$fake_bin"
+	output=$(CALL_LOG="$calls" CONTAINER_TOOLS_CLI="$fake_bin/container-tools" OPENSIM_RC=/dev/null bash "$QUICK_INSTALL" --podman --setup 2>&1) || status=$?
+	assert_not_equals 0 "$status"
+	assert_contains 'run opensim setup in the container after installation' "$output"
+	assert_equals '' "$(cat "$calls" 2>/dev/null || true)"
+}
+
 function test_default_source_replaces_old_magiiic_distributions_and_preserves_other_sources() {
 	quick_install_load_library || return
 	cat <<'SOURCES' >"$MAGIIIC_SOURCE_FILE"
