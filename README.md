@@ -9,7 +9,7 @@ The command line to set up and manage OpenSimulator, in bash. It asks the questi
 This will install OpenSimulator, OpenSim Engine and all required packages from official apt repository.
 
 ```
-curl -o https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/refs/heads/dev/quick-install.sh
+curl -fsSL https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/refs/heads/dev/quick-install.sh -o quick-install.sh
 chmod +x quick-install.sh
 ./quick-install.sh --setup
 ```
@@ -18,28 +18,26 @@ See `./quick-install.sh --help` for other options.
 
 ## Requirements
 
-- bash 5, `jq`, `php-cli` and `dialog` (`brew install dialog`, `apt install dialog`)
-- the dependencies, installed with `composer install`: [bash-tools](https://github.com/magicoli/bash-tools) and the [engine](https://github.com/GuduleLapointe/opensim-engine) (the packages link them in `vendor/magicoli/` instead)
+- Runtime: Bash 5, `jq`, PHP CLI with cURL, intl, mbstring, MySQL and XML extensions, and the [OpenSim Engine](https://github.com/GuduleLapointe/opensim-engine). `dialog` provides the terminal UI; setup also supports plain prompts.
+- Development checkout: run `composer install` to install [bash-tools](https://github.com/magicoli/bash-tools), [container-tools](https://github.com/magicoli/container-tools), the engine, `opensim-rest-php`, and `build-tools`. Debian packages provide their runtime dependencies and link sibling packages under `vendor/magicoli/`.
 
 ## Features
 
-Installation
+### First installation: `quick-install.sh`
 
-- [x] `quick-install.sh`: automated installation script
-    - [x] apt official repo (linux, stable by default)
-    - [ ] Homebrew (macos)
-    - [x] from local git clone
-    - [x] from local deb packages
-    - [x] multi-platform testing on podman containers
-    - [ ] install as podman container
-    - [ ] install as docker container
-    - [ ] advanced/expert install
-- [ ] Build
-    - [x] apt .deb package (tested on debian 12 and 13, ubuntu 24.04 and 26.04, should work on other debian variants)
-    - [x] zip (universal)
-    - [ ] homebrew
+- [x] apt official repo (linux, stable by default)
+- [x] from local git clone
+- [x] from local deb packages
+- [x] multi-platform testing through `container-tools` on Podman
+- [ ] install as podman container
+- [ ] install as docker container
+- [ ] advanced/expert install
+- [ ] support Homebrew (macos)
+- [ ] support [Alpine container](https://hub.docker.com/r/soupbowl/opensimulator)
 
-Commands:
+### Command-line interface (CLI): `bin/opensim`
+
+#### Commands
 
 - [x] status
 - [x] start [--simulators] [target...]
@@ -52,7 +50,7 @@ Commands:
 - [ ] command <instance> <text>|-
 - [ ] ports [instance...] [--publish|--ufw]
 
-Grids
+#### Grids
 
 - [x] setup
 - [ ] import [grid] FILE [--grid] [--simulator] [--users] [--apply]
@@ -61,7 +59,7 @@ Grids
 - [ ] next <grid> location [X,Y] [COUNT] [-e X,Y]
 - [ ] ban [grid] <name|uuid>... [--output DIR]
 
-Archives and backups
+#### Archives and backups
 
 - [ ] save iar [GRID [SIM]] [options] [--keep N] FIRST LAST PATH [PASSWORD] [FILE]
 - [ ] load iar [GRID [SIM]] [-m|--merge] FIRST LAST PATH [PASSWORD] [FILE]
@@ -69,13 +67,19 @@ Archives and backups
 - [ ] load oar [GRID [REGION|SIM]] [--merge] [options] [FILE]
 - [ ] backup [GRID [SIM]] [--logs] [--archives] [--output DIR] [--keep N]
 
-This machine
+#### This machine
 
 - [ ] next port [-e PORT] [MIN] [COUNT]
 - [ ] profile list|add|default|remove
 - [ ] oar pack|info|check|unpack
 - [ ] rest --url http://HOST:PORT --user USER (-- <command> | - | --repl)
 - [x] install-dotnet install the .NET runtime OpenSim needs (as root)
+
+### Builds
+
+- [x] apt .deb package (tested on debian 12 and 13, ubuntu 24.04 and 26.04, should work on other debian variants)
+- [x] zip (universal)
+- [ ] homebrew
 
 ## Usage
 
