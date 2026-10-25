@@ -29,12 +29,9 @@ function test_without_sudo_rights_it_stops_at_once_and_says_so() {
     fi
     printf '#!/bin/sh\nexit 1\n' >"$WORK/bin/sudo"
     chmod +x "$WORK/bin/sudo"
-    local output status
-    output=$(PATH="$WORK/bin:$PATH" "$OPENSIM" setup 2>&1)
-    status=$?
-
-    assert_equals 1 "$status"
-    assert_contains "needs sudo to act as nobody" "$output"
+	assert_exec "PATH='$WORK/bin:$PATH' '$OPENSIM' setup 2>&1" \
+		--exit 1 \
+		--stdout-contains 'needs sudo to act as nobody'
 }
 
 function test_a_machine_without_the_layout_gets_it_from_the_engine_through_sudo() {

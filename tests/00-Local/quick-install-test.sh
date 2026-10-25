@@ -102,12 +102,12 @@ JSON
 }
 
 function test_podman_config_rejects_missing_setup_identity_before_create() {
-	local fake_bin=$WORK/tools calls=$WORK/podman-bad-config-calls config=$WORK/setup.json status=0 output
+	local fake_bin=$WORK/tools calls=$WORK/podman-bad-config-calls config=$WORK/setup.json
 	create_container_tools_stub "$fake_bin"
 	printf '{"type":"grid"}\n' >"$config"
-	output=$(CALL_LOG="$calls" CONTAINER_TOOLS_CLI="$fake_bin/container-tools" OPENSIM_RC=/dev/null bash "$QUICK_INSTALL" --podman --config "$config" 2>&1) || status=$?
-	assert_not_equals 0 "$status"
-	assert_contains 'invalid setup config' "$output"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --config '$config' 2>&1" \
+		--exit 1 \
+		--stdout-contains 'invalid setup config'
 	assert_not_contains '<create>' "$(cat "$calls" 2>/dev/null || true)"
 }
 
@@ -133,11 +133,11 @@ RC
 }
 
 function test_podman_setup_requires_interactive_container_terminal() {
-	local fake_bin=$WORK/tools calls=$WORK/podman-setup-calls status=0 output
+	local fake_bin=$WORK/tools calls=$WORK/podman-setup-calls
 	create_container_tools_stub "$fake_bin"
-	output=$(CALL_LOG="$calls" CONTAINER_TOOLS_CLI="$fake_bin/container-tools" OPENSIM_RC=/dev/null bash "$QUICK_INSTALL" --podman --setup 2>&1) || status=$?
-	assert_not_equals 0 "$status"
-	assert_contains 'run opensim setup in the container after installation' "$output"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --setup 2>&1" \
+		--exit 1 \
+		--stdout-contains 'run opensim setup in the container after installation'
 	assert_equals '' "$(cat "$calls" 2>/dev/null || true)"
 }
 
@@ -276,7 +276,7 @@ function test_dotnet_phase_requests_libgdiplus_directly_from_apt_when_missing() 
 
 function test_dotnet_runtime_detection_accepts_apt_candidate_with_pipefail() {
 	quick_install_load_library || return
-	local runtime= status=0 line
+	local line
 	apt-cache() {
 		case "$1" in
 		pkgnames) printf 'dotnet-runtime-10.0\n' ;;
@@ -286,9 +286,7 @@ function test_dotnet_runtime_detection_accepts_apt_candidate_with_pipefail() {
 			;;
 		esac
 	}
-	runtime=$(dotnet_runtime_package) || status=$?
+	assert_exec 'dotnet_runtime_package' --stdout 'dotnet-runtime-10.0'
 	unset -f apt-cache
-	assert_equals 0 "$status"
-	assert_equals 'dotnet-runtime-10.0' "$runtime"
 }
 

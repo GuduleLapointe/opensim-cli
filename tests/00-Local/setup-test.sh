@@ -197,9 +197,9 @@ function test_saved_database_admin_credentials_are_sent_with_review_confirmation
 
 function test_dialog_is_only_selected_when_the_terminal_is_wide_enough() {
 	local ui="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/src/lib/ui"
-	assert_equals 0 "$(bash -c 'source "$1"; fe_dialog_fits_terminal 78; echo $?' _ "$ui")"
-	assert_equals 1 "$(bash -c 'source "$1"; fe_dialog_fits_terminal 37; echo $?' _ "$ui")"
-	assert_equals 1 "$(bash -c 'source "$1"; fe_dialog_fits_terminal unknown; echo $?' _ "$ui")"
+	assert_exec "bash -c 'source \"\$1\"; fe_dialog_fits_terminal 78' _ '$ui'"
+	assert_exec "bash -c 'source \"\$1\"; fe_dialog_fits_terminal 37' _ '$ui'" --exit 1
+	assert_exec "bash -c 'source \"\$1\"; fe_dialog_fits_terminal unknown' _ '$ui'" --exit 1
 }
 
 function test_database_admin_credentials_can_be_entered_without_opensimrc() {
@@ -229,7 +229,7 @@ function test_abort_ends_with_the_error_of_the_engine_and_a_failure() {
 	engine_says "$ABORT"
 	out=$(setup_with) || status=$?
 	assert_contains "Cancelled" "$out"
-	assert_not_equals 0 "$status"
+	assert_exit_code 1 '' "$status"
 }
 
 function test_quit_ends_with_its_message_and_a_success() {
@@ -237,7 +237,7 @@ function test_quit_ends_with_its_message_and_a_success() {
 	engine_says "$QUIT"
 	out=$(setup_with) || status=$?
 	assert_contains "Written in /etc/opensim/grids/amy." "$out"
-	assert_equals 0 "$status"
+	assert_exit_code 0 '' "$status"
 }
 
 function test_invalid_reply_from_engine_ends_the_setup_with_error() {
@@ -245,7 +245,7 @@ function test_invalid_reply_from_engine_ends_the_setup_with_error() {
 	engine_says "not json at all"
 	out=$(setup_with) || status=$?
 	assert_contains "does not answer as it should" "$out"
-	assert_not_equals 0 "$status"
+	assert_exit_code 1 '' "$status"
 }
 
 function test_unknown_screen_ends_the_setup_with_error() {
@@ -253,7 +253,7 @@ function test_unknown_screen_ends_the_setup_with_error() {
 	engine_says "$(jq -c '.data.attributes.kind = "carousel"' <<<"$MENU")"
 	out=$(setup_with) || status=$?
 	assert_contains "screen this command does not know: carousel" "$out"
-	assert_not_equals 0 "$status"
+	assert_exit_code 1 '' "$status"
 }
 
 # Does not belong in setup tests
@@ -316,7 +316,7 @@ function test_error_is_not_displayed_as_part_of_the_answer() {
 	local out status=0
 	engine_says "$QUIT"
 	out=$(ENGINE_NOISE="Deprecated: a library is old" setup_with) || status=$?
-	assert_equals 0 "$status"
+	assert_exit_code 0 '' "$status"
 	assert_contains "Written in /etc/opensim/grids/amy." "$out"
 	assert_not_contains "Deprecated" "$out"
 }
@@ -326,7 +326,7 @@ function test_error_is_displayed_for_invalid_answer() {
 	engine_says "not json at all"
 	out=$(ENGINE_NOISE="Fatal: the engine is broken" setup_with) || status=$?
 	assert_contains "Fatal: the engine is broken" "$out"
-	assert_not_equals 0 "$status"
+	assert_exit_code 1 '' "$status"
 }
 
 function test_readonly_field_is_shown_and_readonly() {
