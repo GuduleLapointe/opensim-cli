@@ -45,3 +45,11 @@ COMMAND
 		--exit 1 \
 		--stdout-contains 'Could not copy quick-install.sh to sample'
 }
+
+function test_deploy_platform_filter_skips_other_platforms() {
+	assert_exec "DEPLOY_PLATFORM=debian-12 bash -c 'source \"\$1\"; deploy_load_platform ubuntu-24.04' _ '$DEPLOY_HELPERS'" --exit 1
+}
+
+function test_deploy_platform_filter_does_not_leak_between_platforms() {
+	assert_exec "bash -c 'source \"\$1\"; deploy_load_platform debian-12; source \"\$1\"; deploy_load_platform ubuntu-24.04' _ '$DEPLOY_HELPERS'"
+}

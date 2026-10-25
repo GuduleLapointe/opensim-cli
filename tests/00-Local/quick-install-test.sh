@@ -290,3 +290,37 @@ function test_dotnet_runtime_detection_accepts_apt_candidate_with_pipefail() {
 	unset -f apt-cache
 }
 
+function test_dotnet_installer_uses_supported_runtime_channel() {
+	quick_install_load_library || return
+	PGM=quick-install
+	local calls=$WORK/dotnet-installer-calls runtime_checks=0
+	recover_dpkg_configuration() { return 0; }
+	apt_update() { return 0; }
+	uname() { printf 'Linux\n'; }
+	dotnet_runtime_package() { return 1; }
+	ldconfig() { printf 'libicuuc.so.76\nlibgdiplus.so.0\n'; }
+	dpkg-query() { printf 'installed\n'; }
+	dotnet_runtime_installed() {
+		((runtime_checks += 1))
+		((runtime_checks >= 3))
+	}
+	curl() {
+		local output
+		while (($#)); do
+			if [[ "$1" == -o ]]; then output=$2; shift 2; else shift; fi
+		done
+		printf '#!/usr/bin/env bash\nexit 0\n' >"$output"
+	}
+	as_root() {
+		printf '%q ' "$@" >>"$calls"
+		printf '\n' >>"$calls"
+		[[ "$1" != bash ]] || "$@"
+	}
+	phase_dotnet
+	local output
+	output=$(cat "$calls")
+	unset -f recover_dpkg_configuration apt_update uname dotnet_runtime_package ldconfig dpkg-query dotnet_runtime_installed curl as_root
+	assert_contains '--channel 10.0' "$output"
+	assert_contains '--azure-feed https://builds.dotnet.microsoft.com/dotnet' "$output"
+}
+

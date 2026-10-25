@@ -8,6 +8,10 @@ DEPLOY_RUN_ID=${DEPLOY_RUN_ID:-${DEPLOY_RUN_DIR##*/}}
 DEPLOY_HOST_SLUG=${DEPLOY_HOST_SLUG:-$(hostname -s 2>/dev/null || hostname)}
 DEPLOY_USER_SLUG=${DEPLOY_USER_SLUG:-$(id -un 2>/dev/null || printf user)}
 DEPLOY_EPHEMERAL=${DEPLOY_EPHEMERAL:-0}
+if [[ ${__DEPLOY_PLATFORM_FILTER_INITIALIZED:-} != 1 ]]; then
+	DEPLOY_PLATFORM_FILTER=${DEPLOY_PLATFORM_FILTER:-${DEPLOY_PLATFORM:-}}
+	__DEPLOY_PLATFORM_FILTER_INITIALIZED=1
+fi
 DEPLOY_INFRA_BLOCK_FILE=$DEPLOY_RUN_DIR/deployment-infra-blocked
 DEPLOY_APT_DIST=charm-tests
 DEPLOY_APT_COMPONENT=dev
@@ -82,6 +86,9 @@ deploy_mark_platform_blocked() {
 deploy_load_platform() {
 	local requested=$1 platform image expected_id expected_version
 	DEPLOY_PLATFORM=
+	if [[ -n "$DEPLOY_PLATFORM_FILTER" && "$requested" != "$DEPLOY_PLATFORM_FILTER" ]]; then
+		return 1
+	fi
 	while read -r platform image expected_id expected_version; do
 		[[ -z "$platform" || "$platform" == \#* ]] && continue
 		if [[ "$platform" == "$requested" ]]; then
@@ -271,7 +278,7 @@ deploy_run_step() {
 	location=$(deploy_execution_location)
 	case "$step" in
 	image) bashunit::set_test_title "$DEPLOY_PLATFORM image available" ;;
-	created) bashunit::set_test_title "$DEPLOY_PLATFORM container created on $location" ;;
+	created) bashunit::set_test_title "$DEPLOY_PLATFORM container available on $location" ;;
 	started) bashunit::set_test_title "$DEPLOY_PLATFORM container started" ;;
 	running) bashunit::set_test_title "$DEPLOY_PLATFORM container running" ;;
 	ready) bashunit::set_test_title "$DEPLOY_PLATFORM container ready" ;;
@@ -328,6 +335,14 @@ deploy_run_step() {
 			deploy_assert_exec 'deploy_select_engine'
 			return
 		else
+			local status_output status_log
+			status_log=$(deploy_log_dir "$DEPLOY_PLATFORM")/status.log
+			mkdir -p "$(dirname "$status_log")"
+			if deploy_command status "$name" >"$status_log" 2>&1; then
+				printf -v command 'deploy_command status %q' "$name"
+				deploy_assert_exec "$command" --stdout-contains "Image: $DEPLOY_IMAGE"
+				return
+			fi
 			local create_args=(deploy_command create --no-start --name "$name" --image "$DEPLOY_IMAGE"
 				--label org.opensim-cli.deploy=1
 				--label "org.opensim-cli.deploy.platform=$DEPLOY_PLATFORM"
@@ -350,6 +365,13 @@ deploy_run_step() {
 	started)
 		if ! deploy_select_engine || ! deploy_command status "$name" >/dev/null 2>&1; then
 			bashunit::skip "$DEPLOY_PLATFORM container has not been created"
+			return
+		fi
+		local current_status
+		current_status=$(deploy_command status "$name" 2>/dev/null | sed -n 's/^Status: //p') || current_status=
+		if [[ "$current_status" == running ]]; then
+			printf -v start_command 'deploy_command status %q' "$name"
+			deploy_assert_exec "$start_command" --stdout-contains 'Status: running'
 			return
 		fi
 		local start_command
@@ -464,8 +486,8 @@ deploy_run_step() {
 		;;
 	accounts)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		printf -v command 'deploy_command exec %q -- sh -c %q 2>&1' "$name" 'mysql -Nse "SELECT COUNT(*) FROM mysql.user WHERE User IN (0x6f70656e73696d5f61646d696e,0x6f70656e73696d) AND Host=0x6c6f63616c686f7374"'
-		deploy_assert_exec "$command" --stdout 2
+		printf -v command 'deploy_command exec %q -- sh -c %q 2>&1' "$name" 'count=$(mysql -Nse "SELECT COUNT(*) FROM mysql.user WHERE User IN (0x6f70656e73696d5f61646d696e,0x6f70656e73696d) AND Host=0x6c6f63616c686f7374"); printf "OpenSim SQL accounts found: %s\n" "$count"'
+		deploy_assert_exec "$command" --stdout-contains 'OpenSim SQL accounts found: 2'
 		;;
 	credentials)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
@@ -474,8 +496,8 @@ deploy_run_step() {
 		;;
 	packages)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi
-		printf -v command 'deploy_command exec %q -- sh -c %q 2>&1' "$name" 'dpkg-query -W -f="\${db:Status-Status}\n" bash-tools opensim opensim-cli opensim-engine opensim-helpers opensim-rest-php | grep -Ec "^installed$"'
-		deploy_assert_exec "$command" --stdout 6
+		printf -v command 'deploy_command exec %q -- sh -c %q 2>&1' "$name" "count=\$(dpkg-query -W -f='\${db:Status-Status}\\n' bash-tools opensim opensim-cli opensim-engine opensim-helpers opensim-rest-php | grep -Ec '^installed\$'); printf 'Installed OpenSim package count: %s\\n' \"\$count\""
+		deploy_assert_exec "$command" --stdout-contains 'Installed OpenSim package count: 6'
 		;;
 	setup_credentials)
 		if deploy_skip_unless_running "$DEPLOY_PLATFORM"; then return; fi

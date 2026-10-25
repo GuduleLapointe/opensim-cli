@@ -629,6 +629,41 @@ save_database_credentials() {
 	fi
 }
 
+start_sql_server() {
+	if as_root service mariadb start 2>/dev/null || as_root service mysql start 2>/dev/null; then
+		return 0
+	fi
+	as_root mysqladmin ping --silent >/dev/null 2>&1 && return 0
+
+	# Rootless containers cannot always let the init script drop privileges from
+	# namespace-root to mysql. Run MariaDB as mysql directly in that case.
+	if [[ ! -f /run/.containerenv && ! -f /.dockerenv ]]; then
+		return 1
+	fi
+	command -v mariadbd >/dev/null 2>&1 || return 1
+	command -v mariadb-install-db >/dev/null 2>&1 || return 1
+	command -v mariadbd-safe >/dev/null 2>&1 || return 1
+	command -v runuser >/dev/null 2>&1 || return 1
+	command -v start-stop-daemon >/dev/null 2>&1 || return 1
+	local datadir log_file
+	datadir=$(mariadbd --verbose --help 2>/dev/null | awk '$1 == "datadir" { print $2; exit }')
+	[[ -n "$datadir" ]] || return 1
+	if [[ ! -d "$datadir/mysql" ]]; then
+		as_root runuser -u mysql -- mariadb-install-db --datadir="$datadir" --basedir=/usr --auth-root-authentication-method=normal || return 1
+	fi
+	log_file=${TMP:-/tmp/quick-install}.mariadb.log
+	say 'Starting MariaDB as its service user in the container'
+	as_root start-stop-daemon --start --background --chuid mysql \
+		--exec "$(command -v mariadbd-safe)" -- --datadir="$datadir" >>"$log_file" 2>&1 || return 1
+	local attempt
+	for attempt in {1..30}; do
+		as_root mysqladmin ping --silent >/dev/null 2>&1 && return 0
+		sleep 1
+	done
+	tail -n 20 "$log_file"
+	return 1
+}
+
 phase_database() {
 	[[ $(uname -s) == Linux ]] || die "SQL server installation is available on Debian and Ubuntu"
 		configure_package_sources || return $?
@@ -642,7 +677,7 @@ phase_database() {
 		esac
 		install_packages "$server_package" || die "could not install $server_package"
 	fi
-	as_root service mariadb start 2>/dev/null || as_root service mysql start 2>/dev/null || die "could not start the SQL server"
+	start_sql_server || die "could not start the SQL server"
 	command -v mysql >/dev/null 2>&1 || command -v mariadb >/dev/null 2>&1 || die "SQL client is unavailable after server installation"
 
 	local had_admin_pass=0 had_app_pass=0
@@ -742,7 +777,9 @@ phase_dotnet() {
 		rm -f "$install_script"
 		die "could not download dotnet-install.sh"
 	fi
-	as_root bash "$install_script" --runtime dotnet --channel 8.0 --install-dir /usr/local/share/dotnet || {
+	as_root bash "$install_script" --runtime dotnet --channel 10.0 \
+		--azure-feed https://builds.dotnet.microsoft.com/dotnet \
+		--install-dir /usr/local/share/dotnet || {
 		rm -f "$install_script"
 		die "could not install the .NET runtime"
 	}
