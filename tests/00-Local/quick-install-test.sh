@@ -86,6 +86,7 @@ function test_podman_connection_local_forces_local_engine() {
 	create_container_tools_stub "$fake_bin"
 	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=ursull bash '$QUICK_INSTALL' --podman --connection=local"
 	assert_contains 'connection=<unset>' "$(cat "$calls")"
+	assert_contains '<--image> <docker.io/library/ubuntu:26.04>' "$(cat "$calls")"
 	assert_not_contains '<--connection>' "$(cat "$calls")"
 }
 

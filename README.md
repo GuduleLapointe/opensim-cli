@@ -20,7 +20,7 @@ To run the installer on an SSH server, download it locally first, then run
 `./quick-install.sh --remote root@server --setup`.
 
 For a Podman install, run the downloaded script as a file. It creates a
-persistent Debian 12 container by default; choose another image with
+persistent Ubuntu 26.04 container by default; choose another image with
 `--image` or `OPENSIM_CONTAINER_IMAGE`. Podman uses `CONTAINER_CONNECTION` if
 set, or `--connection=local` to force the local engine. Run `opensim setup`
 from the container terminal after installation.

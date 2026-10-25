@@ -25,11 +25,11 @@
 #           --remote SSH_TARGET   run this installation on a server over SSH
 #           --podman              install in a persistent Podman container
 #           --connection NAME     use a configured Podman connection; local|none forces local Podman
-#           --image IMAGE         container image (default: $OPENSIM_CONTAINER_IMAGE or Debian 12 slim)
+#           --image IMAGE         container image (default: $OPENSIM_CONTAINER_IMAGE or Ubuntu 26.04)
 # Environment: OPENSIM_KIT_DEBS=folder       install packages (*.deb) from a local folder
 #             OPENSIM_KIT_APT_DIST=charm-tests select the unsigned test distribution (default: charm)
 #             OPENSIM_KIT_APT_COMPONENT=dev    select its component (default: stable, or dev for charm-tests)
-#             OPENSIM_CONTAINER_IMAGE=IMAGE    default image for --podman (Debian 12 slim)
+#             OPENSIM_CONTAINER_IMAGE=IMAGE    default image for --podman (Ubuntu 26.04)
 
 set -euo pipefail
 
@@ -109,7 +109,7 @@ PODMAN_MODE=no
 PODMAN_CONNECTION=
 PODMAN_CONNECTION_SELECTED=no
 PODMAN_FORCE_LOCAL=no
-PODMAN_IMAGE=${OPENSIM_CONTAINER_IMAGE:-docker.io/library/debian:12-slim}
+PODMAN_IMAGE=${OPENSIM_CONTAINER_IMAGE:-docker.io/library/ubuntu:26.04}
 PODMAN_IMAGE_SELECTED=no
 PODMAN_INSTALL_ARGS=()
 CONTAINER_TOOLS_CLI_SELECTED=
