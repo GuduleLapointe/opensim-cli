@@ -16,6 +16,9 @@ chmod +x quick-install.sh
 
 See `./quick-install.sh --help` for other options.
 
+To run the installer on an SSH server, download it locally first, then run
+`./quick-install.sh --remote root@server --setup`.
+
 ## Requirements
 
 - Bash 5+

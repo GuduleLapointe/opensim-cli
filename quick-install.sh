@@ -7,6 +7,7 @@
 #
 #   Or from a clone of the repository:
 #     git clone https://github.com/GuduleLapointe/opensim-cli.git && cd opensim-cli && ./quick-install.sh
+#     ./quick-install.sh --remote root@server --setup
 #
 #   Or with the packages only:  sudo apt install opensim opensim-cli opensim-helpers && opensim setup
 #
