@@ -18,8 +18,12 @@ See `./quick-install.sh --help` for other options.
 
 ## Requirements
 
-- Runtime: Bash 5, `jq`, PHP CLI with cURL, intl, mbstring, MySQL and XML extensions, and the [OpenSim Engine](https://github.com/GuduleLapointe/opensim-engine). `dialog` provides the terminal UI; setup also supports plain prompts.
-- Development checkout: run `composer install` to install [bash-tools](https://github.com/magicoli/bash-tools), [container-tools](https://github.com/magicoli/container-tools), the engine, `opensim-rest-php`, and `build-tools`. Debian packages provide their runtime dependencies and link sibling packages under `vendor/magicoli/`.
+- Bash 5+
+- PHP CLI 8.2+ with cURL, intl, mbstring, MySQL and XML extensions
+- `jq`
+- MySQL or MariaDB server and client
+- Podman and `podman-compose` (container support)
+- `dialog` (optional; plain prompts are supported)
 
 ## Features
 
