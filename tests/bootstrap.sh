@@ -21,8 +21,7 @@ fi
 
 __tests_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 
-# Keep the caller's environment across rc-helpers, which may define the same settings. Command-line assignments must win over rc
-# and test .env files.
+# Keep caller-provided values so command-line environment assignments win over config files.
 declare -A __tests_caller_env=()
 while IFS='=' read -r __tests_name __tests_value; do
 	[[ "$__tests_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
@@ -34,42 +33,40 @@ if [[ ! -f "$__tests_root/tests/.env" && -f "$__tests_root/tests/.env.example" ]
 	echo "tests: tests/.env made from tests/.env.example, edit it to run the containers on another machine" >&2
 fi
 
-# Use the ecosystem configuration loader rather than reading ~/.opensimrc here. Scripts may also be invoked independently and
-# follow the same read_rc contract.
+# Let the shared helper load ~/.opensimrc and project .env with its standard rules, then add test-only overrides.
 __tests_rc_helpers="$__tests_root/vendor/magicoli/opensim-engine/lib/rc-helpers"
 if [[ -r "$__tests_rc_helpers" ]]; then
 	# shellcheck source=/dev/null
 	source "$__tests_rc_helpers"
 	read_rc "$__tests_root"
 fi
+
+__tests_source_env() {
+	local file=$1 was_allexport=
+	[[ -r "$file" ]] || return 0
+	[[ $- == *a* ]] && was_allexport=1
+	set -a
+	# shellcheck disable=SC1090
+	source "$file"
+	[[ -n "$was_allexport" ]] || set +a
+}
+
+__tests_source_env "$__tests_root/tests/.env"
+
+# PATH is intentionally taken from the configuration layer: ~/.opensimrc may remove development shims before tests run.
+# Other caller values, including inline assignments such as FOO=baz, override every config file.
 for __tests_name in "${!__tests_caller_env[@]}"; do
+	[[ "$__tests_name" == PATH ]] && continue
 	__tests_declaration=$(declare -p "$__tests_name" 2>/dev/null || true)
 	[[ "$__tests_declaration" =~ ^declare\ -[^[:space:]]*r ]] && continue
 	export "$__tests_name=${__tests_caller_env[$__tests_name]}"
 done
-
-__tests_file="$__tests_root/tests/.env"
-if [[ -f "$__tests_file" ]]; then
-	while IFS= read -r __tests_line || [[ -n "$__tests_line" ]]; do
-		[[ "$__tests_line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)=(.*)$ ]] || continue
-		__tests_name=${BASH_REMATCH[1]}
-		__tests_value=${BASH_REMATCH[2]}
-		__tests_value=${__tests_value%%[[:space:]]#*}
-		__tests_value=${__tests_value%\"}
-		__tests_value=${__tests_value#\"}
-		__tests_value=${__tests_value%\'}
-		__tests_value=${__tests_value#\'}
-		# Caller environment wins; tests/.env overrides project .env and ~/.opensimrc.
-		if [[ -z "${__tests_caller_env[$__tests_name]+x}" ]]; then
-			export "$__tests_name=$__tests_value"
-		fi
-	done <"$__tests_file"
-fi
 
 if [[ -n "${CONTAINER_CONNECTION:-}" ]]; then
 	export CONTAINER_CONNECTION
 	[[ -n "${__tests_said:-}" ]] || echo "tests: podman connection: $CONTAINER_CONNECTION" >&2
 	export __tests_said=1
 fi
-unset __tests_root __tests_file __tests_line __tests_name __tests_value __tests_declaration __tests_caller_env
+unset -f __tests_source_env
+unset __tests_root __tests_name __tests_value __tests_declaration __tests_rc_helpers __tests_caller_env
 true
