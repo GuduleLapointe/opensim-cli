@@ -106,7 +106,7 @@ This stage uses small TCP/UDP listeners, avoiding repeated full installations.
 Podman distinguishes `run` (create and start) from `start` (start an existing container). Standard `--publish` mappings are supplied to `create`/`run`; `start` does not offer a replacement port list. Merely stopping and starting an existing bridge container does not implement the required update behavior.
 
 - [x] Record the selected hosts' Podman versions and available network backends.
-- [ ] Verify explicit TCP and UDP mappings derived from the setup configuration, without depending on image `EXPOSE` metadata or automatic host-port selection.
+- [x] Verify explicit TCP and UDP mappings derived from the setup configuration, without depending on image `EXPOSE` metadata or automatic host-port selection.
 - [ ] Prove a supported mechanism to change ports for the same OCI container when Pasta is unavailable. Investigate existing networking/forwarding tools before writing a forwarding service.
 - [ ] Test Pasta live forwarding separately for TCP and UDP where available.
 - [ ] Keep public, private and console bindings distinct with every backend; automatic forwarding must not expose SQL or private consoles unintentionally.
@@ -118,6 +118,8 @@ Podman distinguishes `run` (create and start) from `start` (start an existing co
 Acceptance: change the configured ports, relaunch if required, and verify the same container ID, instance identity and data, plus the new TCP/UDP bindings. Live changes must leave unrelated simulators running.
 
 Development hosts checked: Vonda runs rootless Podman 5.7.0 with Netavark (client 5.6.0); Ursull runs rootless Podman 4.9.3 with Netavark (client 5.6.0). The live TCP/UDP integration checks in this stage currently run against Vonda.
+
+Prepared setups now carry engine-generated `port_bindings`: public TCP/UDP listeners bind on all host interfaces; private and console TCP listeners bind to host loopback; disabled consoles are omitted; duplicate standalone/listener ports are collapsed. Quick-install passes those records as explicit container-tools mappings and disables image `EXPOSE` defaults. Validation: 81 QuickSetup tests (394 assertions), 31 quick-install tests (108 assertions), one real-engine-to-installer setup test (15 assertions), and Vonda TCP/UDP listener delivery (one integration test, 11 assertions).
 
 If standard Podman mechanisms cannot meet same-container relaunch on a target backend, record that limitation and resolve the design before continuing. Replacing the OCI container while retaining its volumes is a different behavior and requires an explicit decision; it is not silently substituted here.
 

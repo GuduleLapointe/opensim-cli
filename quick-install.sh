@@ -282,8 +282,8 @@ build_systemd_image() (
 )
 
 run_podman_install() {
-	local source_script=${BASH_SOURCE[0]} source_dir output name server_image status=0 debs_in_container=
-	local -a environment=()
+	local source_script=${BASH_SOURCE[0]} source_dir output name server_image status=0 debs_in_container= mapping mapping_output
+	local -a environment=() publish_options=() mappings=()
 	bootstrap_podman_manager || die "could not install the local OpenSim manager"
 	if [[ -n "${CONTAINER_TOOLS_CLI:-}" ]]; then
 		CONTAINER_TOOLS_CLI_SELECTED=$CONTAINER_TOOLS_CLI
@@ -304,7 +304,13 @@ run_podman_install() {
 	[[ -f "$source_script" ]] || die "--podman requires quick-install.sh to be run from a local file"
 	server_image=$(build_systemd_image "$PODMAN_IMAGE") || die "could not build the systemd server image"
 	validate_prepared_podman_ports "$SETUP_CONFIG_FILE"
-	output=$(run_container_tool create --name "$PODMAN_CONTAINER_NAME" --image "$server_image") || status=$?
+	mapping_output=$(prepared_podman_publish_mappings "$SETUP_CONFIG_FILE") || die "the engine did not provide valid port bindings for the prepared setup"
+	mapfile -t mappings <<<"$mapping_output"
+	(( ${#mappings[@]} > 0 )) || die "the engine did not provide port bindings for the prepared setup"
+	for mapping in "${mappings[@]}"; do
+		publish_options+=(--publish "$mapping")
+	done
+	output=$(run_container_tool create --name "$PODMAN_CONTAINER_NAME" --image "$server_image" --no-publish-defaults "${publish_options[@]}") || status=$?
 	printf '%s\n' "$output"
 	((status == 0)) || die "could not create the Podman container"
 	name=$(sed -n 's/^Name: //p' <<<"$output" | tail -n 1)
@@ -336,6 +342,26 @@ run_podman_install() {
 	[[ -z "$DEBUG" ]] || environment+=(DEBUG="$DEBUG")
 	run_container_tool exec "$name" -- env "${environment[@]}" bash /tmp/quick-install.sh "$@" || status=$?
 	return "$status"
+}
+
+prepared_podman_publish_mappings() {
+	local config=$1
+	jq -e '
+		(.port_bindings | type == "array" and length > 0)
+		and all(.port_bindings[];
+			(.port as $port | ($port | type) == "number" and $port == ($port | floor) and $port >= 1 and $port <= 65535)
+			and (.protocol == "tcp" or .protocol == "udp")
+			and (.use == "public" or .use == "private" or .use == "console")
+			and has("host_ip")
+			and (.host_ip == null or (.host_ip | type) == "string")
+		)
+	' "$config" >/dev/null || return 1
+	jq -r '
+		.port_bindings[]
+		| if .host_ip == null or .host_ip == "" then "\(.port):\(.port)/\(.protocol)"
+		  else "\(.host_ip):\(.port):\(.port)/\(.protocol)"
+		  end
+	' "$config"
 }
 
 validate_prepared_podman_ports() {

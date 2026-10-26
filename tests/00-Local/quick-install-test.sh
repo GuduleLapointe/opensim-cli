@@ -41,13 +41,13 @@ done
 if [[ -n "${config:-}" ]]; then
     [[ -z "${CAPTURED_SETUP:-}" ]] || cp "$config" "$CAPTURED_SETUP"
     if jq -e 'keys == ["hostname","occupied_ports"] or keys == ["occupied_ports"]' "$config" >/dev/null; then
-        printf '{"identity":"test_grid","answers":{"type":"grid","name":"Test Grid"},"setup":{}}\n' >"$destination"
+        printf '{"identity":"test_grid","answers":{"type":"grid","name":"Test Grid"},"setup":{"grid":{"public_port":8012,"private_port":8013,"console_port":8014},"simulators":[{"http_port":9010,"console":"rest","console_port":9014,"regions":[{"port":9011}]}]},"port_bindings":[{"port":8012,"protocol":"tcp","use":"public","host_ip":null},{"port":8013,"protocol":"tcp","use":"private","host_ip":"127.0.0.1"},{"port":8014,"protocol":"tcp","use":"console","host_ip":"127.0.0.1"},{"port":9010,"protocol":"tcp","use":"public","host_ip":null},{"port":9011,"protocol":"udp","use":"public","host_ip":null},{"port":9014,"protocol":"tcp","use":"console","host_ip":"127.0.0.1"}]}\n' >"$destination"
     else
         jq -e '.identity' "$config" >/dev/null || { echo 'invalid setup config' >&2; exit 1; }
-        cp "$config" "$destination"
+        jq '.port_bindings //= [{"port":8012,"protocol":"tcp","use":"public","host_ip":null}]' "$config" >"$destination"
     fi
 else
-    printf '{"identity":"test_grid","answers":{"type":"grid","name":"Test Grid"},"setup":{}}\n' >"$destination"
+    printf '{"identity":"test_grid","answers":{"type":"grid","name":"Test Grid"},"setup":{"grid":{"public_port":8012,"private_port":8013,"console_port":8014},"simulators":[{"http_port":9010,"console":"rest","console_port":9014,"regions":[{"port":9011}]}]},"port_bindings":[{"port":8012,"protocol":"tcp","use":"public","host_ip":null},{"port":8013,"protocol":"tcp","use":"private","host_ip":"127.0.0.1"},{"port":8014,"protocol":"tcp","use":"console","host_ip":"127.0.0.1"},{"port":9010,"protocol":"tcp","use":"public","host_ip":null},{"port":9011,"protocol":"udp","use":"public","host_ip":null},{"port":9014,"protocol":"tcp","use":"console","host_ip":"127.0.0.1"}]}\n' >"$destination"
 fi
 chmod 600 "$destination"
 SETUP
@@ -136,6 +136,10 @@ function test_podman_install_uses_connection_image_and_forwards_install_options(
 	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=podman-host APT_SOURCE_DIR='$debs' bash '$QUICK_INSTALL' --podman --connection=podman-host --image=docker.io/library/ubuntu:24.04 --opensim --yes"
 	assert_contains '<--name> <test_grid>' "$(cat "$calls")"
 	assert_contains '<--connection> <podman-host> <create> <--name> <test_grid> <--image> <localhost/opensim-server:docker.io-library-ubuntu-24.04-' "$(cat "$calls")"
+	assert_contains '<--no-publish-defaults>' "$(grep '<create>' "$calls")"
+	assert_contains '<--publish> <8012:8012/tcp>' "$(grep '<create>' "$calls")"
+	assert_contains '<--publish> <127.0.0.1:8013:8013/tcp>' "$(grep '<create>' "$calls")"
+	assert_contains '<--publish> <9011:9011/udp>' "$(grep '<create>' "$calls")"
 	assert_not_contains '<-->' "$(grep '<create>' "$calls")"
 	assert_contains '<cp> ' "$(cat "$calls")"
 	assert_contains '<cp> <'"$debs"'> <test-opensim:/tmp/opensim-kit-debs>' "$(cat "$calls")"

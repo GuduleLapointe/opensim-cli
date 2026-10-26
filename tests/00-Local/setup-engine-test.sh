@@ -40,10 +40,17 @@ CLI
 	local line
 	for ((line = 0; line < 50; line++)); do printf '\n'; done >"$WORK/input"
 	assert_exec "CALL_LOG='$WORK/calls' CAPTURED_CONFIG='$WORK/prepared.json' CONTAINER_TOOLS_CLI='$WORK/container-tools' FE_INPUT_FD=7 FE_TTY='$WORK/none' OPENSIM_SETUP_UI=plain '$PROJECT_ROOT/quick-install.sh' --podman --config '$WORK/answers.json' --yes 7<'$WORK/input'" --stdout-contains 'Setup configuration saved'
-	assert_contains 'create --name oliviers_test-grid' "$(cat "$WORK/calls")"
+	local create_call mapping
+	create_call=$(grep '^create ' "$WORK/calls")
+	assert_contains 'create --name oliviers_test-grid' "$create_call"
+	assert_contains '--no-publish-defaults' "$create_call"
+	while IFS= read -r mapping; do
+		assert_contains '--publish '"$mapping" "$create_call"
+	done < <(jq -r '.port_bindings[] | if .host_ip == null then "\(.port):\(.port)/\(.protocol)" else "\(.host_ip):\(.port):\(.port)/\(.protocol)" end' "$WORK/prepared.json")
 	assert_equals oliviers_test-grid "$(jq -r .identity "$WORK/prepared.json")"
 	assert_equals 1 "$(jq -r .version "$WORK/prepared.json")"
 	assert_equals 8012 "$(jq -r .setup.grid.public_port "$WORK/prepared.json")"
+	assert_equals tcp "$(jq -r '.port_bindings[] | select(.port == 8012) | .protocol' "$WORK/prepared.json")"
 	assert_equals fixture-admin-password "$(jq -r .answers.admin_password "$WORK/prepared.json")"
 	assert_directory_not_exists "$WORK/etc/grids"
 }
