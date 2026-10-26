@@ -43,7 +43,8 @@ Validated: the ten Bashunit port-command tests (29 assertions) pass on macOS and
 - [x] Provide `opensim setup --prepare FILE` with private atomic saving, cancellation that preserves the destination, and refusal of engines that do not acknowledge preparation support.
 - [x] Let quick-install collect the full grid, standalone or simulator setup, rather than just its type and name.
 - [x] Reuse the same saved answer format in quick-install and `opensim setup`.
-- [ ] Include the database driver and the choice to create a region or adopt an existing one in the collected answers.
+- [ ] Include the selected database driver in collected answers, saved setup configuration and provisioning.
+- [x] Collect the first-region choice: an empty region source creates one; a supplied Region.ini adopts that region. Preparation and adoption tests cover both paths.
 - [x] Resolve how the engine-owned questionnaire is available before target installation without requiring the full OpenSim stack on the client host. Preserve quick-install's ability to be downloaded and run independently.
 - [x] Detect occupied ports on the selected Podman host during planning; repeat the collision check immediately before launch.
 - [ ] `opensim setup --podman [--connection <host>]` should also allow the setup of a new or existing podman instance
