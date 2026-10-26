@@ -37,9 +37,11 @@ README.md remains the concise user guide.
 - Persistent paths belong to the selected Podman host, including remote hosts.
 - Containers include SSH and common maintenance tools: Bash, curl, wget,
   process/socket inspection, DNS diagnostics and ping.
-- Container region configuration sets `ResolveAddress = True` and a reachable
-  `ExternalHostName`. `SYSTEMIP` still selects the local container address;
-  enabling resolution alone does not discover the externally reachable address.
+- Validate `ResolveAddress = True` with portable address configuration, including
+  `ExternalHostName = SYSTEMIP`, against the actual core's announced address.
+  A container must remain movable between hosts without a baked-in host IP.
+  The inspected core source resolves SYSTEMIP through its local-address helper;
+  verify actual behavior before deciding whether that is suitable behind NAT.
 - Support SQLite3 for small deployments, including a single-region container.
   MariaDB/MySQL remain supported and recommended for grids. The selected driver
   controls provisioning and required services; SQLite must not require a SQL
@@ -52,21 +54,26 @@ README.md remains the concise user guide.
 
 ## 1. Restore `opensim ports`
 
-- [ ] Port the kit command through the current CLI/engine architecture.
+- [x] Port the kit command through the current CLI/engine architecture.
   Reference: `../opensim-kit/src/Console/Commands/PortsCommand.php`.
-- [ ] Use the existing engine port descriptions (`ports()` on controllers),
+- [x] Use the existing engine port descriptions (`ports()` on controllers),
   including instance, type, port, protocol, role and access category.
-- [ ] Provide the table and instance selection supported by the old command.
-- [ ] Restore `--publish`, `--ufw` and `--private-address` behavior.
-- [ ] Deduplicate mappings while preserving distinct TCP and UDP entries.
-- [ ] Keep private/console ports restricted by default; omit disabled listeners.
-- [ ] Add help and completion using the existing CLI conventions.
-- [ ] Test Robust, simulators, multiple regions, TCP/UDP, disabled consoles,
+- [x] Provide the table and instance selection supported by the old command.
+- [x] Restore `--publish`, `--ufw` and `--private-address` behavior.
+- [x] Deduplicate mappings while preserving distinct TCP and UDP entries.
+- [x] Keep private/console ports restricted by default; omit disabled listeners.
+- [x] Add help and completion using the existing CLI conventions.
+- [x] Test Robust, simulators, multiple regions, TCP/UDP, disabled consoles,
   instance selection and explicit failure for an unknown instance.
 
 Acceptance: reproduce the old command's useful output, including region UDP
 ports and loopback-bound console mappings. The CLI does not parse a second set
 of port rules independently of the engine.
+
+Validated: the ten Bashunit port-command tests (29 assertions) pass on macOS
+and Ubuntu 26.04 using the source CLI and installed engine dependencies.
+The complete local application suite passes: 58 passed, two expected macOS
+setup skips, no failures.
 
 ## 2. Collect the complete setup before provisioning
 
@@ -234,9 +241,10 @@ replacement for image updates remains distinct from the port-change contract.
 - [ ] Apply setup without repeating the questionnaire or changing chosen ports.
 - [ ] Validate SQL administrator/application credentials for MySQL/MariaDB,
   SQLite file access for SQLite, and normal rc loading for both workflows.
-- [ ] Generate/import each container region with `ResolveAddress = True` and
-  the intended public `ExternalHostName`; do not leave it as `SYSTEMIP` behind
-  a private container network. Preserve user-supplied public addresses.
+- [ ] Test `ResolveAddress = True` with `SYSTEMIP` and with a public hostname
+  on the actual core. Verify the advertised address outside the container,
+  including after moving the deployment to another host. Select the working
+  portable configuration and preserve explicit public-address choices.
 - [ ] Start a grid and a simulator with a region, and check actual readiness.
 - [ ] Compare `opensim ports` with configured listeners and effective bindings.
 - [ ] Verify advertised public hostnames and matching external/internal OpenSim

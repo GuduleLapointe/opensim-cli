@@ -2,7 +2,7 @@
 
 The command line to set up and manage OpenSimulator, in bash. It asks the questions and shows the results; the rules and the work are the [OpenSim engine](https://github.com/GuduleLapointe/opensim-engine)'s. It needs nothing else of the OpenSim ecosystem: not the core, not the helpers, not the modules.
 
-**Under construction.** The quick setup asks what to set up and a few answers, checks them with the engine and shows the setup they stand for. Besides it: status, start, stop, restart, console and install-dotnet. `dev/build.sh` makes the Debian package and the zip into `dist/`. The package installs the bash completion (`share/bash-completion/opensim`).
+**Under construction.** The quick setup asks what to set up and a few answers, checks them with the engine and shows the setup they stand for. Besides it: status, ports, start, stop, restart, console and install-dotnet. `dev/build.sh` makes the Debian package and the zip into `dist/`. The package installs the bash completion (`share/bash-completion/opensim`).
 
 ## Quick install
 
@@ -64,7 +64,11 @@ For a Podman install, run the downloaded script as a file. It creates a persiste
 - [ ] enable|disable <grid> profiles
 - [x] console|screen <instance>
 - [ ] command <instance> <text>|-
-- [ ] ports [instance...] [--publish|--ufw]
+- [x] ports [instance...] [--publish|--ufw] [--private-address ADDRESS]
+
+`opensim ports` lists configured listeners and their TCP/UDP protocol. `--publish`
+prints Podman/Docker mappings; `--ufw` prints public firewall rules and comments
+for private/console ports. Private mappings bind to `127.0.0.1` unless overridden.
 
 #### Grids
 

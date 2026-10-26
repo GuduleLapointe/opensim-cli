@@ -4,6 +4,7 @@
  * What the commands that act on this machine ask of the engine (run by the scripts of libexec/, not by hand):
  *
  *   run.php status
+ *   run.php ports [instance...] [--publish|--ufw] [--private-address ADDRESS]
  *   run.php start [--simulators] [target...]
  *   run.php stop|restart [--simulators] [now] [target...]
  *   run.php console <instance>
@@ -222,6 +223,9 @@ $now = ($words[0] ?? '') === 'now';
 $targets = $now ? array_slice($words, 1) : $words;
 
 switch ($command) {
+    case 'ports':
+        require __DIR__ . '/ports.php';
+        exit(showPorts($engine, $args));
     case 'status':
         echo render(OpenSim::status($engine));
         exit(0);

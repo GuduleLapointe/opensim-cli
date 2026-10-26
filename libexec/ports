@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# opensim ports: describe the configured listeners and how to expose them.
+
+USAGE="opensim ports [-hqv] [instance...] [--publish|--ufw] [--private-address ADDRESS]"
+HELP="List instance ports with their protocol, purpose and access category.
+  --publish                  print Podman/Docker port mappings
+  --ufw                      print public firewall rules; private rules are comments
+  --private-address ADDRESS  bind private and console ports here (default 127.0.0.1)"
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run ports "$@"

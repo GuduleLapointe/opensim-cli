@@ -5,12 +5,13 @@ set -e
 here=$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 libexec=$(cd "$here/../libexec" && pwd)
 
-COMMANDOPTS=setup,status,start,stop,restart,console,screen,install-dotnet
+COMMANDOPTS=setup,status,ports,start,stop,restart,console,screen,install-dotnet
 HELP=$(
 	cat <<USAGE
 
   setup           make a grid, a standalone or a simulator that joins a grid
   status          the instances of this machine, running or not
+  ports           list instance ports, publishing options or firewall rules
   start           start grids and simulators
   stop            stop grids and simulators
   restart         stop, then start grids and simulators
@@ -18,6 +19,12 @@ HELP=$(
   install-dotnet  install the .NET runtime OpenSimulator needs
 USAGE
 )
+# Command help uses the command's own usage, before dispatch can prepare a setup or elevate privileges.
+if [[ -n "${1:-}" && ",$COMMANDOPTS," == *",$1,"* && -x "$libexec/$1" ]]; then
+	for argument in "${@:2}"; do
+		case "$argument" in -h | --help) exec "$libexec/$1" "${@:2}" ;; esac
+	done
+fi
 export PRESERVE_ENV=PATH,CONTAINER_CONNECTION,DEFAULT_OWNER_NAME,DEFAULT_OWNER_PASSWORD,DOTNET_SYSTEM_NET_DISABLEIPV6,OPENSIM_DB_ADMIN_PASS,OPENSIM_DB_ADMIN_USER,OPENSIM_DB_HOST,OPENSIM_DB_NAME,OPENSIM_DB_PASS,OPENSIM_DB_PORT,OPENSIM_DB_USER,APT_SOURCE_DIR
 
 # $COMMAND and other runtime values are detected by lib/common
