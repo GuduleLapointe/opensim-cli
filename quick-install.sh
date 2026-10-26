@@ -161,6 +161,7 @@ PODMAN_IMAGE=${OPENSIM_CONTAINER_IMAGE:-docker.io/library/ubuntu:26.04}
 PODMAN_IMAGE_SELECTED=no
 PODMAN_INSTALL_ARGS=()
 CONTAINER_TOOLS_CLI_SELECTED=
+SETUP_CLI_SELECTED=
 SETUP_CONFIG_FILE=${OPENSIM_SETUP_CONFIG_FILE:-${OPENSIM_SETUP_CONFIG:-}}
 SETUP_CONFIG_TEMP=
 PODMAN_CONTAINER_NAME=
@@ -265,33 +266,30 @@ run_podman_install() {
 	return "$status"
 }
 
-prepare_podman_setup_config() {
-	local type name slug parsed
-	if [[ -n "$SETUP_CONFIG_FILE" ]]; then
-		[[ -r "$SETUP_CONFIG_FILE" ]] || die "cannot read setup config: $SETUP_CONFIG_FILE"
-		command -v jq >/dev/null 2>&1 || die "jq is required to read the setup config"
-		type=$(jq -er '.type // .answers.type // empty' "$SETUP_CONFIG_FILE") || die "invalid setup config: expected JSON answers with type and name"
-		name=$(jq -er '.name // .answers.name // empty' "$SETUP_CONFIG_FILE") || die "invalid setup config: expected JSON answers with type and name"
-	else
-		type=${OPENSIM_SETUP_TYPE:-grid}
-		name=${OPENSIM_SETUP_NAME:-}
-		if [[ -z "$name" && -z "$ASSUME_YES" && -r /dev/tty ]]; then
-			printf 'Setup type [grid/standalone/simulator] (grid): ' >/dev/tty
-			IFS= read -r type </dev/tty || die "could not read setup type"
-			type=${type:-grid}
-			printf 'Grid or simulator name: ' >/dev/tty
-			IFS= read -r name </dev/tty || die "could not read setup name"
+bootstrap_podman_manager() {
+	if [[ -n "$clone" ]]; then
+		if [[ ! -f "$clone/vendor/autoload.php" ]]; then
+			phase_dependencies || return $?
 		fi
-		name=${name:-OpenSim}
-		SETUP_CONFIG_TEMP="$TMP.setup.json"
-		command -v jq >/dev/null 2>&1 || die "jq is required to write the setup config"
-		jq -cn --arg type "$type" --arg name "$name" '{type:$type,name:$name}' >"$SETUP_CONFIG_TEMP" || die "could not write setup config"
-		SETUP_CONFIG_FILE=$SETUP_CONFIG_TEMP
+		SETUP_CLI_SELECTED=$clone/bin/opensim
+	else
+		configure_package_sources || return $?
+		# The controller needs the engine and CLI, without a local SQL server or OpenSimulator core.
+		install_packages --no-install-recommends opensim-cli container-tools || return $?
+		SETUP_CLI_SELECTED=/usr/share/opensim-cli/bin/opensim
 	fi
-	case "$type" in grid | standalone | simulator) ;; *) die "setup type must be grid, standalone, or simulator" ;; esac
-	slug=$(printf '%s' "$name" | iconv -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//')
-	[[ -n "$slug" ]] || die "setup name must contain letters or numbers"
-	PODMAN_CONTAINER_NAME=$slug
+}
+
+prepare_podman_setup_config() {
+	local -a arguments=(setup)
+	bootstrap_podman_manager || die "could not install the local OpenSim manager"
+	command -v jq >/dev/null 2>&1 || die "jq is required by the OpenSim manager"
+	[[ -z "$SETUP_CONFIG_FILE" ]] || arguments+=(--config "$SETUP_CONFIG_FILE")
+	SETUP_CONFIG_TEMP=$(mktemp "$TMP.setup.XXXXXXXX") || die "could not create a private setup file"
+	arguments+=(--prepare "$SETUP_CONFIG_TEMP")
+	"$SETUP_CLI_SELECTED" "${arguments[@]}" || die "setup preparation failed; no container created"
+	PODMAN_CONTAINER_NAME=$(jq -er '.identity | select(type == "string" and test("^[a-zA-Z0-9][a-zA-Z0-9_.-]*$"))' "$SETUP_CONFIG_TEMP") || die "invalid setup config: the engine did not provide an instance identity"
+	SETUP_CONFIG_FILE=$SETUP_CONFIG_TEMP
 }
 
 run_container_tool() {
@@ -873,7 +871,7 @@ fi
 PGM=$(basename "$0")
 TMP=/tmp/$PGM.$$
 DEBUG=${DEBUG:-}
-trap 'rm -rf "$TMP" "$TMP.$$" "$TMP.setup.json"' EXIT
+trap 'rm -rf "$TMP" "$TMP.$$"; [[ -z "$SETUP_CONFIG_TEMP" ]] || rm -f "$SETUP_CONFIG_TEMP"' EXIT
 
 while (($#)); do
 	argument=$1
@@ -973,11 +971,6 @@ if [[ -n "$REMOTE_TARGET" ]]; then
 	exit $?
 fi
 
-if [[ "$PODMAN_MODE" == yes ]]; then
-	run_podman_install "${PODMAN_INSTALL_ARGS[@]}"
-	exit $?
-fi
-
 # Check if in a clone of the repository
 here=
 if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
@@ -987,6 +980,11 @@ log here $here
 clone=
 [[ -n "$here" && -x "$here/bin/opensim" && -f "$here/composer.json" ]] && clone=$here
 log clone $clone
+
+if [[ "$PODMAN_MODE" == yes ]]; then
+	run_podman_install "${PODMAN_INSTALL_ARGS[@]}"
+	exit $?
+fi
 
 case "$(uname -s)" in Linux | Darwin) ;; *) die "unsupported system $(uname -s)" ;; esac
 

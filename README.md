@@ -78,6 +78,8 @@ for private/console ports. Private mappings bind to `127.0.0.1` unless overridde
 and saves them in a private file. Use `--config setup.json` to prefill a later
 setup. Preparation requires an engine that supports this mode.
 
+`quick-install.sh --podman` uses this questionnaire before creating the target container. From a downloaded script, it installs the local CLI, engine and container tools first; a source checkout reuses its Composer dependencies. Cancelling the questionnaire creates no target container.
+
 - [ ] import [grid] FILE [--grid] [--simulator] [--users] [--apply]
 - [ ] web [grid] [show|check]
 - [ ] web [grid] snippet <caddy|nginx|apache>

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-QUICK_INSTALL=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/quick-install.sh
+QUICK_INSTALL_SOURCE=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/quick-install.sh
 QUICK_INSTALL_LIBRARY_LOADED=no
 
 function quick_install_load_library() {
@@ -17,6 +17,33 @@ function quick_install_load_library() {
 
 function set_up() {
 	WORK=$(mktemp -d)
+	QUICK_INSTALL=$WORK/project/quick-install.sh
+	mkdir -p "$WORK/project/bin" "$WORK/project/vendor"
+	cp "$QUICK_INSTALL_SOURCE" "$QUICK_INSTALL"
+	printf '{}\n' >"$WORK/project/composer.json"
+	: >"$WORK/project/vendor/autoload.php"
+	cat >"$WORK/project/bin/opensim" <<'SETUP'
+#!/usr/bin/env bash
+printf 'setup' >>"$CALL_LOG"
+printf ' <%s>' "$@" >>"$CALL_LOG"
+printf '\n' >>"$CALL_LOG"
+shift
+while (($#)); do
+    case "$1" in
+        --prepare) destination=$2; shift 2 ;;
+        --config) config=$2; shift 2 ;;
+        *) exit 2 ;;
+    esac
+done
+if [[ -n "${config:-}" ]]; then
+    jq -e '.identity' "$config" >/dev/null || { echo 'invalid setup config' >&2; exit 1; }
+    cp "$config" "$destination"
+else
+    printf '{"identity":"test_grid","answers":{"type":"grid","name":"Test Grid"},"setup":{}}\n' >"$destination"
+fi
+chmod 600 "$destination"
+SETUP
+	chmod +x "$WORK/project/bin/opensim"
 	APT_SOURCE_FILE=$WORK/magiiic.list
 	TMP=$WORK/quick-install
 }
@@ -79,9 +106,9 @@ function test_podman_install_uses_connection_image_and_forwards_install_options(
 	local fake_bin=$WORK/tools calls=$WORK/podman-calls debs=$WORK/local-debs
 	mkdir -p "$debs"
 	create_container_tools_stub "$fake_bin"
-	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=ursull APT_SOURCE_DIR='$debs' bash '$QUICK_INSTALL' --podman --connection=ursull --image=docker.io/library/ubuntu:24.04 --opensim --yes"
-	assert_contains '<--name> <opensim>' "$(cat "$calls")"
-	assert_contains '<--connection> <ursull> <create> <--name> <opensim> <--image> <docker.io/library/ubuntu:24.04>' "$(cat "$calls")"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=podman-host APT_SOURCE_DIR='$debs' bash '$QUICK_INSTALL' --podman --connection=podman-host --image=docker.io/library/ubuntu:24.04 --opensim --yes"
+	assert_contains '<--name> <test_grid>' "$(cat "$calls")"
+	assert_contains '<--connection> <podman-host> <create> <--name> <test_grid> <--image> <docker.io/library/ubuntu:24.04>' "$(cat "$calls")"
 	assert_contains '<cp> ' "$(cat "$calls")"
 	assert_contains '<cp> <'"$debs"'> <test-opensim:/tmp/opensim-kit-debs>' "$(cat "$calls")"
 	assert_contains '<exec> <test-opensim> <-->' "$(cat "$calls")"
@@ -93,11 +120,11 @@ function test_podman_config_names_container_and_is_copied_for_setup() {
 	local fake_bin=$WORK/tools calls=$WORK/podman-config-calls config=$WORK/setup.json
 	create_container_tools_stub "$fake_bin"
 cat >"$config" <<'JSON'
-{"type":"standalone","name":"Ile de Re"}
+{"identity":"ile_de_re.ile_de_re","answers":{"type":"standalone","name":"Ile de Re"},"setup":{}}
 JSON
 	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --config '$config' --connection=local --opensim"
-	assert_contains '<--name> <ile-de-re>' "$(cat "$calls")"
-	assert_contains '<cp> <'"$config"'> <test-opensim:/tmp/opensim-setup.json>' "$(cat "$calls")"
+	assert_contains '<--name> <ile_de_re.ile_de_re>' "$(cat "$calls")"
+	assert_contains '> <test-opensim:/tmp/opensim-setup.json>' "$(cat "$calls")"
 	assert_contains '<OPENSIM_SETUP_CONFIG_FILE=/tmp/opensim-setup.json>' "$(cat "$calls")"
 }
 
@@ -114,7 +141,7 @@ function test_podman_config_rejects_missing_setup_identity_before_create() {
 function test_podman_connection_local_forces_local_engine() {
 	local fake_bin=$WORK/tools calls=$WORK/podman-local-calls
 	create_container_tools_stub "$fake_bin"
-	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=ursull bash '$QUICK_INSTALL' --podman --connection=local --yes"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=podman-host bash '$QUICK_INSTALL' --podman --connection=local --yes"
 	assert_contains 'connection=<unset>' "$(cat "$calls")"
 	assert_contains '<--image> <docker.io/library/ubuntu:26.04>' "$(cat "$calls")"
 	assert_not_contains '<--connection>' "$(cat "$calls")"
@@ -127,8 +154,8 @@ function test_podman_environment_overrides_opensimrc() {
 CONTAINER_CONNECTION=other
 OPENSIM_CONTAINER_IMAGE=docker.io/library/ubuntu:24.04
 RC
-	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC='$rc' CONTAINER_CONNECTION=ursull OPENSIM_CONTAINER_IMAGE=docker.io/library/debian:13-slim bash '$QUICK_INSTALL' --podman --yes"
-	assert_contains 'connection=ursull' "$(cat "$calls")"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC='$rc' CONTAINER_CONNECTION=podman-host OPENSIM_CONTAINER_IMAGE=docker.io/library/debian:13-slim bash '$QUICK_INSTALL' --podman --yes"
+	assert_contains 'connection=podman-host' "$(cat "$calls")"
 	assert_contains '<--image> <docker.io/library/debian:13-slim>' "$(cat "$calls")"
 }
 
@@ -139,6 +166,33 @@ function test_podman_setup_requires_interactive_container_terminal() {
 		--exit 1 \
 		--stdout-contains 'run opensim setup in the container after installation'
 	assert_equals '' "$(cat "$calls" 2>/dev/null || true)"
+}
+
+function test_podman_prepares_before_container_creation() {
+	local fake_bin=$WORK/tools calls=$WORK/prepare-calls
+	create_container_tools_stub "$fake_bin"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --yes"
+	assert_contains 'setup <setup> <--prepare>' "$(head -n 1 "$calls")"
+	assert_contains '<create>' "$(sed -n '2p' "$calls")"
+}
+
+function test_podman_cancel_creates_no_container() {
+	local fake_bin=$WORK/tools calls=$WORK/cancel-calls
+	create_container_tools_stub "$fake_bin"
+	printf '#!/usr/bin/env bash\necho Cancelled >&2\nexit 1\n' >"$WORK/project/bin/opensim"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman 2>&1" --exit 1 --stdout-contains Cancelled
+	assert_file_not_exists "$calls"
+}
+
+function test_podman_bootstrap_installs_only_management_packages() {
+	quick_install_load_library || return
+	clone=
+	local calls=$WORK/bootstrap-calls
+	configure_package_sources() { printf 'sources\n' >>"$calls"; }
+	install_packages() { printf '%s\n' "$*" >>"$calls"; }
+	bootstrap_podman_manager
+	assert_equals $'sources\n--no-install-recommends opensim-cli container-tools' "$(cat "$calls")"
+	assert_equals /usr/share/opensim-cli/bin/opensim "$SETUP_CLI_SELECTED"
 }
 
 function test_default_source_replaces_old_magiiic_distributions_and_preserves_other_sources() {
@@ -196,7 +250,7 @@ function test_apt_source_parser_accepts_multiword_options() {
 function test_apt_source_settings_build_primary_and_test_entries() {
 	local fixture=$WORK/project-sources output
 	mkdir -p "$fixture/tests"
-	cp "$QUICK_INSTALL" "$fixture/quick-install.sh"
+	cp -R "$WORK/project/." "$fixture/"
 	cat >"$fixture/.env" <<'ENV'
 APT_SOURCE="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable"
 ENV
@@ -211,7 +265,7 @@ ENV
 function test_podman_install_loads_project_and_test_apt_repositories() {
 	local fixture=$WORK/project calls=$WORK/podman-repository-calls
 	mkdir -p "$fixture/tests" "$fixture/tools"
-	cp "$QUICK_INSTALL" "$fixture/quick-install.sh"
+	cp -R "$WORK/project/." "$fixture/"
 	cat >"$fixture/.env" <<'ENV'
 APT_SOURCE="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable"
 ENV
@@ -229,7 +283,7 @@ ENV
 function test_podman_caller_apt_repositories_override_test_environment() {
 	local fixture=$WORK/project-override calls=$WORK/podman-repository-override-calls
 	mkdir -p "$fixture/tests" "$fixture/tools"
-	cp "$QUICK_INSTALL" "$fixture/quick-install.sh"
+	cp -R "$WORK/project/." "$fixture/"
 	cat >"$fixture/tests/.env" <<'ENV'
 APT_SOURCE="deb https://packages.example.test/debian bookworm main"
 ENV

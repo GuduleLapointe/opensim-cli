@@ -40,17 +40,19 @@ Validated: the ten Bashunit port-command tests (29 assertions) pass on macOS and
 
 - [x] Separate the engine's questionnaire/validation from setup side effects.
 - [x] Provide `opensim setup --prepare FILE` with private atomic saving, cancellation that preserves the destination, and refusal of engines that do not acknowledge preparation support.
-- [ ] Let quick-install collect the full grid, standalone or simulator setup, rather than just its type and name.
-- [ ] Reuse the same saved answer format in quick-install and `opensim setup`.
+- [x] Let quick-install collect the full grid, standalone or simulator setup, rather than just its type and name.
+- [x] Reuse the same saved answer format in quick-install and `opensim setup`.
 - [ ] Include the database driver and the choice to create a region or adopt an existing one in the collected answers.
-- [ ] Resolve how the engine-owned questionnaire is available before target installation without requiring the full OpenSim stack on the client host. Preserve quick-install's ability to be downloaded and run independently.
+- [x] Resolve how the engine-owned questionnaire is available before target installation without requiring the full OpenSim stack on the client host. Preserve quick-install's ability to be downloaded and run independently.
 - [ ] Check the selected Podman host's occupied/reserved ports during planning; repeat collision checks immediately before launch to catch intervening changes.
 - [ ] Preserve ten-port simulator allocation and the ability to override defaults.
-- [ ] Compute the final OpenSim identity before creating paths or the container.
+- [x] Compute the final OpenSim identity before creating paths or the container.
 - [ ] Protect saved secrets and transfer them as file contents or standard input.
 - [ ] Test interactive answers and supplied configuration, cancellation, validation failures, config round trips and application without repeated prompts.
 
 Acceptance: cancellation leaves no target container or partial deployment. The confirmed configuration determines both the container identity and setup.
+
+Controller bootstrap decision: a downloaded quick-install installs opensim-cli (and its engine dependency) plus container-tools on the client. The controller suppresses package recommendations so that collecting answers does not install a local SQL server; ordinary target installation keeps its existing dependency behavior. A source checkout reuses its Composer dependencies. No temporary questionnaire container or runtime bundle is used. The engine provides the final identity and random-name defaults. Supplied configuration prefills the same questionnaire; it is confirmed and validated before target creation.
 
 Preparation foundation validated: 65 engine quick-setup tests pass on Ubuntu 24.04, and 38 CLI setup/ports tests pass on Ubuntu 26.04. The preparation API returns collected answers and a setup preview without provisioning. Integration with quick-install, freezing effective settings across hosts, and unattended application of those settings remain pending; this stage is not complete yet. The updated local application suite passes: 62 passed, two expected macOS skips.
 
