@@ -45,7 +45,7 @@ Validated: the ten Bashunit port-command tests (29 assertions) pass on macOS and
 - [ ] Include the database driver and the choice to create a region or adopt an existing one in the collected answers.
 - [x] Resolve how the engine-owned questionnaire is available before target installation without requiring the full OpenSim stack on the client host. Preserve quick-install's ability to be downloaded and run independently.
 - [ ] Check the selected Podman host's occupied/reserved ports during planning; repeat collision checks immediately before launch to catch intervening changes.
-- [ ] Preserve ten-port simulator allocation and the ability to override defaults.
+- [x] Preserve ten-port simulator allocation and the ability to override defaults.
 - [x] Compute the final OpenSim identity before creating paths or the container.
 - [x] Protect saved secrets and transfer them as file contents or standard input.
 - [ ] Test interactive answers and supplied configuration, cancellation, validation failures, config round trips and application without repeated prompts.
@@ -57,6 +57,8 @@ Controller bootstrap decision: a downloaded quick-install installs opensim-cli (
 Credential handoff: quick-install copies the selected SQL credentials into a private rc file in the new container, so the package installation and later setup use the same account/password. Applying a prepared file fills an unspecified SQL administrator from the target's normal rc environment while preserving explicitly supplied credentials. SQL account creation quotes arbitrary passwords using a defined session SQL mode; a live MariaDB check authenticated both temporary accounts with apostrophes and backslashes and removed them afterwards. All 72 local CLI tests passed on Ubuntu 24.04 before the additional SQL quoting regression, which also passed separately.
 
 Prepared application: `opensim setup --apply FILE` applies the confirmed configuration without repeating questions and refuses changes to its frozen values. Quick-install recognizes this format and uses `--apply` when `--setup` is requested; ordinary answer files keep interactive `--config` behavior. The installer accepts `--region-config FILE` and passes the original region through preparation before creating the target. Remote SSH installation copies both input files to a private temporary directory, rewrites their paths and removes the directory on completion or failure. Native installer tests pass (27 tests, 87 assertions); all 83 local CLI tests pass on Ubuntu 24.04, including a real private-input handoff to the opensim service account. Target-host port preflight and SQL driver selection remain open.
+
+Port choices: the questionnaire now offers optional grid private/console ports and simulator HTTP/console/region ports. Empty inputs retain the existing planners' defaults and ten-port blocks; changing the simulator HTTP base moves its automatic console and region ports with it. Confirmed values survive preparation. A standalone keeps its Login URI and HTTP listener together. The core engine and CLI regressions pass on Ubuntu 24.04: 1,034 engine tests and 83 CLI tests, with six engine prerequisite skips. Remote-host occupancy checks are still pending.
 
 ## 2a. Provision containers for existing regions
 
