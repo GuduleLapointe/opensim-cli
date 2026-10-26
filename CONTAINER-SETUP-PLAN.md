@@ -111,7 +111,8 @@ Podman distinguishes `run` (create and start) from `start` (start an existing co
 - [x] Test Pasta live forwarding separately for TCP and UDP where available.
 - [x] Keep public, private and console bindings distinct with every backend; automatic forwarding must not expose SQL or private consoles unintentionally.
 - [x] Verify Pasta reacts to listeners started and stopped by the controller or inside the container; its automatic forwarding tracks bound sockets without changing the container.
-- [x] Exercise an occupied host port, a listener outside the initial published set and listener removal/restart on Pasta.
+- [x] Exercise an occupied host port and a listener outside the initial published set on bridge and Pasta backends.
+- [x] Verify Pasta removes and restores forwarding when a listener stops and restarts.
 - [x] Verify published access from another machine, not only container loopback.
 - [x] Keep generic mappings and Pasta forwarding in container-tools and generate OpenSim's access policy in the engine.
 - [ ] Restart an individual OpenSim simulator after changing its configured ports; validate bridge replacement once stage 5 mounts are implemented.
@@ -120,9 +121,9 @@ Acceptance: change the configured ports, relaunch if required, and verify the sa
 
 Development hosts checked: Vonda runs rootless Podman 5.7.0 with Netavark (client 5.6.0); Ursull runs rootless Podman 4.9.3 with Netavark (client 5.6.0). The live TCP/UDP integration checks in this stage currently run against Vonda.
 
-Prepared setups now carry engine-generated `port_bindings`: public TCP/UDP listeners bind on all host interfaces; private and console TCP listeners bind to host loopback; disabled consoles are omitted; duplicate standalone/listener ports are collapsed. Quick-install passes those records as explicit container-tools mappings and disables image `EXPOSE` defaults. Validation: 81 QuickSetup tests (394 assertions), 31 quick-install tests (108 assertions), one real-engine-to-installer setup test (15 assertions), and Vonda TCP/UDP listener delivery (one integration test, 11 assertions).
+Prepared setups now carry engine-generated `port_bindings`: public TCP/UDP listeners bind on all host interfaces; private and console TCP listeners bind to host loopback; disabled consoles are omitted; duplicate standalone/listener ports are collapsed. Quick-install passes those records as explicit container-tools mappings and disables image `EXPOSE` defaults. Validation: 81 QuickSetup tests (394 assertions), 31 quick-install tests (108 assertions), one real-engine-to-installer setup test (16 assertions), and Vonda explicit TCP/UDP listener delivery (one integration test, 11 assertions).
 
-Pasta live forwarding validation: Vonda passed TCP listeners started by the controller and inside the container, and a UDP listener started inside the container. A separate TCP test starts, stops and restarts a listener outside the initial published set and verifies the OCI ID remains unchanged. The UDP probe waits for the socket to bind before sending; test port selection checks both TCP and UDP sockets. These checks verify dynamic listener forwarding on Pasta, not fixed `--publish` changes on a bridge container.
+Live forwarding validation on Vonda: Pasta passed TCP listeners started by the controller and inside the container, UDP listener delivery, and TCP listener start/stop/restart outside the initial published set while keeping the OCI ID. A bridge test passed a listener started after container startup on a mapping chosen at creation, and another confirmed a second container cannot claim an occupied host port. The external-access test connected from the Mac to a TCP listener published by Vonda. The UDP probe waits for the socket to bind before sending; test port selection checks both TCP and UDP sockets. These checks verify dynamic listener forwarding on Pasta, not fixed `--publish` changes on a bridge container.
 
 OpenSim uses explicit engine-generated bindings for every network backend; it never enables Pasta auto-publish, which would forward every eligible listening port, including private services. The quick-install engine integration test now asserts that the auto-publish flag is absent while checking public, private, console and UDP mappings.
 
