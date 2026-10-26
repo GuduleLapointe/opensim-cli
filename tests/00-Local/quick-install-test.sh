@@ -519,8 +519,24 @@ function test_systemd_image_starts_init_and_generates_keys_at_boot() {
     mkdir "$WORK/context"
     write_systemd_context "$WORK/context" docker.io/library/debian:12-slim
     assert_contains 'FROM docker.io/library/debian:12-slim' "$(cat "$WORK/context/Containerfile")"
+    assert_contains 'COPY setup-system.sh /usr/local/sbin/setup-system' "$(cat "$WORK/context/Containerfile")"
+    assert_contains '&& /usr/local/sbin/setup-system' "$(cat "$WORK/context/Containerfile")"
     assert_contains 'CMD ["/sbin/init"]' "$(cat "$WORK/context/Containerfile")"
     assert_contains 'STOPSIGNAL SIGRTMIN+3' "$(cat "$WORK/context/Containerfile")"
-    assert_contains 'rm -rf /var/lib/apt/lists/*' "$(cat "$WORK/context/Containerfile")"
+    assert_contains 'systemd-sysv' "$(cat "$WORK/context/setup-system.sh")"
+    assert_contains 'openssh-server' "$(cat "$WORK/context/setup-system.sh")"
+    assert_contains 'rm -rf /var/lib/apt/lists/*' "$(cat "$WORK/context/setup-system.sh")"
+    assert_exec "bash -n '$WORK/context/setup-system.sh'"
     assert_contains 'ExecStart=/usr/bin/ssh-keygen -A' "$(cat "$WORK/context/ssh-host-keys.service")"
+}
+
+function test_systemd_image_fingerprint_includes_setup_script() {
+	quick_install_load_library || return
+	mkdir "$WORK/context"
+	write_systemd_context "$WORK/context" docker.io/library/ubuntu:26.04
+	local original changed
+	original=$(systemd_image_checksum "$WORK/context")
+	printf '\n# image setup revision\n' >>"$WORK/context/setup-system.sh"
+	changed=$(systemd_image_checksum "$WORK/context")
+	assert_not_equals "$original" "$changed"
 }

@@ -250,12 +250,39 @@ write_systemd_context() {
 	local directory=$1 base=$2
 	printf 'FROM %s\n' "$base" >"$directory/Containerfile"
 	cat >>"$directory/Containerfile" <<-'CONTAINERFILE'
-		RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends systemd systemd-sysv dbus openssh-server curl wget ca-certificates iproute2 iputils-ping procps && apt-get clean && rm -rf /var/lib/apt/lists/* && rm -f /etc/machine-id /var/lib/dbus/machine-id /etc/ssh/ssh_host_* && touch /etc/machine-id
+		COPY setup-system.sh /usr/local/sbin/setup-system
+		RUN chmod 755 /usr/local/sbin/setup-system && /usr/local/sbin/setup-system
 		COPY ssh-host-keys.service /etc/systemd/system/ssh-host-keys.service
 		RUN systemctl enable ssh-host-keys.service ssh.service
 		STOPSIGNAL SIGRTMIN+3
 		CMD ["/sbin/init"]
 	CONTAINERFILE
+	cat >"$directory/setup-system.sh" <<-'SETUP_SYSTEM'
+		#!/usr/bin/env bash
+		set -euo pipefail
+
+		export DEBIAN_FRONTEND=noninteractive
+
+		apt-get update
+		apt-get install -y --no-install-recommends \
+			systemd \
+			systemd-sysv \
+			dbus \
+			openssh-server \
+			curl \
+			wget \
+			ca-certificates \
+			iproute2 \
+			iputils-ping \
+			procps
+		apt-get clean
+		# Do not keep build-time APT indexes in the reusable image.
+		rm -rf /var/lib/apt/lists/*
+
+		# These identities must be created independently when each container boots.
+		rm -f /etc/machine-id /var/lib/dbus/machine-id /etc/ssh/ssh_host_*
+		touch /etc/machine-id
+	SETUP_SYSTEM
 	cat >"$directory/ssh-host-keys.service" <<-'SERVICE'
 		[Unit]
 		Description=Generate SSH host keys
@@ -274,12 +301,16 @@ build_systemd_image() (
 	context=$(mktemp -d) || return 1
 	trap 'rm -rf "$context"' EXIT
 	write_systemd_context "$context" "$base" || return $?
-	checksum=$(cat "$context/Containerfile" "$context/ssh-host-keys.service" | cksum | awk '{print $1}')
+	checksum=$(systemd_image_checksum "$context") || return $?
 	slug=$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g')
 	image="localhost/opensim-server:${slug:0:80}-$checksum"
 	run_container_tool build --file "$context/Containerfile" --tag "$image" "$context" >&2 || return $?
 	printf '%s\n' "$image"
 )
+
+systemd_image_checksum() {
+	cksum "$1/Containerfile" "$1/setup-system.sh" "$1/ssh-host-keys.service" | cksum | awk '{print $1}'
+}
 
 run_podman_install() {
 	local source_script=${BASH_SOURCE[0]} source_dir output name server_image status=0 debs_in_container= mapping mapping_output

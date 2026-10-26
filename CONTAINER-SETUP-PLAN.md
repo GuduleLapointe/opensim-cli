@@ -135,10 +135,11 @@ Bridge replacement changes the OCI ID and briefly stops that container, but it p
 
 - [ ] Reuse quick-install's installation phases through a readable setup script called by the Containerfile; avoid a second package-install implementation.
 - [ ] Keep Debian/Ubuntu base selection parameterized where the recipe is shared.
-- [ ] Include OpenSim tools/core dependencies and maintenance tools, including SSH.
+- [x] Move the systemd, SSH and maintenance-tool layer into a readable setup script; remove APT indexes in the same image layer.
+- [ ] Include OpenSim tools/core dependencies in the reusable image without instance credentials or generated host keys.
 - [ ] Generate instance secrets and SSH host keys at initialization, not build.
 - [ ] Diagnose current `opensim start|stop|restart` inside a container. The engine's current StartService/StopService use its runtime/console machinery; absence of systemd alone does not explain an instance restart failure.
-- [x] Validate systemd as PID 1 through the container-tools API path. The reusable Debian/Ubuntu server recipe enables SSH with host keys generated on instance boot. Ubuntu 26.04 lifecycle tests pass on Ursull without privileged mode; application-specific service integration remains below.
+- [x] Validate systemd as PID 1 through the container-tools API path. The Ubuntu 26.04 image built and booted on Vonda; systemd and SSH became active, the machine ID was populated, and SSH host keys were generated at boot. The generated image tag includes the setup script in its checksum. OpenSim package layers and application-specific service integration remain below.
 - [ ] Manage MariaDB when bundled, SSH and enabled OpenSim instances; remove the installer's placeholder sleep loop once real service lifecycle is validated.
 - [ ] Start database services according to the instance's selected driver; a reusable image must also run a SQLite-only instance without MariaDB startup.
 - [ ] Ensure signals stop OpenSim and databases cleanly within an appropriate stop timeout. An instance restart must not restart the whole container.
