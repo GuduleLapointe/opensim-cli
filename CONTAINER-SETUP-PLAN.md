@@ -37,6 +37,18 @@ README.md remains the concise user guide.
 - Persistent paths belong to the selected Podman host, including remote hosts.
 - Containers include SSH and common maintenance tools: Bash, curl, wget,
   process/socket inspection, DNS diagnostics and ping.
+- Container region configuration sets `ResolveAddress = True` and a reachable
+  `ExternalHostName`. `SYSTEMIP` still selects the local container address;
+  enabling resolution alone does not discover the externally reachable address.
+- Support SQLite3 for small deployments, including a single-region container.
+  MariaDB/MySQL remain supported and recommended for grids. The selected driver
+  controls provisioning and required services; SQLite must not require a SQL
+  server or administrator account.
+- Provision a simulator container for an existing region directly, preserving
+  its identity and data. Creating then deleting a placeholder region is not a
+  supported migration workflow.
+- Migrating existing live regions into containers is an acceptance case for the
+  next usable beta, not a later enhancement after new-region provisioning.
 
 ## 1. Restore `opensim ports`
 
@@ -62,6 +74,8 @@ of port rules independently of the engine.
 - [ ] Let quick-install collect the full grid, standalone or simulator setup,
   rather than just its type and name.
 - [ ] Reuse the same saved answer format in quick-install and `opensim setup`.
+- [ ] Include the database driver and the choice to create a region or adopt an
+  existing one in the collected answers.
 - [ ] Resolve how the engine-owned questionnaire is available before target
   installation without requiring the full OpenSim stack on the client host.
   Preserve quick-install's ability to be downloaded and run independently.
@@ -75,6 +89,61 @@ of port rules independently of the engine.
 
 Acceptance: cancellation leaves no target container or partial deployment.
 The confirmed configuration determines both the container identity and setup.
+
+## 2a. Provision containers for existing regions
+
+Prioritize this reported bug before extending the new-region-only workflow.
+
+- [ ] Reproduce rejection of an existing region when provisioning its new
+  simulator/container, using a fixture with its existing grid registration.
+- [ ] Reuse the engine's existing move/adoption mechanisms where applicable;
+  inspect RegionPlanner's existing-region context and uniqueness checks.
+- [ ] Distinguish adopting the same region from creating a conflicting new
+  region. Keep genuine duplicate-name/UUID protection.
+- [ ] Allow the simulator/container to be provisioned without creating any new
+  region, SQL schema, estate or registry entry for a placeholder.
+- [ ] Import or reference the existing Region.ini, preserving region UUID, name,
+  location, estate associations and settings except explicitly changed values.
+- [ ] Transfer/reconnect the existing database and required files using the
+  appropriate backup/restore workflow for their current driver. Do not assume
+  migration into a container also means conversion from MySQL to SQLite.
+- [ ] Validate compatible core/schema versions before applying migrations.
+- [ ] Define the source shutdown, final data copy and destination startup
+  sequence so the same region is not running from two simulators at once.
+- [ ] Test cancellation, failed import and rerun without damaging the source or
+  leaving placeholder records. Retain a recoverable source backup for cutover.
+
+Acceptance: move a region with its original UUID and data into its intended
+simulator container, then verify its grid registration, estate and contents.
+No temporary region or disposable database is created to bypass setup.
+
+An already migrated region can serve as a read-only manual investigation
+reference. Reproduce its relevant structure with anonymous fixtures rather than
+committing personal server, grid or container names as test configuration.
+
+## 2b. Complete SQLite3 provisioning
+
+- [ ] Reuse OSPDO's existing `driver=sqlite` and database-file/DSN support.
+- [ ] Audit DatabaseService, SqlRunner and model queries for MySQL-only extension
+  checks, SQL, account creation and connection assumptions. OSPDO's connection
+  support does not by itself validate the complete setup/runtime workflow.
+- [ ] Carry the selected driver consistently through setup answers, saved
+  configuration, engine access and the OpenSim core storage provider.
+- [ ] Verify the selected OpenSim release/profile supports the chosen SQLite
+  stores and initialize their schemas using existing supported mechanisms.
+- [ ] Provide the PHP SQLite extension and core-native SQLite dependencies in
+  the reusable image, without requiring a MariaDB service for SQLite instances.
+- [ ] Skip SQL administrator/application account questions and server startup
+  for SQLite; create database files with the instance's correct permissions.
+- [ ] Place database files, including any journal/WAL companion files, on the
+  instance's persistent data mount and define a consistent backup procedure.
+- [ ] Test fresh SQLite setup, normal reads/writes, region start/stop/restart,
+  persistence and adoption of a compatible existing SQLite region.
+- [ ] Retain MySQL/MariaDB regression coverage and their grid recommendation;
+  do not silently convert an existing database or change its driver.
+
+Acceptance: a single-region deployment completes setup and runs with SQLite3
+without installing/starting a SQL server or asking for SQL admin credentials.
 
 ## 3. Prove launch-time and changing-port behavior
 
@@ -125,6 +194,8 @@ and requires an explicit decision; it is not silently substituted here.
   rootless operation and the container-tools API path, before adopting it.
 - [ ] Manage MariaDB when bundled, SSH and enabled OpenSim instances; remove the
   installer's placeholder sleep loop once real service lifecycle is validated.
+- [ ] Start database services according to the instance's selected driver;
+  a reusable image must also run a SQLite-only instance without MariaDB startup.
 - [ ] Ensure signals stop OpenSim and databases cleanly within an appropriate
   stop timeout. An instance restart must not restart the whole container.
 - [ ] Clean build-only files and package indexes from the image.
@@ -142,6 +213,8 @@ them cleanly, with readable status and logs and no personal data in its image.
   mounted at `/var/lib/opensim` inside the container.
 - [ ] Define persistent locations for logs, SSH host keys and `/var/lib/mysql`
   when the deployment includes its own MariaDB server.
+- [ ] Persist SQLite database files and companion files under the instance's
+  data tree when SQLite is selected.
 - [ ] Make host roots configurable and provision the required permissions on the
   Podman host. Rootless access and UID/GID mapping must work with these paths.
 - [ ] Initialize empty mounted folders from the image's installed defaults;
@@ -159,14 +232,22 @@ replacement for image updates remains distinct from the port-change contract.
 
 - [ ] Create the target instance using the confirmed configuration and mounts.
 - [ ] Apply setup without repeating the questionnaire or changing chosen ports.
-- [ ] Validate SQL administrator/application credentials and normal rc loading.
+- [ ] Validate SQL administrator/application credentials for MySQL/MariaDB,
+  SQLite file access for SQLite, and normal rc loading for both workflows.
+- [ ] Generate/import each container region with `ResolveAddress = True` and
+  the intended public `ExternalHostName`; do not leave it as `SYSTEMIP` behind
+  a private container network. Preserve user-supplied public addresses.
 - [ ] Start a grid and a simulator with a region, and check actual readiness.
 - [ ] Compare `opensim ports` with configured listeners and effective bindings.
 - [ ] Verify advertised public hostnames and matching external/internal OpenSim
   ports, including region UDP access.
+- [ ] Test the region address announced to Robust/viewers from an external
+  client. A passing file-content assertion alone does not validate reachability.
 - [ ] Check start/stop/status/restart and preservation after a container restart.
 - [ ] Add a region and validate the port-change workflow from stage 3.
 - [ ] Confirm a real Firestorm login and entry into the region.
+- [ ] Repeat the runtime checks with an adopted existing region, preserving
+  its UUID, estate, terrain, objects and applicable database/file contents.
 
 Acceptance: a working grid and region, usable externally, with retained state
 and independently manageable instances.
@@ -206,6 +287,10 @@ reachable grid/region, using a reusable image and persistent instance data.
 - Existing naming: `../opensim-engine/src/Provisioning/Slug.php`.
 - Existing port allocation: `../opensim-engine/src/Network/Ports.php`.
 - Existing port descriptions: engine controllers' `ports()` methods.
+- Existing database abstraction: `../opensim-engine/src/Data/OSPDO.php`.
+- Existing provisioning: engine DatabaseService, SqlRunner and RegionPlanner.
+- Address resolution behavior:
+  `../opensim-kit/upstream/opensim/OpenSim/Framework/RegionInfo.cs`.
 - Existing CLI output: `../opensim-kit/src/Console/Commands/PortsCommand.php`.
 - [Podman create](https://docs.podman.io/en/latest/markdown/podman-create.1.html).
 - [Podman run](https://docs.podman.io/en/latest/markdown/podman-run.1.html).
