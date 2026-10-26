@@ -40,7 +40,7 @@ done
 [[ -n "${destination:-}" ]] || exit 0
 if [[ -n "${config:-}" ]]; then
     [[ -z "${CAPTURED_SETUP:-}" ]] || cp "$config" "$CAPTURED_SETUP"
-    if jq -e 'keys == ["hostname"]' "$config" >/dev/null; then
+    if jq -e 'keys == ["hostname","occupied_ports"] or keys == ["occupied_ports"]' "$config" >/dev/null; then
         printf '{"identity":"test_grid","answers":{"type":"grid","name":"Test Grid"},"setup":{}}\n' >"$destination"
     else
         jq -e '.identity' "$config" >/dev/null || { echo 'invalid setup config' >&2; exit 1; }
@@ -118,6 +118,9 @@ if [[ "$action" == cp && -n "${CAPTURED_RC:-}" && "${3:-}" == *:/root/.opensimrc
 fi
 if [[ "$action" == info ]]; then
     printf '{"Name":"podman.example.test"}\n'
+fi
+if [[ "$action" == host-ports ]]; then
+    printf '[8002,9001]\n'
 fi
 if [[ "$action" == create ]]; then
 	printf 'Container created\nName: test-opensim\n'
@@ -481,7 +484,30 @@ function test_podman_setup_proposes_selected_server_hostname() {
     assert_exec "CALL_LOG='$calls' CAPTURED_SETUP='$WORK/prefill.json' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --connection=podman-host --yes"
     assert_file_exists "$WORK/prefill.json"
     assert_equals podman.example.test "$(jq -r '.hostname' "$WORK/prefill.json")"
+    assert_equals '[8002,9001]' "$(jq -c '.occupied_ports' "$WORK/prefill.json")"
+    assert_contains '<host-ports>' "$(cat "$calls")"
     assert_contains '<--connection> <podman-host> <info>' "$(cat "$calls")"
+}
+
+function test_podman_install_rechecks_prepared_ports_before_creating_the_container() {
+	local fake_bin=$WORK/tools calls=$WORK/port-recheck-calls config=$WORK/setup.json
+	create_container_tools_stub "$fake_bin"
+	cat >"$config" <<'JSON'
+{"identity":"test_grid","answers":{"type":"grid","name":"Test Grid"},"setup":{"grid":{"public_port":8002,"private_port":8003,"console_port":8004},"simulators":[]}}
+JSON
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --config '$config' --connection=podman-host --yes 2>&1" --exit 1 --stdout-contains 'ports already occupied on the selected Podman host: 8002'
+	assert_equals 2 "$(grep -c '<host-ports>' "$calls")"
+	assert_not_contains '<create>' "$(cat "$calls")"
+}
+
+function test_podman_install_does_not_recheck_a_remote_grids_ports() {
+	local fake_bin=$WORK/tools calls=$WORK/remote-grid-port-calls config=$WORK/setup.json
+	create_container_tools_stub "$fake_bin"
+	cat >"$config" <<'JSON'
+{"identity":"example.region","answers":{"type":"simulator"},"setup":{"grid":{"public_port":8002,"private_port":8003,"console_port":8004},"simulators":[{"http_port":9100,"console_port":9104,"regions":[{"port":9101}]}]}}
+JSON
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --config '$config' --connection=podman-host --yes"
+	assert_contains '<create>' "$(cat "$calls")"
 }
 
 function test_systemd_image_starts_init_and_generates_keys_at_boot() {

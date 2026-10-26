@@ -303,6 +303,7 @@ run_podman_install() {
 	prepare_podman_setup_config
 	[[ -f "$source_script" ]] || die "--podman requires quick-install.sh to be run from a local file"
 	server_image=$(build_systemd_image "$PODMAN_IMAGE") || die "could not build the systemd server image"
+	validate_prepared_podman_ports "$SETUP_CONFIG_FILE"
 	output=$(run_container_tool create --name "$PODMAN_CONTAINER_NAME" --image "$server_image") || status=$?
 	printf '%s\n' "$output"
 	((status == 0)) || die "could not create the Podman container"
@@ -337,6 +338,20 @@ run_podman_install() {
 	return "$status"
 }
 
+validate_prepared_podman_ports() {
+	local config=$1 occupied_ports conflicts
+	occupied_ports=$(run_container_tool host-ports | jq -cer 'select(type == "array" and all(.[]; type == "number" and floor == . and . >= 1 and . <= 65535))') || die "could not recheck ports on the selected Podman host before launch"
+	conflicts=$(jq -er --argjson occupied_ports "$occupied_ports" '
+		[(if .answers.type == "simulator" then empty else .setup.grid.public_port, .setup.grid.private_port, .setup.grid.console_port end),
+		 (.setup.simulators[]? | .http_port, .console_port, (.regions[]?.port))]
+		| map(select(type == "number" and . >= 1 and . <= 65535))
+		| unique
+		| map(select(. as $port | $occupied_ports | index($port) != null))
+		| join(", ")
+	' "$config") || die "could not validate the prepared ports"
+	[[ -z "$conflicts" ]] || die "ports already occupied on the selected Podman host: $conflicts; rerun setup and choose different ports"
+}
+
 bootstrap_podman_manager() {
 	if [[ -n "$clone" ]]; then
 		if [[ ! -f "$clone/vendor/autoload.php" ]]; then
@@ -352,17 +367,17 @@ bootstrap_podman_manager() {
 }
 
 prepare_podman_setup_config() {
-	local hostname
+	local hostname= occupied_ports
 	local -a arguments=(setup)
 	command -v jq >/dev/null 2>&1 || die "jq is required by the OpenSim manager"
+	say "Checking occupied ports on the selected Podman host"
+	occupied_ports=$(run_container_tool host-ports | jq -cer 'select(type == "array" and all(.[]; type == "number" and floor == . and . >= 1 and . <= 65535))') || die "could not inspect ports on the selected Podman host"
 	if [[ "$PODMAN_FORCE_LOCAL" != yes ]]; then
 		hostname=$(run_container_tool info | jq -er '.Name | select(type == "string" and length > 0)') || die "could not read the selected Podman server hostname"
-		SETUP_PREFILL_TEMP=$(mktemp "$TMP.prefill.XXXXXXXX") || die "could not create a private setup prefill"
-		jq --arg hostname "$hostname" 'if (.answers | type) == "object" then .answers.hostname //= $hostname else .hostname //= $hostname end' "${SETUP_CONFIG_FILE:-/dev/stdin}" >"$SETUP_PREFILL_TEMP" <<<'{}' || die "could not prepare the destination hostname"
-		arguments+=(--config "$SETUP_PREFILL_TEMP")
-	elif [[ -n "$SETUP_CONFIG_FILE" ]]; then
-		arguments+=(--config "$SETUP_CONFIG_FILE")
 	fi
+	SETUP_PREFILL_TEMP=$(mktemp "$TMP.prefill.XXXXXXXX") || die "could not create a private setup prefill"
+	jq --argjson occupied_ports "$occupied_ports" --arg hostname "$hostname" '.occupied_ports = $occupied_ports | if (.answers | type) == "object" then (if $hostname == "" then . else .answers.hostname //= $hostname end) else (if $hostname == "" then . else .hostname //= $hostname end) end' "${SETUP_CONFIG_FILE:-/dev/stdin}" >"$SETUP_PREFILL_TEMP" <<<'{}' || die "could not prepare the selected host setup context"
+	arguments+=(--config "$SETUP_PREFILL_TEMP")
 	[[ -z "$REGION_CONFIG_FILE" ]] || arguments+=(--region-config "$REGION_CONFIG_FILE")
 	SETUP_CONFIG_TEMP=$(mktemp "$TMP.setup.XXXXXXXX") || die "could not create a private setup file"
 	arguments+=(--prepare "$SETUP_CONFIG_TEMP")

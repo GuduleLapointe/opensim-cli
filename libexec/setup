@@ -74,9 +74,13 @@ if [[ -n "$apply_file" ]]; then
 fi
 setup_prefill='{}'
 setup_prefill_type=
+setup_occupied_ports=
 if [[ -n "$setup_config" ]]; then
 	[[ -r "$setup_config" ]] || die "cannot read setup config: $setup_config"
 	setup_prefill=$(jq -ce 'if (.answers | type) == "object" then .answers elif type == "object" then . else error("expected object") end' "$setup_config") || die "setup config must be a JSON object"
+	if jq -e 'has("occupied_ports")' "$setup_config" >/dev/null; then
+		setup_occupied_ports=$(jq -ce '.occupied_ports | select(type == "array" and all(.[]; type == "number" and floor == . and . >= 1 and . <= 65535))' "$setup_config") || die "setup config occupied_ports must be a list of valid ports"
+	fi
 	setup_prefill_type=$(jq -r '.type // empty' <<<"$setup_prefill")
 fi
 
@@ -129,8 +133,8 @@ if [[ "$adoption_required" == true ]]; then
 fi
 
 while :; do
-	request=$(jq -c --rawfile state <(printf '%s' "$state") --arg button "$button" --arg mode "$setup_mode" --slurpfile prefill <(printf '%s' "$setup_prefill") \
-		'{data: {type: "steps", attributes: {state: $state, button: $button, answers: (. + ($prefill[0] | {existing_region,hostname} | with_entries(select(.value != null)))), mode: $mode}}}' <<<"$answers")
+	request=$(jq -c --rawfile state <(printf '%s' "$state") --arg button "$button" --arg mode "$setup_mode" --slurpfile prefill <(printf '%s' "$setup_prefill") --argjson occupied_ports "${setup_occupied_ports:-null}" \
+		'{data: {type: "steps", attributes: ({state: $state, button: $button, answers: (. + ($prefill[0] | {existing_region,hostname} | with_entries(select(.value != null)))), mode: $mode} + (if $occupied_ports == null then {} else {occupied_ports: $occupied_ports} end))}}' <<<"$answers")
 	[[ -z "$apply_request" ]] || request=$apply_request
 	# What the engine tells while it works (lines starting with "opensim: ") is shown as it comes. Its answer goes to a file and its
 	# error output to another that is read while it runs: the instances it starts keep both open, a pipe would never end

@@ -27,7 +27,10 @@ JSON
 	cat >"$WORK/container-tools" <<'CLI'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$CALL_LOG"
+while [[ "$1" == --connection ]]; do shift 2; done
 case "$1" in
+	host-ports) printf '[8002,9000]\n' ;;
+	info) printf '{"Name":"podman.example.test"}\n' ;;
 	create) printf 'Container created\nName: oliviers_test-grid\n' ;;
 	cp) [[ "$3" != *:/tmp/opensim-setup.json ]] || cp "$2" "$CAPTURED_CONFIG" ;;
 esac
@@ -37,7 +40,7 @@ CLI
 	local line
 	for ((line = 0; line < 50; line++)); do printf '\n'; done >"$WORK/input"
 	assert_exec "CALL_LOG='$WORK/calls' CAPTURED_CONFIG='$WORK/prepared.json' CONTAINER_TOOLS_CLI='$WORK/container-tools' FE_INPUT_FD=7 FE_TTY='$WORK/none' OPENSIM_SETUP_UI=plain '$PROJECT_ROOT/quick-install.sh' --podman --config '$WORK/answers.json' --yes 7<'$WORK/input'" --stdout-contains 'Setup configuration saved'
-	assert_contains 'create --name oliviers_test-grid' "$(head -n 1 "$WORK/calls")"
+	assert_contains 'create --name oliviers_test-grid' "$(cat "$WORK/calls")"
 	assert_equals oliviers_test-grid "$(jq -r .identity "$WORK/prepared.json")"
 	assert_equals 1 "$(jq -r .version "$WORK/prepared.json")"
 	assert_equals 18102 "$(jq -r .setup.grid.public_port "$WORK/prepared.json")"
