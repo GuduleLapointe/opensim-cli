@@ -27,6 +27,7 @@
 #           --connection NAME     use a configured Podman connection; local|none forces local Podman
 #           --image IMAGE         container image (default: $OPENSIM_CONTAINER_IMAGE or Ubuntu 26.04)
 #           --config FILE         quick setup answers in JSON
+#           --region-config FILE  stage an existing region from its Region.ini
 # Environment: APT_SOURCE_DIR=folder         install local packages (*.deb) from a folder
 #             APT_SOURCE=...                  complete primary APT source line (default: charm stable)
 #             APT_SOURCE_TESTS=...            optional additional APT source line
@@ -163,6 +164,7 @@ PODMAN_INSTALL_ARGS=()
 CONTAINER_TOOLS_CLI_SELECTED=
 SETUP_CLI_SELECTED=
 SETUP_CONFIG_FILE=${OPENSIM_SETUP_CONFIG_FILE:-${OPENSIM_SETUP_CONFIG:-}}
+REGION_CONFIG_FILE=
 SETUP_CONFIG_TEMP=
 SETUP_RC_TEMP=
 PODMAN_CONTAINER_NAME=
@@ -202,26 +204,46 @@ as_root() {
 	fi
 }
 
-run_remote_install() {
-	local target=$1 source_script=${BASH_SOURCE[0]} remote_script command status quoted
+run_remote_install() (
+	local target=$1 source_script=${BASH_SOURCE[0]} remote_dir remote_script command quoted argument
+	local -a arguments=()
 	shift
 	[[ "$target" != -* ]] || die "--remote requires an SSH target, not another option"
 	[[ -f "$source_script" ]] || die "--remote requires quick-install.sh to be run from a local file"
 	command -v scp >/dev/null 2>&1 || die "scp is required for --remote"
 	command -v ssh >/dev/null 2>&1 || die "ssh is required for --remote"
+	[[ -z "$SETUP_CONFIG_FILE" || -r "$SETUP_CONFIG_FILE" ]] || die "cannot read setup config: $SETUP_CONFIG_FILE"
+	[[ -z "$REGION_CONFIG_FILE" || -r "$REGION_CONFIG_FILE" ]] || die "cannot read region config: $REGION_CONFIG_FILE"
 	source_script=$(cd -- "$(dirname -- "$source_script")" && pwd)/$(basename -- "$source_script")
-	remote_script="/tmp/quick-install-$$-${RANDOM}.sh"
+	remote_dir=$(ssh "$target" 'umask 077; mktemp -d /tmp/quick-install.XXXXXXXX') || die "could not create a private installation directory on $target"
+	[[ "$remote_dir" =~ ^/tmp/quick-install\.[a-zA-Z0-9.-]+$ ]] || die "invalid remote installation directory"
+	trap 'ssh "$target" "rm -rf -- $remote_dir" >/dev/null 2>&1 || true' EXIT
+	remote_script=$remote_dir/quick-install.sh
 	scp -- "$source_script" "$target:$remote_script" || die "could not copy quick-install.sh to $target"
+	while (($#)); do
+		argument=$1
+		shift
+		case "$argument" in
+			--config | --region-config) shift ;;
+			--config=* | --region-config=*) ;;
+			*) arguments+=("$argument") ;;
+		esac
+	done
+	if [[ -n "$SETUP_CONFIG_FILE" ]]; then
+		scp -- "$SETUP_CONFIG_FILE" "$target:$remote_dir/setup.json" || die "could not copy setup config to $target"
+		arguments+=(--config "$remote_dir/setup.json")
+	fi
+	if [[ -n "$REGION_CONFIG_FILE" ]]; then
+		scp -- "$REGION_CONFIG_FILE" "$target:$remote_dir/Region.ini" || die "could not copy region config to $target"
+		arguments+=(--region-config "$remote_dir/Region.ini")
+	fi
 	printf -v command 'env APT_SOURCE=%q APT_SOURCE_TESTS=%q bash %q' "${APT_SOURCE:-}" "${APT_SOURCE_TESTS:-}" "$remote_script"
-	for quoted in "$@"; do
+	for quoted in "${arguments[@]}"; do
 		printf -v quoted ' %q' "$quoted"
 		command+=$quoted
 	done
-	ssh -t "$target" "$command" || status=$?
-	status=${status:-0}
-	ssh "$target" "rm -f -- '$remote_script'" >/dev/null 2>&1 || true
-	return "$status"
-}
+	ssh -t "$target" "$command"
+)
 
 run_podman_install() {
 	local source_script=${BASH_SOURCE[0]} source_dir output name status=0 debs_in_container=
@@ -295,6 +317,7 @@ prepare_podman_setup_config() {
 	bootstrap_podman_manager || die "could not install the local OpenSim manager"
 	command -v jq >/dev/null 2>&1 || die "jq is required by the OpenSim manager"
 	[[ -z "$SETUP_CONFIG_FILE" ]] || arguments+=(--config "$SETUP_CONFIG_FILE")
+	[[ -z "$REGION_CONFIG_FILE" ]] || arguments+=(--region-config "$REGION_CONFIG_FILE")
 	SETUP_CONFIG_TEMP=$(mktemp "$TMP.setup.XXXXXXXX") || die "could not create a private setup file"
 	arguments+=(--prepare "$SETUP_CONFIG_TEMP")
 	"$SETUP_CLI_SELECTED" "${arguments[@]}" || die "setup preparation failed; no container created"
@@ -581,12 +604,12 @@ phase_dependencies() {
 	if [[ -n "$clone" ]]; then
 		if [[ $(uname -s) == Darwin ]]; then
 			command -v brew >/dev/null 2>&1 || die "Homebrew is needed on macOS: https://brew.sh"
-			for tool in php composer screen; do command -v "$tool" >/dev/null 2>&1 || brew install "$tool" || return $?; done
+			for tool in php composer screen jq; do command -v "$tool" >/dev/null 2>&1 || brew install "$tool" || return $?; done
 		else
 			local missing=()
 			command -v php >/dev/null 2>&1 || missing+=("${PHP_PACKAGES[@]}")
 			command -v composer >/dev/null 2>&1 || missing+=(composer)
-			for tool in curl git unzip screen; do command -v "$tool" >/dev/null 2>&1 || missing+=("$tool"); done
+			for tool in curl git unzip screen jq; do command -v "$tool" >/dev/null 2>&1 || missing+=("$tool"); done
 			command -v mysql >/dev/null 2>&1 || command -v mariadb >/dev/null 2>&1 || missing+=(default-mysql-client)
 			if ((${#missing[@]})); then
 				say "This machine needs: ${missing[*]}"
@@ -716,7 +739,8 @@ phase_database() {
 
 # Installation completed, give proper instructions and run opensim setup if RUN_SETUP=yes
 end_installation() {
-	local basedir opensim_path setup_config=${OPENSIM_SETUP_CONFIG_FILE:-$SETUP_CONFIG_FILE} setup_config_path= setup_command
+	local basedir opensim_path setup_config=${OPENSIM_SETUP_CONFIG_FILE:-$SETUP_CONFIG_FILE} setup_config_path= setup_command setup_option=--config
+	local -a setup_arguments=(setup)
 
 	if [ -n "${clone:-}" ]; then
 		basedir=$clone
@@ -725,6 +749,9 @@ end_installation() {
 		basedir=$(cd "$(dirname "$(realpath "$opensim_path")")/.." && pwd) || die "could not locate the opensim installation"
 	fi
 	if [[ -n "$setup_config" && -r "$setup_config" ]]; then
+		if [[ -z "$REGION_CONFIG_FILE" ]] && jq -e ' .version == 1 and (.answers | type == "object") and (.setup | type == "object")' "$setup_config" >/dev/null 2>&1; then
+			setup_option=--apply
+		fi
 		if [[ $(uname -s) == Linux ]]; then
 			as_root mkdir -p /etc/opensim || die "could not create /etc/opensim"
 			as_root install -m 600 "$setup_config" /etc/opensim/setup.json || die "could not install the setup config"
@@ -737,18 +764,21 @@ end_installation() {
 		fi
 	fi
 	setup_command="$basedir/bin/opensim setup"
-	[[ -z "$setup_config_path" ]] || setup_command+=" --config $(shell_quote "$setup_config_path")"
+	if [[ -n "$setup_config_path" ]]; then
+		setup_arguments+=("$setup_option" "$setup_config_path")
+		setup_command+=" $setup_option $(shell_quote "$setup_config_path")"
+	fi
+	if [[ -n "$REGION_CONFIG_FILE" ]]; then
+		setup_arguments+=(--region-config "$REGION_CONFIG_FILE")
+		setup_command+=" --region-config $(shell_quote "$REGION_CONFIG_FILE")"
+	fi
 	cat <<-INSTALL_COMPLETED
 		Installation completed, execute:
 		    source ${basedir}/share/bash-completion/opensim
 		    $setup_command
 	INSTALL_COMPLETED
 	if [[ "${RUN_SETUP:-}" =~ ^(yes|true|1)$ ]]; then
-		if [[ -n "$setup_config_path" ]]; then
-			$basedir/bin/opensim setup --config "$setup_config_path" || die "Error $? while executing opensim setup"
-		else
-			$basedir/bin/opensim setup || die "Error $? while executing opensim setup"
-		fi
+		"$basedir/bin/opensim" "${setup_arguments[@]}" || die "Error $? while executing opensim setup"
 	fi
 	exit 0
 }
@@ -941,9 +971,18 @@ while (($#)); do
 		(($#)) || die "--config requires a JSON setup file"
 		[[ "$1" != -* ]] || die "--config requires a JSON setup file"
 		SETUP_CONFIG_FILE=$1
+		REMOTE_ARGS+=("$1")
 		shift
 		;;
 	--config=*) SETUP_CONFIG_FILE=${argument#*=}; [[ -n "$SETUP_CONFIG_FILE" ]] || die "--config requires a JSON setup file" ;;
+	--region-config)
+		(($#)) || die "--region-config requires a Region.ini file"
+		[[ "$1" != -* ]] || die "--region-config requires a Region.ini file"
+		REGION_CONFIG_FILE=$1
+		REMOTE_ARGS+=("$1")
+		shift
+		;;
+	--region-config=*) REGION_CONFIG_FILE=${argument#*=}; [[ -n "$REGION_CONFIG_FILE" ]] || die "--region-config requires a Region.ini file" ;;
 	--dependencies | --mariadb | --mysql | --dotnet | --opensim)
 		[[ "$PHASE_SELECTED" == no ]] || die "choose only one installation phase"
 		PHASE_SELECTED=yes
@@ -976,7 +1015,6 @@ esac
 [[ "$INSTALL_PHASE" == all || "$INSTALL_PHASE" == opensim ]] || [[ -z "$RUN_SETUP" ]] || die "--setup is only valid for the full install or --opensim"
 [[ "$PODMAN_CONNECTION_SELECTED" == no || "$PODMAN_MODE" == yes ]] || die "--connection requires --podman"
 [[ "$PODMAN_IMAGE_SELECTED" == no || "$PODMAN_MODE" == yes ]] || die "--image requires --podman"
-[[ "$PODMAN_MODE" != yes || -z "$RUN_SETUP" ]] || die "--setup needs an interactive container terminal; run opensim setup in the container after installation"
 
 if [[ -n "$REMOTE_TARGET" ]]; then
 	run_remote_install "$REMOTE_TARGET" "${REMOTE_ARGS[@]}"

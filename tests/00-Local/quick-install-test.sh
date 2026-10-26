@@ -32,9 +32,12 @@ while (($#)); do
     case "$1" in
         --prepare) destination=$2; shift 2 ;;
         --config) config=$2; shift 2 ;;
+        --region-config) region=$2; shift 2 ;;
+        --apply) exit 0 ;;
         *) exit 2 ;;
     esac
 done
+[[ -n "${destination:-}" ]] || exit 0
 if [[ -n "${config:-}" ]]; then
     jq -e '.identity' "$config" >/dev/null || { echo 'invalid setup config' >&2; exit 1; }
     cp "$config" "$destination"
@@ -71,10 +74,20 @@ SCP
 printf 'ssh' >>"$CALL_LOG"
 printf ' <%s>' "$@" >>"$CALL_LOG"
 printf '\n' >>"$CALL_LOG"
+if [[ "$*" == *mktemp* ]]; then printf '/tmp/quick-install.test-session\n'; fi
 SSH
 	chmod +x "$fake_bin/scp" "$fake_bin/ssh"
 
 	assert_exec "CALL_LOG='$calls' PATH='$fake_bin:$PATH' APT_SOURCE='deb https://packages.example.test/debian bookworm main' APT_SOURCE_TESTS='deb https://test.example.test/debian bookworm main' bash '$QUICK_INSTALL' --remote root@example.test --cleanup --opensim"
+	local config="$WORK/Setup Answers.json" region="$WORK/Existing Region.ini"
+	printf '{"type":"simulator"}\n' >"$config"
+	printf '[Existing Region]\n' >"$region"
+	: >"$calls"
+	assert_exec "CALL_LOG='$calls' PATH='$fake_bin:$PATH' APT_SOURCE='deb https://packages.example.test/debian bookworm main' APT_SOURCE_TESTS='deb https://test.example.test/debian bookworm main' bash '$QUICK_INSTALL' --remote root@example.test --config '$config' --region-config='$region' --cleanup --opensim"
+	assert_contains '<'"$config"'> <root@example.test:/tmp/quick-install.test-session/setup.json>' "$(cat "$calls")"
+	assert_contains '<'"$region"'> <root@example.test:/tmp/quick-install.test-session/Region.ini>' "$(cat "$calls")"
+	assert_contains '--config /tmp/quick-install.test-session/setup.json' "$(cat "$calls")"
+	assert_contains '--region-config /tmp/quick-install.test-session/Region.ini' "$(cat "$calls")"
 	assert_contains 'root@example.test' "$(cat "$calls")"
 	assert_contains '--cleanup --opensim' "$(cat "$calls")"
 	assert_contains 'APT_SOURCE=deb' "$(cat "$calls")"
@@ -82,7 +95,7 @@ SSH
 	assert_contains 'APT_SOURCE_TESTS=deb' "$(cat "$calls")"
 	assert_contains 'test.example.test/debian' "$(cat "$calls")"
 	assert_contains 'scp' "$(cat "$calls")"
-	assert_equals 2 "$(grep -c '^ssh ' "$calls")"
+	assert_equals 3 "$(grep -c '^ssh ' "$calls")"
 }
 
 function create_container_tools_stub() {
@@ -175,13 +188,49 @@ RC
 	assert_contains '<--image> <docker.io/library/debian:13-slim>' "$(cat "$calls")"
 }
 
-function test_podman_setup_requires_interactive_container_terminal() {
+function test_podman_setup_applies_prepared_settings() {
 	local fake_bin=$WORK/tools calls=$WORK/podman-setup-calls
 	create_container_tools_stub "$fake_bin"
-	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --setup 2>&1" \
-		--exit 1 \
-		--stdout-contains 'run opensim setup in the container after installation'
-	assert_equals '' "$(cat "$calls" 2>/dev/null || true)"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --setup"
+	assert_contains '<RUN_SETUP=yes>' "$(cat "$calls")"
+	assert_contains '<bash> </tmp/quick-install.sh> <--setup>' "$(cat "$calls")"
+}
+
+function test_podman_prepares_an_existing_region() {
+	local fake_bin=$WORK/tools calls=$WORK/region-calls region="$WORK/Existing Region.ini"
+	printf '[Existing Region]\n' >"$region"
+	create_container_tools_stub "$fake_bin"
+	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --region-config '$region'"
+	assert_contains '<--region-config> <'"$region"'>' "$(head -n 1 "$calls")"
+	assert_not_contains '<--region-config>' "$(grep '<exec>' "$calls")"
+}
+
+function test_confirmed_setup_is_applied_after_installation() {
+	quick_install_load_library || return
+	local calls=$WORK/apply-calls config="$WORK/Confirmed Setup.json"
+	printf '{"version":1,"identity":"test_grid","answers":{},"setup":{}}\n' >"$config"
+	clone=$WORK/project
+	SETUP_CONFIG_FILE=$config
+	unset OPENSIM_SETUP_CONFIG_FILE
+	RUN_SETUP=yes
+	uname() { printf 'Darwin\n'; }
+	export CALL_LOG=$calls
+	assert_exec '(end_installation)' --stdout-contains '--apply'
+	assert_contains '<setup> <--apply> <'"$config"'>' "$(cat "$calls")"
+}
+
+function test_unconfirmed_answers_keep_interactive_setup() {
+	quick_install_load_library || return
+	local calls=$WORK/prefill-calls config="$WORK/Setup Answers.json"
+	printf '{"type":"grid"}\n' >"$config"
+	clone=$WORK/project
+	SETUP_CONFIG_FILE=$config
+	unset OPENSIM_SETUP_CONFIG_FILE
+	RUN_SETUP=yes
+	uname() { printf 'Darwin\n'; }
+	export CALL_LOG=$calls
+	assert_exec '(end_installation)' --stdout-contains '--config'
+	assert_contains '<setup> <--config> <'"$config"'>' "$(cat "$calls")"
 }
 
 function test_podman_prepares_before_container_creation() {
