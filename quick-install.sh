@@ -429,7 +429,9 @@ prepare_podman_setup_config() {
 	command -v jq >/dev/null 2>&1 || die "jq is required by the OpenSim manager"
 	say "Checking occupied ports on the selected Podman host"
 	occupied_ports=$(run_container_tool host-ports | jq -cer 'select(type == "array" and all(.[]; type == "number" and floor == . and . >= 1 and . <= 65535))') || die "could not inspect ports on the selected Podman host"
-	if [[ "$PODMAN_FORCE_LOCAL" != yes ]]; then
+	if [[ "$PODMAN_FORCE_LOCAL" == yes ]]; then
+		hostname=$(hostname -f 2>/dev/null || hostname) || die "could not read the local host name"
+	else
 		hostname=$(run_container_tool info | jq -er '.Name | select(type == "string" and length > 0)') || die "could not read the selected Podman server hostname"
 	fi
 	SETUP_PREFILL_TEMP=$(mktemp "$TMP.prefill.XXXXXXXX") || die "could not create a private setup prefill"
@@ -439,6 +441,17 @@ prepare_podman_setup_config() {
 	SETUP_CONFIG_TEMP=$(mktemp "$TMP.setup.XXXXXXXX") || die "could not create a private setup file"
 	arguments+=(--prepare "$SETUP_CONFIG_TEMP")
 	"$SETUP_CLI_SELECTED" "${arguments[@]}" || die "setup preparation failed; no container created"
+	jq --arg external_host "$hostname" '
+		if ($external_host | length) > 0 then
+		.setup.simulators = ((.setup.simulators // []) | map(
+				if ((.external_host // "") | ascii_downcase) == "" or ((.external_host // "") | ascii_downcase) == "systemip"
+				then .external_host = $external_host
+				else .
+				end
+			))
+		else . end
+	' "$SETUP_CONFIG_TEMP" >"$SETUP_PREFILL_TEMP" || die "could not set the region's externally reachable address"
+	mv "$SETUP_PREFILL_TEMP" "$SETUP_CONFIG_TEMP" || die "could not save the region's externally reachable address"
 	PODMAN_CONTAINER_NAME=$(jq -er '.identity | select(type == "string" and test("^[a-zA-Z0-9][a-zA-Z0-9_.-]*$"))' "$SETUP_CONFIG_TEMP") || die "invalid setup config: the engine did not provide an instance identity"
 	SETUP_CONFIG_FILE=$SETUP_CONFIG_TEMP
 }

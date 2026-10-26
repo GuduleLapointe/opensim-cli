@@ -17,7 +17,7 @@ Implementation checklist. Complete and validate one stage before starting the ne
 - Pasta is an optional backend, not a prerequisite for this behavior.
 - Persistent paths belong to the selected Podman host, including remote hosts.
 - Containers include SSH and common maintenance tools: Bash, curl, wget, process/socket inspection, DNS diagnostics and ping.
-- Validate `ResolveAddress = True` with portable address configuration, including `ExternalHostName = SYSTEMIP`, against the actual core's announced address. A container must remain movable between hosts without a baked-in host IP. The inspected core source resolves SYSTEMIP through its local-address helper; verify actual behavior before deciding whether that is suitable behind NAT.
+- For container regions, use the selected Podman host's reachable hostname with `ResolveAddress = True`. `SYSTEMIP` resolves to the container's bridge address and is not externally reachable. Keep the hostname in instance configuration so the image remains reusable and movable; verify the address OpenSim actually advertises after startup.
 - Support SQLite3 for small deployments, including a single-region container. MariaDB/MySQL remain supported and recommended for grids. The selected driver controls provisioning and required services; SQLite must not require a SQL server or administrator account.
 - Provision a simulator container for an existing region directly, preserving its identity and data. Creating then deleting a placeholder region is not a supported migration workflow.
 - Migrating existing live regions into containers is an acceptance case for the next usable beta, not a later enhancement after new-region provisioning.
@@ -172,7 +172,7 @@ Acceptance: container replacement preserves all application state without anothe
 - [ ] Create the target instance using the confirmed configuration and mounts.
 - [ ] Apply setup without repeating the questionnaire or changing chosen ports.
 - [ ] Validate SQL administrator/application credentials for MySQL/MariaDB, SQLite file access for SQLite, and normal rc loading for both workflows.
-- [ ] Test `ResolveAddress = True` with `SYSTEMIP` and with a public hostname on the actual core. Verify the advertised address outside the container, including after moving the deployment to another host. Select the working portable configuration and preserve explicit public-address choices.
+- [ ] Test `ResolveAddress = True` with the selected Podman host hostname on the actual core. Verify the advertised address outside the container, including after moving the deployment to another host, and preserve explicit public-address choices.
 - [ ] Start a grid and a simulator with a region, and check actual readiness.
 - [ ] Compare `opensim ports` with configured listeners and effective bindings.
 - [ ] Verify advertised public hostnames and matching external/internal OpenSim ports, including region UDP access.
@@ -181,6 +181,8 @@ Acceptance: container replacement preserves all application state without anothe
 - [ ] Add a region and validate the port-change workflow from stage 3.
 - [ ] Confirm a real Firestorm login and entry into the region.
 - [ ] Repeat the runtime checks with an adopted existing region, preserving its UUID, estate, terrain, objects and applicable database/file contents.
+
+Diagnosis (2026-10-26): Vonda publishes `9021/udp` on `0.0.0.0`, and a generic UDP echo test reaches a container on Vonda from the Mac. The OpenSim login log instead advertises `10.88.0.47:9021`, the container's private bridge address; the active `Welcome.ini` still says `ExternalHostName = SYSTEMIP`, which OpenSim resolves to that address. Setup now carries the selected Podman host name into the region config. External Firestorm login remains to be verified.
 
 Acceptance: a working grid and region, usable externally, with retained state and independently manageable instances.
 

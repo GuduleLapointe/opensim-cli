@@ -116,6 +116,9 @@ action=$1
 if [[ "$action" == cp && -n "${CAPTURED_RC:-}" && "${3:-}" == *:/root/.opensimrc ]]; then
 	cp "$2" "$CAPTURED_RC"
 fi
+if [[ "$action" == cp && -n "${CAPTURED_CONTAINER_SETUP:-}" && "${3:-}" == *:/tmp/opensim-setup.json ]]; then
+	cp "$2" "$CAPTURED_CONTAINER_SETUP"
+fi
 if [[ "$action" == info ]]; then
     printf '{"Name":"podman.example.test"}\n'
 fi
@@ -158,6 +161,16 @@ JSON
 	assert_contains '<--name> <ile_de_re.ile_de_re>' "$(cat "$calls")"
 	assert_contains '> <test-opensim:/tmp/opensim-setup.json>' "$(cat "$calls")"
 	assert_contains '<OPENSIM_SETUP_CONFIG_FILE=/tmp/opensim-setup.json>' "$(cat "$calls")"
+}
+
+function test_podman_setup_advertises_the_selected_host_for_region_udp() {
+	local fake_bin=$WORK/tools calls=$WORK/podman-external-host-calls config=$WORK/setup.json
+	create_container_tools_stub "$fake_bin"
+	cat >"$config" <<'JSON'
+{"identity":"example","answers":{"type":"grid"},"setup":{"grid":{"hostname":"grid.example.test"},"simulators":[{"external_host":"SYSTEMIP","regions":[{"port":9021}]}]}}
+JSON
+	assert_exec "CALL_LOG='$calls' CAPTURED_CONTAINER_SETUP='$WORK/applied-setup.json' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --config '$config' --connection=podman-host --opensim"
+	assert_equals 'podman.example.test' "$(jq -r '.setup.simulators[0].external_host' "$WORK/applied-setup.json")"
 }
 
 function test_podman_transfers_database_credentials_privately() {
