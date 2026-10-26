@@ -479,7 +479,7 @@
             "dist": {
                 "type": "path",
                 "url": "../container-tools",
-                "reference": "7127fbc2788e9efa8c241bb34699f25980006e8b"
+                "reference": "090522b2ddff004812c660c701b0a014f76ca388"
             },
             "require": {
                 "ext-curl": "*",
@@ -596,7 +596,7 @@
             "dist": {
                 "type": "path",
                 "url": "../opensim-engine",
-                "reference": "655d4626137f41d585141665496b5d69e11cfc40"
+                "reference": "9a5ba17aa43a2b9f08a19e0244ebb4ee4e6dda97"
             },
             "require": {
                 "ext-curl": "*",
@@ -781,16 +781,16 @@
         },
         {
             "name": "phpxmlrpc/phpxmlrpc",
-            "version": "4.11.5",
+            "version": "4.11.6",
             "source": {
                 "type": "git",
                 "url": "https://github.com/gggeek/phpxmlrpc.git",
-                "reference": "ad6df5f9e296a9ea76e58a7cb634b88a8e324dc4"
+                "reference": "30a5d27510c529bd80a0b93f335e1cdf1b501183"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/gggeek/phpxmlrpc/zipball/ad6df5f9e296a9ea76e58a7cb634b88a8e324dc4",
-                "reference": "ad6df5f9e296a9ea76e58a7cb634b88a8e324dc4",
+                "url": "https://api.github.com/repos/gggeek/phpxmlrpc/zipball/30a5d27510c529bd80a0b93f335e1cdf1b501183",
+                "reference": "30a5d27510c529bd80a0b93f335e1cdf1b501183",
                 "shasum": ""
             },
             "require": {
@@ -806,7 +806,7 @@
                 "ext-curl": "*",
                 "ext-dom": "*",
                 "ext-mbstring": "*",
-                "phpunit/phpunit": "^4.8.28 || ^5.6.3 || ^8.5.42",
+                "phpunit/phpunit": "^4.8.36 || ^5.6.8 || ^8.5.56",
                 "phpunit/phpunit-selenium": "*",
                 "yoast/phpunit-polyfills": "*"
             },
@@ -836,9 +836,9 @@
             ],
             "support": {
                 "issues": "https://github.com/gggeek/phpxmlrpc/issues",
-                "source": "https://github.com/gggeek/phpxmlrpc/tree/4.11.5"
+                "source": "https://github.com/gggeek/phpxmlrpc/tree/4.11.6"
             },
-            "time": "2025-11-11T13:17:35+00:00"
+            "time": "2026-10-26T19:03:59+00:00"
         },
         {
             "name": "psr/http-client",
