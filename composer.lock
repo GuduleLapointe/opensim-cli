@@ -479,7 +479,7 @@
             "dist": {
                 "type": "path",
                 "url": "../container-tools",
-                "reference": "090522b2ddff004812c660c701b0a014f76ca388"
+                "reference": "5a3265973f3fe6678528a999cae0733f43b48e58"
             },
             "require": {
                 "ext-curl": "*",
