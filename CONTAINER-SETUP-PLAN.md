@@ -64,6 +64,8 @@ Preparation foundation validated: 65 engine quick-setup tests pass on Ubuntu 24.
 
 Prioritize this reported bug before extending the new-region-only workflow.
 
+Planning foundation validated: applying a fixed-region move now preserves its existing UUID, name, roles and estate, and rejects a missing or invalid UUID. The fixed-region path accepts only location/port changes. The 137 targeted engine tests pass on Ubuntu 24.04. This fixes a destructive planning primitive; it does not yet expose the complete adoption/import workflow or move a live source.
+
 - [ ] Reproduce rejection of an existing region when provisioning its new simulator/container, using a fixture with its existing grid registration.
 - [ ] Reuse the engine's existing move/adoption mechanisms where applicable; inspect RegionPlanner's existing-region context and uniqueness checks.
 - [ ] Distinguish adopting the same region from creating a conflicting new region. Keep genuine duplicate-name/UUID protection.
