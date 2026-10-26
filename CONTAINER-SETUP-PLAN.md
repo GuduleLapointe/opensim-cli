@@ -120,7 +120,7 @@ Podman distinguishes `run` (create and start) from `start` (start an existing co
 
 Acceptance: change the configured ports, relaunch if required, and verify the same OpenSim identity and data plus the new TCP/UDP bindings. Pasta keeps the OCI ID for live changes; a bridge fallback may replace the OCI container while preserving mounted data. Live changes must leave unrelated simulators running.
 
-Development hosts checked: Vonda runs rootless Podman 5.7.0 with Netavark (client 5.6.0); Ursull runs rootless Podman 4.9.3 with Netavark (client 5.6.0). The live TCP/UDP integration checks in this stage currently run against Vonda.
+Port allocation is tested without Podman or Docker: tests bind real local TCP/UDP sockets, call the engine's process-table detector, and verify that allocation skips the occupied ten-port blocks. Native setup uses the same detector on its target machine. Container deployments supply a selected-host snapshot through their container backend; publication and forwarding tests remain separate integration checks.
 
 Prepared setups now carry engine-generated `port_bindings`: public TCP/UDP listeners bind on all host interfaces; private and console TCP listeners bind to host loopback; disabled consoles are omitted; duplicate standalone/listener ports are collapsed. Quick-install passes those records as explicit container-tools mappings and disables image `EXPOSE` defaults. Validation: 81 QuickSetup tests (394 assertions), 31 quick-install tests (108 assertions), one real-engine-to-installer setup test (16 assertions), and Vonda explicit TCP/UDP listener delivery (one integration test, 11 assertions).
 
