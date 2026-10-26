@@ -18,7 +18,7 @@ See `./quick-install.sh --help` for other options.
 
 To run the installer on an SSH server, download it locally first, then run `./quick-install.sh --remote root@server --setup`.
 
-For a Podman install, run the downloaded script as a file. It creates a persistent Ubuntu 26.04 container by default; choose another image with `--image` or `OPENSIM_CONTAINER_IMAGE`. Podman uses `CONTAINER_CONNECTION` if set, or `--connection=local` to force the local engine. Run `opensim setup` from the container terminal after installation.
+For a Podman install, run the downloaded script as a file. It builds a cached systemd server image from Ubuntu 26.04 and creates a persistent container by default; choose another image with `--image` or `OPENSIM_CONTAINER_IMAGE`. Podman uses `CONTAINER_CONNECTION` if set, or `--connection=local` to force the local engine. Run `opensim setup` from the container terminal after installation.
 
 ## Requirements
 

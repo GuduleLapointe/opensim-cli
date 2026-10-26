@@ -246,8 +246,43 @@ run_remote_install() (
 	ssh -t "$target" "$command"
 )
 
+write_systemd_context() {
+	local directory=$1 base=$2
+	printf 'FROM %s\n' "$base" >"$directory/Containerfile"
+	cat >>"$directory/Containerfile" <<-'CONTAINERFILE'
+		RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends systemd systemd-sysv dbus openssh-server curl wget ca-certificates iproute2 iputils-ping procps && apt-get clean && rm -rf /var/lib/apt/lists/* && rm -f /etc/machine-id /var/lib/dbus/machine-id /etc/ssh/ssh_host_* && touch /etc/machine-id
+		COPY ssh-host-keys.service /etc/systemd/system/ssh-host-keys.service
+		RUN systemctl enable ssh-host-keys.service ssh.service
+		STOPSIGNAL SIGRTMIN+3
+		CMD ["/sbin/init"]
+	CONTAINERFILE
+	cat >"$directory/ssh-host-keys.service" <<-'SERVICE'
+		[Unit]
+		Description=Generate SSH host keys
+		Before=ssh.service
+		[Service]
+		Type=oneshot
+		ExecStart=/usr/bin/ssh-keygen -A
+		RemainAfterExit=yes
+		[Install]
+		WantedBy=multi-user.target
+	SERVICE
+}
+
+build_systemd_image() (
+	local base=$1 context image checksum slug
+	context=$(mktemp -d) || return 1
+	trap 'rm -rf "$context"' EXIT
+	write_systemd_context "$context" "$base" || return $?
+	checksum=$(cat "$context/Containerfile" "$context/ssh-host-keys.service" | cksum | awk '{print $1}')
+	slug=$(printf '%s' "$base" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9_.-]+/-/g')
+	image="localhost/opensim-server:${slug:0:80}-$checksum"
+	run_container_tool build --file "$context/Containerfile" --tag "$image" "$context" >&2 || return $?
+	printf '%s\n' "$image"
+)
+
 run_podman_install() {
-	local source_script=${BASH_SOURCE[0]} source_dir output name status=0 debs_in_container=
+	local source_script=${BASH_SOURCE[0]} source_dir output name server_image status=0 debs_in_container=
 	local -a environment=()
 	bootstrap_podman_manager || die "could not install the local OpenSim manager"
 	if [[ -n "${CONTAINER_TOOLS_CLI:-}" ]]; then
@@ -267,11 +302,13 @@ run_podman_install() {
 	[[ -x "$CONTAINER_TOOLS_CLI_SELECTED" ]] || die "container-tools is not executable: $CONTAINER_TOOLS_CLI_SELECTED"
 	prepare_podman_setup_config
 	[[ -f "$source_script" ]] || die "--podman requires quick-install.sh to be run from a local file"
-	output=$(run_container_tool create --name "$PODMAN_CONTAINER_NAME" --image "$PODMAN_IMAGE") || status=$?
+	server_image=$(build_systemd_image "$PODMAN_IMAGE") || die "could not build the systemd server image"
+	output=$(run_container_tool create --name "$PODMAN_CONTAINER_NAME" --image "$server_image") || status=$?
 	printf '%s\n' "$output"
 	((status == 0)) || die "could not create the Podman container"
 	name=$(sed -n 's/^Name: //p' <<<"$output" | tail -n 1)
 	[[ -n "$name" ]] || die "container-tools did not report the created container name"
+	run_container_tool wait-ready "$name" -- sh -c 'test "$(cat /proc/1/comm)" = systemd && systemctl is-active multi-user.target && systemctl is-active ssh.service' || die "systemd services did not become ready in container $name"
 	say "Install OpenSim in container $name"
 	run_container_tool cp "$source_script" "$name:/tmp/quick-install.sh" || die "could not copy quick-install.sh to container $name"
 	run_container_tool cp "$SETUP_CONFIG_FILE" "$name:/tmp/opensim-setup.json" || die "could not copy setup config to container $name"

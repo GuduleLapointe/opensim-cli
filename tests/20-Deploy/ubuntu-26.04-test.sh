@@ -9,6 +9,8 @@ if deploy_load_platform ubuntu-26.04; then
 	function test_03_container_start_succeeds() { deploy_run_step started; }
 	function test_04_container_reports_running() { deploy_run_step running; }
 	function test_05_container_is_ready() { deploy_run_step ready; }
+	function test_05a_systemd_is_pid_1() { deploy_run_step systemd; }
+	function test_05b_ssh_service_is_running() { deploy_run_step ssh; }
 	function test_06_os_id_matches_platform() { deploy_run_step id; }
 	function test_07_os_version_matches_platform() { deploy_run_step version; }
 	function test_08_quick_install_dependencies() { deploy_run_step dependencies; }

@@ -118,3 +118,5 @@ use Bashunit's one-retry annotation. A check that only passes on retry is
 marked as flaky; package mutations and installation tests are not retried.
 
 Source-clone mode remains out of scope.
+
+Deployment tests build the same cached systemd server image as quick-install. Each platform checks systemd as PID 1 and the SSH service separately before installing OpenSim. Existing containers created from the old shell-only image must be recreated to use systemd.

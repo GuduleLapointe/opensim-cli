@@ -20,6 +20,7 @@ DEPLOY_INSTALL_MODE=${DEPLOY_INSTALL_MODE:-separate}
 DEPLOY_ENGINE_SELECTED=
 DEPLOY_PLATFORM=
 DEPLOY_IMAGE=
+DEPLOY_BASE_IMAGE=
 DEPLOY_NAME_BASE=opensim-deploy
 DEPLOY_EXPECTED_ID=
 DEPLOY_EXPECTED_VERSION=
@@ -93,6 +94,7 @@ deploy_load_platform() {
 		[[ -z "$platform" || "$platform" == \#* ]] && continue
 		if [[ "$platform" == "$requested" ]]; then
 			DEPLOY_PLATFORM=$platform
+			DEPLOY_BASE_IMAGE=$image
 			DEPLOY_IMAGE=$image
 			DEPLOY_EXPECTED_ID=$expected_id
 			DEPLOY_EXPECTED_VERSION=$expected_version
@@ -123,20 +125,15 @@ deploy_installation_is_current() {
 }
 
 deploy_ensure_image() {
-	local image=$1 log_file=$2 status=0
-	if ! deploy_select_engine; then
-		printf 'Container-tools is unavailable\n'
-		return 127
-	fi
-	mkdir -p "$(dirname "$log_file")" || return $?
-	deploy_command image-pull "$image" >"$log_file" 2>&1 || status=$?
-	if ((status != 0)); then
-		printf 'Image pull failed: %s\n' "$image"
-		tail -n 12 "$log_file"
-	else
-		printf 'Image available: %s\n' "$image"
-	fi
-	return "$status"
+	local image=$1 log_file=$2 built_image
+	mkdir -p "$(dirname "$log_file")" "$DEPLOY_RUN_DIR" || return $?
+	built_image=$(
+		QUICK_INSTALL_LIBRARY_ONLY=yes source "$DEPLOY_PROJECT_ROOT/quick-install.sh"
+		CONTAINER_TOOLS_CLI_SELECTED=$DEPLOY_CONTAINER_CLI
+		build_systemd_image "$image"
+	) 2>"$log_file" || { cat "$log_file"; return 1; }
+	printf '%s\n' "$built_image" >"$DEPLOY_RUN_DIR/$DEPLOY_PLATFORM-image"
+	printf 'Image available: %s\n' "$built_image"
 }
 
 deploy_assert_exec() {
@@ -266,6 +263,9 @@ deploy_mark_infra_blocked() {
 
 deploy_run_step() {
 	local step=$1 name location command
+	if [[ "$step" != image && -s "$DEPLOY_RUN_DIR/$DEPLOY_PLATFORM-image" ]]; then
+		DEPLOY_IMAGE=$(cat "$DEPLOY_RUN_DIR/$DEPLOY_PLATFORM-image")
+	fi
 	name=$(deploy_name "$DEPLOY_PLATFORM")
 	location=$(deploy_execution_location)
 	case "$step" in
@@ -274,6 +274,8 @@ deploy_run_step() {
 	started) bashunit::set_test_title "$DEPLOY_PLATFORM container started" ;;
 	running) bashunit::set_test_title "$DEPLOY_PLATFORM container running" ;;
 	ready) bashunit::set_test_title "$DEPLOY_PLATFORM container ready" ;;
+	systemd) bashunit::set_test_title "$DEPLOY_PLATFORM systemd is PID 1" ;;
+	ssh) bashunit::set_test_title "$DEPLOY_PLATFORM SSH service running" ;;
 	id) bashunit::set_test_title "$DEPLOY_PLATFORM OS ID matches" ;;
 	version) bashunit::set_test_title "$DEPLOY_PLATFORM OS version matches" ;;
 	dependencies) bashunit::set_test_title "$DEPLOY_PLATFORM dependencies installed" ;;
@@ -318,7 +320,7 @@ deploy_run_step() {
 	image)
 		local image_log image_command
 		image_log=$(deploy_log_dir "$DEPLOY_PLATFORM")/image.log
-		printf -v image_command 'deploy_ensure_image %q %q' "$DEPLOY_IMAGE" "$image_log"
+		printf -v image_command 'deploy_ensure_image %q %q' "$DEPLOY_BASE_IMAGE" "$image_log"
 		deploy_assert_exec "$image_command" --stdout-contains 'Image available'
 		return
 		;;
@@ -380,8 +382,18 @@ deploy_run_step() {
 	ready)
 		if ! assert_deployment_container_running "$DEPLOY_PLATFORM"; then return; fi
 		local ready_command
-		printf -v ready_command 'deploy_command exec %q -- sh -c %q' "$name" 'test -r /etc/os-release && test -x /bin/sh && command -v tar >/dev/null'
+		printf -v ready_command 'deploy_command wait-ready %q -- sh -c %q' "$name" 'systemctl is-active multi-user.target'
 		deploy_assert_exec "$ready_command"
+		return
+		;;
+	systemd)
+		printf -v command 'deploy_command exec %q -- cat /proc/1/comm' "$name"
+		deploy_assert_exec "$command" --stdout-contains systemd
+		return
+		;;
+	ssh)
+		printf -v command 'deploy_command wait-ready %q -- systemctl is-active ssh.service' "$name"
+		deploy_assert_exec "$command"
 		return
 		;;
 	id)

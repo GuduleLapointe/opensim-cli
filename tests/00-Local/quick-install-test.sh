@@ -132,7 +132,7 @@ function test_podman_install_uses_connection_image_and_forwards_install_options(
 	create_container_tools_stub "$fake_bin"
 	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=podman-host APT_SOURCE_DIR='$debs' bash '$QUICK_INSTALL' --podman --connection=podman-host --image=docker.io/library/ubuntu:24.04 --opensim --yes"
 	assert_contains '<--name> <test_grid>' "$(cat "$calls")"
-	assert_contains '<--connection> <podman-host> <create> <--name> <test_grid> <--image> <docker.io/library/ubuntu:24.04>' "$(cat "$calls")"
+	assert_contains '<--connection> <podman-host> <create> <--name> <test_grid> <--image> <localhost/opensim-server:docker.io-library-ubuntu-24.04-' "$(cat "$calls")"
 	assert_not_contains '<-->' "$(grep '<create>' "$calls")"
 	assert_contains '<cp> ' "$(cat "$calls")"
 	assert_contains '<cp> <'"$debs"'> <test-opensim:/tmp/opensim-kit-debs>' "$(cat "$calls")"
@@ -181,7 +181,7 @@ function test_podman_connection_local_forces_local_engine() {
 	create_container_tools_stub "$fake_bin"
 	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=podman-host bash '$QUICK_INSTALL' --podman --connection=local --yes"
 	assert_contains 'connection=<unset>' "$(cat "$calls")"
-	assert_contains '<--image> <docker.io/library/ubuntu:26.04>' "$(cat "$calls")"
+	assert_contains '<--image> <localhost/opensim-server:docker.io-library-ubuntu-26.04-' "$(cat "$calls")"
 	assert_not_contains '<--connection>' "$(cat "$calls")"
 }
 
@@ -194,7 +194,7 @@ OPENSIM_CONTAINER_IMAGE=docker.io/library/ubuntu:24.04
 RC
 	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC='$rc' CONTAINER_CONNECTION=podman-host OPENSIM_CONTAINER_IMAGE=docker.io/library/debian:13-slim bash '$QUICK_INSTALL' --podman --yes"
 	assert_contains 'connection=podman-host' "$(cat "$calls")"
-	assert_contains '<--image> <docker.io/library/debian:13-slim>' "$(cat "$calls")"
+	assert_contains '<--image> <localhost/opensim-server:docker.io-library-debian-13-slim-' "$(cat "$calls")"
 }
 
 function test_podman_setup_applies_prepared_settings() {
@@ -482,4 +482,15 @@ function test_podman_setup_proposes_selected_server_hostname() {
     assert_file_exists "$WORK/prefill.json"
     assert_equals podman.example.test "$(jq -r '.hostname' "$WORK/prefill.json")"
     assert_contains '<--connection> <podman-host> <info>' "$(cat "$calls")"
+}
+
+function test_systemd_image_starts_init_and_generates_keys_at_boot() {
+    quick_install_load_library || return
+    mkdir "$WORK/context"
+    write_systemd_context "$WORK/context" docker.io/library/debian:12-slim
+    assert_contains 'FROM docker.io/library/debian:12-slim' "$(cat "$WORK/context/Containerfile")"
+    assert_contains 'CMD ["/sbin/init"]' "$(cat "$WORK/context/Containerfile")"
+    assert_contains 'STOPSIGNAL SIGRTMIN+3' "$(cat "$WORK/context/Containerfile")"
+    assert_contains 'rm -rf /var/lib/apt/lists/*' "$(cat "$WORK/context/Containerfile")"
+    assert_contains 'ExecStart=/usr/bin/ssh-keygen -A' "$(cat "$WORK/context/ssh-host-keys.service")"
 }

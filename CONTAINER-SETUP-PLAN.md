@@ -125,7 +125,7 @@ If standard Podman mechanisms cannot meet same-container relaunch on a target ba
 - [ ] Include OpenSim tools/core dependencies and maintenance tools, including SSH.
 - [ ] Generate instance secrets and SSH host keys at initialization, not build.
 - [ ] Diagnose current `opensim start|stop|restart` inside a container. The engine's current StartService/StopService use its runtime/console machinery; absence of systemd alone does not explain an instance restart failure.
-- [ ] Validate an existing service manager for PID 1 and automatic startup. Evaluate Podman's supported systemd mode for the complete server, including rootless operation and the container-tools API path, before adopting it.
+- [x] Validate systemd as PID 1 through the container-tools API path. The reusable Debian/Ubuntu server recipe enables SSH with host keys generated on instance boot. Ubuntu 26.04 lifecycle tests pass on Ursull without privileged mode; application-specific service integration remains below.
 - [ ] Manage MariaDB when bundled, SSH and enabled OpenSim instances; remove the installer's placeholder sleep loop once real service lifecycle is validated.
 - [ ] Start database services according to the instance's selected driver; a reusable image must also run a SQLite-only instance without MariaDB startup.
 - [ ] Ensure signals stop OpenSim and databases cleanly within an appropriate stop timeout. An instance restart must not restart the whole container.

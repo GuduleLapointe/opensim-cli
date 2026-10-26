@@ -50,11 +50,19 @@ done
 
 cp tests/Packaging/inside "$stage/inside"
 
+# Build the same systemd server image as the installer.
+BASE=$(
+    QUICK_INSTALL_LIBRARY_ONLY=yes source ./quick-install.sh
+    CONTAINER_TOOLS_CLI_SELECTED=$CONTAINER_TOOLS_CLI
+    build_systemd_image "$BASE"
+)
+
 # Create the clean test container and transfer the current package set.
 create_args=(create --no-start --name "$container_name" --image "$BASE")
 [[ -n "${MEMORY:-}" ]] && create_args+=(--memory "$MEMORY")
 "$CONTAINER_TOOLS_CLI" "${create_args[@]}"
 "$CONTAINER_TOOLS_CLI" start "$container_name"
+"$CONTAINER_TOOLS_CLI" wait-ready "$container_name" -- systemctl is-active multi-user.target
 "$CONTAINER_TOOLS_CLI" cp "$stage/debs" "$container_name:/tmp/debs"
 "$CONTAINER_TOOLS_CLI" cp "$stage/inside" "$container_name:/tmp/inside"
 "$CONTAINER_TOOLS_CLI" exec "$container_name" -- bash /tmp/inside
