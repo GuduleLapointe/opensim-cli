@@ -82,3 +82,58 @@ as_system_user() {
 		die "this needs administrator rights: run it as root, or install sudo"
 	fi
 }
+
+# Read private setup inputs as their caller and pass them to the service account without changing their permissions.
+run_setup() {
+	local -a arguments=("$@") inputs=() indexes=()
+	local index position input_file input_dir= destination status=0 option
+	if [[ -z "${system_user:-}" || "$(id -un)" == "$system_user" ]]; then
+		"$CLI_ROOT/libexec/setup" "$@"
+		return $?
+	fi
+	for ((index = 0; index < ${#arguments[@]}; index++)); do
+		input_file=
+		case "${arguments[index]}" in
+			--apply)
+				((index + 1 < ${#arguments[@]})) || die "--apply requires a JSON file"
+				input_file=${arguments[index+1]}; arguments[index+1]=- ;;
+			--apply=*) input_file=${arguments[index]#*=}; arguments[index]=--apply=- ;;
+		esac
+		if [[ -n "$input_file" && "$input_file" != - ]]; then
+			[[ -r "$input_file" ]] || die "cannot read prepared setup: $input_file"
+			as_system_user "$CLI_ROOT/libexec/setup" "${arguments[@]}" <"$input_file"
+			return $?
+		fi
+	done
+	for ((index = 0; index < ${#arguments[@]}; index++)); do
+		case "${arguments[index]}" in
+			--config | --region-config)
+				option=${arguments[index]}
+				((index + 1 < ${#arguments[@]})) || die "$option requires a file"
+				input_file=${arguments[index+1]} ;;
+			--config=* | --region-config=*) input_file=${arguments[index]#*=} ;;
+			*) continue ;;
+		esac
+		[[ -r "$input_file" ]] || die "cannot read setup input: $input_file"
+		inputs+=("$input_file"); indexes+=("$index")
+		[[ "${arguments[index]}" == *=* ]] || ((index += 1))
+	done
+	if ((${#inputs[@]})); then
+		input_dir=$(as_system_user mktemp -d /tmp/opensim-setup.XXXXXXXX) || die "could not create private setup inputs"
+	fi
+	for ((position = 0; position < ${#inputs[@]}; position++)); do
+		index=${indexes[position]}
+		destination=$input_dir/input-$position
+		if ! as_system_user sh -c 'umask 077; cat > "$1"' setup "$destination" <"${inputs[position]}"; then
+			as_system_user rm -rf -- "$input_dir" || true
+			die "could not transfer setup input: ${inputs[position]}"
+		fi
+		case "${arguments[index]}" in
+			*=*) option=${arguments[index]%%=*}; arguments[index]=$option=$destination ;;
+			*) arguments[index+1]=$destination ;;
+		esac
+	done
+	as_system_user "$CLI_ROOT/libexec/setup" "${arguments[@]}" || status=$?
+	[[ -z "$input_dir" ]] || as_system_user rm -rf -- "$input_dir" || true
+	return "$status"
+}

@@ -2,11 +2,12 @@
 # opensim setup: the engine gives the screens (it is the scenario), this draws the one it gets, sends it back filled with the button that
 # was pressed, and does the action it answers: another screen, the same one with what is wrong, quit with a message, abort with an error.
 
-USAGE="opensim setup [-hqv] [--config FILE] [--prepare FILE] [--apply FILE]"
+USAGE="opensim setup [-hqv] [--config FILE] [--prepare FILE] [--apply FILE] [--region-config FILE]"
 HELP="Shows the setup questions and applies the confirmed settings.
   --config FILE   prefill answers from a JSON configuration
   --prepare FILE  save answers privately without creating the installation
-  --apply FILE    apply a prepared configuration without further questions"
+  --apply FILE    apply a prepared configuration without further questions
+  --region-config FILE  adopt an existing Region.ini in a simulator setup"
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 source "$CLI_ROOT/src/lib/ui"
@@ -15,6 +16,7 @@ setup_config=${OPENSIM_SETUP_CONFIG_FILE:-}
 setup_config_explicit=no
 prepare_file=
 apply_file=
+region_config=
 setup_mode=apply
 while (($#)); do
 	case "$1" in
@@ -25,6 +27,12 @@ while (($#)); do
 			shift 2
 			;;
 		--config=*) setup_config_explicit=yes; setup_config=${1#*=}; [[ -n "$setup_config" ]] || die "opensim setup --config requires a JSON file"; shift ;;
+		--region-config)
+			(($# > 1)) && [[ "$2" != -* ]] || die "opensim setup --region-config requires an INI file"
+			region_config=$2
+			shift 2
+			;;
+		--region-config=*) region_config=${1#*=}; [[ -n "$region_config" ]] || die "opensim setup --region-config requires an INI file"; shift ;;
 		--apply)
 			(($# > 1)) && [[ "$2" != --* ]] || die "opensim setup --apply requires a JSON file"
 			apply_file=$2
@@ -44,21 +52,24 @@ done
 apply_request=
 if [[ -n "$apply_file" ]]; then
 	[[ "$setup_config_explicit" == yes ]] || setup_config=
-	[[ -z "$prepare_file" && -z "$setup_config" ]] || die "--apply cannot be combined with --prepare or --config"
+	[[ -z "$prepare_file" && -z "$setup_config" && -z "$region_config" ]] || die "--apply cannot be combined with --prepare, --config or --region-config"
 	apply_filter='
 		if (.answers.admin_user // "") == "" then
-			.answers.admin_user = (env.OPENSIM_DB_ADMIN_USER // "") |
-			.answers.admin_password = (env.OPENSIM_DB_ADMIN_PASS // "")
-		elif (.answers.admin_password // "") == "" and .answers.admin_user == env.OPENSIM_DB_ADMIN_USER then
-			.answers.admin_password = (env.OPENSIM_DB_ADMIN_PASS // "")
+			.answers.admin_user = $admin_user |
+			.answers.admin_password = $admin_password
+		elif (.answers.admin_password // "") == "" and .answers.admin_user == $admin_user then
+			.answers.admin_password = $admin_password
 		else . end |
 		{data: {type: "steps", attributes: {mode: "apply", configuration: .}}}
 	'
+	setup_apply_request() {
+		jq -ce --rawfile admin_user <(printf '%s' "${OPENSIM_DB_ADMIN_USER:-}") --rawfile admin_password <(printf '%s' "${OPENSIM_DB_ADMIN_PASS:-}") "$apply_filter"
+	}
 	if [[ "$apply_file" == - ]]; then
-		apply_request=$(jq -ce "$apply_filter") || die "cannot read prepared setup from standard input"
+		apply_request=$(setup_apply_request) || die "cannot read prepared setup from standard input"
 	else
 		[[ -r "$apply_file" ]] || die "cannot read prepared setup: $apply_file"
-		apply_request=$(jq -ce "$apply_filter" <"$apply_file") || die "invalid prepared setup JSON"
+		apply_request=$(setup_apply_request <"$apply_file") || die "invalid prepared setup JSON"
 	fi
 fi
 setup_prefill='{}'
@@ -67,8 +78,14 @@ if [[ -n "$setup_config" ]]; then
 	[[ -r "$setup_config" ]] || die "cannot read setup config: $setup_config"
 	setup_prefill=$(jq -ce 'if (.answers | type) == "object" then .answers elif type == "object" then . else error("expected object") end' "$setup_config") || die "setup config must be a JSON object"
 	setup_prefill_type=$(jq -r '.type // empty' <<<"$setup_prefill")
-	[[ -z "$setup_prefill_type" || "$setup_prefill_type" =~ ^(grid|standalone|simulator)$ ]] || die "setup config type must be grid, standalone, or simulator"
 fi
+
+if [[ -n "$region_config" ]]; then
+	[[ -r "$region_config" ]] || die "cannot read region configuration: $region_config"
+	setup_prefill=$(jq -c --rawfile region "$region_config" '. + {existing_region:$region}' <<<"$setup_prefill") || die "cannot read region configuration"
+fi
+setup_prefill=$(jq -c 'if (.existing_region // "") != "" then .type //= "simulator" else . end' <<<"$setup_prefill")
+setup_prefill_type=$(jq -r '.type // empty' <<<"$setup_prefill")
 
 state= button=next answers='{}'
 errors=$(mktemp) answer=$(mktemp) prepared_tmp=
@@ -102,9 +119,18 @@ fail_engine() {
 	die "The engine does not answer as it should: ${what:-$1}$(grep -v '^opensim: ' "$errors" | sed 's/^/\n  /')"
 }
 
+adoption_required=$(jq -r '(.existing_region // "") != ""' <<<"$setup_prefill")
+if [[ -n "$apply_request" ]]; then
+	adoption_required=$(jq -r '.data.attributes.configuration | (.answers.existing_region // .setup.simulators[0].regions[0].source // "") != ""' <<<"$apply_request")
+fi
+if [[ "$adoption_required" == true ]]; then
+	reply=$(engine POST /setups/quick --data=- <<<'{"data":{"type":"setups","attributes":{}}}' 2>"$errors") || fail_engine "$reply"
+	jq -e '.data.attributes.capabilities | arrays | index("existing_region") != null' <<<"$reply" >/dev/null || die "The engine does not support existing-region setup; update opensim-engine"
+fi
+
 while :; do
-	request=$(jq -cn --arg state "$state" --arg button "$button" --arg mode "$setup_mode" --argjson answers "$answers" \
-		'{data: {type: "steps", attributes: {state: $state, button: $button, answers: $answers, mode: $mode}}}')
+	request=$(jq -c --rawfile state <(printf '%s' "$state") --arg button "$button" --arg mode "$setup_mode" --slurpfile prefill <(printf '%s' "$setup_prefill") \
+		'{data: {type: "steps", attributes: {state: $state, button: $button, answers: (. + ($prefill[0] | {existing_region} | with_entries(select(.value != null)))), mode: $mode}}}' <<<"$answers")
 	[[ -z "$apply_request" ]] || request=$apply_request
 	# What the engine tells while it works (lines starting with "opensim: ") is shown as it comes. Its answer goes to a file and its
 	# error output to another that is read while it runs: the instances it starts keep both open, a pipe would never end
@@ -126,7 +152,7 @@ while :; do
 	fi
 	if [[ "$(jq -r '.action + ":" + (.kind // "")' <<<"$screen")" == screen:menu && -n "$setup_prefill_type" ]]; then
 		state=$(jq -r '.state' <<<"$screen")
-		answers=$(jq -cn --arg type "$setup_prefill_type" '{type:$type}')
+		answers=$(jq -c '{type,existing_region} | with_entries(select(.value != null))' <<<"$setup_prefill")
 		setup_prefill_type=
 		continue
 	fi
@@ -134,8 +160,8 @@ while :; do
 	screen)
 		[[ -z "$apply_file" ]] || die "The engine could not apply the prepared configuration: $(jq -r '.notice // empty' <<<"$screen")"
 		case "$(jq -r .kind <<<"$screen")" in
-			form) screen=$(jq -c --argjson prefill "$setup_prefill" '.fields |= map(if ($prefill[.name] // null) != null then .value = ($prefill[.name] | tostring) else . end)' <<<"$screen") ;;
-			checks) screen=$(jq -c --argjson prefill "$setup_prefill" '.items |= map(if ($prefill[.name] // null) != null then .checked = (($prefill[.name] | tostring | ascii_downcase) == "true" or ($prefill[.name] | tostring | ascii_downcase) == "yes" or ($prefill[.name] | tostring) == "1") else . end)' <<<"$screen") ;;
+			form) screen=$(jq -c --slurpfile prefill <(printf '%s' "$setup_prefill") '$prefill[0] as $prefill | .fields |= map(if ($prefill[.name] // null) != null then .value = ($prefill[.name] | tostring) else . end)' <<<"$screen") ;;
+			checks) screen=$(jq -c --slurpfile prefill <(printf '%s' "$setup_prefill") '$prefill[0] as $prefill | .items |= map(if ($prefill[.name] // null) != null then .checked = (($prefill[.name] | tostring | ascii_downcase) == "true" or ($prefill[.name] | tostring | ascii_downcase) == "yes" or ($prefill[.name] | tostring) == "1") else . end)' <<<"$screen") ;;
 		esac
 		ui_screen "$screen"
 		;;

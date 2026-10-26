@@ -6,6 +6,7 @@
 
 OPENSIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bin/opensim"
 SETUP_CONFIG=
+ENGINE_CAPABILITIES='{"data":{"attributes":{"capabilities":["prepare","apply_prepared","existing_region"]}}}'
 
 # The screens of the engine, as it gives them
 MENU='{"data":{"attributes":{"action":"screen","kind":"menu","name":"type","title":"OpenSim setup","text":"","notice":"","items":[{"key":"grid","label":"Grid","note":""},{"key":"standalone","label":"Standalone","note":""},{"key":"speculoos","label":"Speculoos","note":"not implemented"}],"value":"","buttons":{"next":"OK","back":"Quit"},"state":"s1"}}}'
@@ -202,6 +203,101 @@ function test_setup_apply_transfers_private_config_before_elevation() {
 	chmod +x "$WORK/bin/sudo"
 	assert_exec "PATH='$WORK/bin:$PATH' OPENSIM_SYSTEM_USER=nobody '$OPENSIM' setup --apply '$config'"
 	assert_equals "$(cat "$config")" "$(cat "$WORK/received-config")"
+}
+
+function test_setup_adoption_requires_engine_support_before_apply() {
+	local config=$WORK/prepared.json
+	cat >"$config" <<'JSON'
+{"version":1,"identity":"example.existing","answers":{"existing_region":"[Existing]\nRegionUUID=aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee\nLocation=120,130\nInternalPort=9101\n"},"setup":{}}
+JSON
+	engine_says "$QUIT"
+	assert_exec "'$OPENSIM' setup --apply '$config' </dev/null 2>&1" --exit 1 --stdout-contains 'engine does not support existing-region setup'
+	assert_equals 1 "$(cat "$ENGINE_REPLIES/.count")"
+}
+
+function test_setup_prepares_an_existing_region_file() {
+	local region=$WORK/existing.ini config=$WORK/prepared.json prepared
+	cat >"$region" <<'INI'
+[Existing Island]
+RegionUUID = aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee
+Location = 120,130
+InternalPort = 9101
+INI
+	prepared=$(jq -cn --rawfile region "$region" '{data:{attributes:{action:"prepared",configuration:{version:1,identity:"example.existing_island",answers:{type:"simulator",existing_region:$region},setup:{}}}}}')
+	engine_prepares "$ENGINE_CAPABILITIES" "$MENU" "$FORM" "$REVIEW" "$DATABASE_FORM" "$prepared"
+	printf '\n\n\n' >"$WORK/answers"
+	assert_exec "FE_INPUT_FD=7 FE_TTY='$WORK/none' OPENSIM_SETUP_UI=plain '$OPENSIM' setup --region-config '$region' --prepare '$config' 7<'$WORK/answers'" --stdout-contains 'Setup configuration saved'
+	assert_equals simulator "$(request 3 .answers.type)"
+	assert_equals "$(cat "$region")" "$(request 3 .answers.existing_region)"
+	assert_equals "$(cat "$region")" "$(jq -r .answers.existing_region "$config")"
+}
+
+function test_setup_rejects_an_unreadable_region_file() {
+	engine_prepares "$MENU"
+	assert_exec "'$OPENSIM' setup --region-config='$WORK/missing.ini' --prepare '$WORK/setup.json' 2>&1" --exit 1 --stdout-contains 'cannot read region configuration'
+	assert_file_not_exists "$ENGINE_REPLIES/.count"
+}
+
+function make_setup_sudo_executor() {
+	mkdir -p "$WORK/bin"
+	cat >"$WORK/bin/sudo" <<'SUDO'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"$SUDO_LOG"
+[[ "$1" != -u ]] || shift 2
+preserved=
+if [[ "$1" == --preserve-env=* ]]; then preserved=${1#*=}; shift; fi
+[[ ",$preserved," == *,OPENSIM_API,* ]] || unset OPENSIM_API
+exec "$@"
+SUDO
+	chmod +x "$WORK/bin/sudo"
+}
+
+function test_setup_stages_private_inputs_before_elevation() {
+	local config=$WORK/answers.json region=$WORK/region.ini
+	printf '%s\n' '{"type":"simulator","name":"Existing"}' >"$config"
+	printf '%s\n' '[Existing]' 'RegionUUID = aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' >"$region"
+	chmod 600 "$config" "$region"
+	make_setup_sudo_executor
+	engine_says "$ENGINE_CAPABILITIES" "$QUIT"
+	assert_exec "SUDO_LOG='$WORK/sudo.log' PATH='$WORK/bin:$PATH' OPENSIM_SYSTEM_USER=nobody '$OPENSIM' setup --config '$config' --region-config '$region' </dev/null" --stdout-contains 'Grid name:'
+	local forwarded
+	forwarded=$(cat "$WORK/sudo.log")
+	assert_not_contains "$config" "$forwarded"
+	assert_not_contains "$region" "$forwarded"
+	local staged
+	staged=$(sed -n 's#.*\(/tmp/opensim-setup\.[^ /]*\)/input-[0-9]*.*#\1#p' "$WORK/sudo.log" | head -n 1)
+	assert_not_empty "$staged"
+	assert_directory_not_exists "$staged"
+}
+
+function test_setup_keeps_engine_override_when_elevating() {
+	make_setup_sudo_executor
+	engine_says "$QUIT"
+	assert_exec "SUDO_LOG='$WORK/sudo.log' PATH='$WORK/bin:$PATH' OPENSIM_SYSTEM_USER=nobody '$OPENSIM' setup </dev/null" --stdout-contains 'Grid name:'
+	assert_equals 1 "$(cat "$ENGINE_REPLIES/.count")"
+}
+
+function test_setup_preflights_private_inputs_before_copying() {
+	local config=$WORK/answers.json
+	printf '%s\n' '{"type":"simulator"}' >"$config"
+	make_setup_sudo_executor
+	engine_says "$QUIT"
+	assert_exec "SUDO_LOG='$WORK/sudo.log' PATH='$WORK/bin:$PATH' OPENSIM_SYSTEM_USER=nobody '$OPENSIM' setup --config '$config' --region-config '$WORK/missing.ini' </dev/null 2>&1" --exit 1 --stdout-contains 'cannot read setup input'
+	assert_file_not_exists "$WORK/sudo.log"
+	assert_file_not_exists "$ENGINE_REPLIES/.count"
+}
+
+function test_setup_apply_reads_unexported_admin_settings() {
+	local config=$WORK/prepared.json
+	printf '%s\n' '{"version":1,"identity":"example","answers":{},"setup":{}}' >"$config"
+	cat >"$WORK/.opensimrc" <<'RC'
+OPENSIM_DB_ADMIN_USER=example_admin
+OPENSIM_DB_ADMIN_PASS=admin-fixture
+RC
+	engine_says "$QUIT"
+	assert_exec "'$OPENSIM' setup --apply '$config' </dev/null" --stdout-contains 'Grid name:'
+	assert_equals example_admin "$(request 1 .configuration.answers.admin_user)"
+	assert_equals admin-fixture "$(request 1 .configuration.answers.admin_password)"
 }
 
 function test_setup_config_selects_type_and_prefills_answers() {

@@ -79,6 +79,15 @@ and saves them in a private file. Use `--config setup.json` to prefill a later s
 
 `quick-install.sh --podman` uses this questionnaire before creating the target container. From a downloaded script, it installs the local CLI, engine and container tools first; a source checkout reuses its Composer dependencies. Cancelling the questionnaire creates no target container.
 
+To stage an existing region without a replacement region or database:
+
+```bash
+opensim setup --region-config /path/to/Region.ini --prepare setup.json
+opensim setup --apply setup.json
+```
+
+This preserves the region's UUID and original settings and leaves the simulator disabled. Database/file restoration and source shutdown come before enabling it.
+
 - [ ] import [grid] FILE [--grid] [--simulator] [--users] [--apply]
 - [ ] web [grid] [show|check]
 - [ ] web [grid] snippet <caddy|nginx|apache>
