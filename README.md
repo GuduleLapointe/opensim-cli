@@ -75,8 +75,7 @@ for private/console ports. Private mappings bind to `127.0.0.1` unless overridde
 - [x] setup
 
 `opensim setup --prepare setup.json` collects answers without applying the setup
-and saves them in a private file. Use `--config setup.json` to prefill a later
-setup. Preparation requires an engine that supports this mode.
+and saves them in a private file. Use `--config setup.json` to prefill a later setup or `--apply setup.json` to apply the confirmed configuration without further questions. Preparation and application require an engine that supports these modes.
 
 `quick-install.sh --podman` uses this questionnaire before creating the target container. From a downloaded script, it installs the local CLI, engine and container tools first; a source checkout reuses its Composer dependencies. Cancelling the questionnaire creates no target container.
 

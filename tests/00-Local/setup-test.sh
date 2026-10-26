@@ -169,6 +169,39 @@ function test_setup_prepare_rejects_invalid_output_without_replacing_file() {
 	assert_equals 'keep this configuration' "$(cat "$config")"
 }
 
+function test_setup_applies_prepared_config_without_questions() {
+	local config=$WORK/prepared.json
+	printf '%s\n' '{"version":1,"identity":"example","answers":{"type":"grid","password":"secret"},"setup":{}}' >"$config"
+	chmod 600 "$config"
+	engine_says "$QUIT"
+	assert_exec "FE_TTY='$WORK/none' '$OPENSIM' setup --apply '$config' </dev/null" --stdout-contains 'Grid name:'
+	assert_equals example "$(request 1 .configuration.identity)"
+	assert_equals secret "$(request 1 .configuration.answers.password)"
+	assert_equals 1 "$(cat "$ENGINE_REPLIES/.count")"
+}
+
+function test_setup_apply_rejects_a_questionnaire_response() {
+	local config=$WORK/prepared.json
+	printf '%s\n' '{"version":1,"identity":"example","answers":{},"setup":{}}' >"$config"
+	engine_says "$MENU"
+	assert_exec "FE_TTY='$WORK/none' '$OPENSIM' setup --apply='$config' </dev/null 2>&1" --exit 1 --stdout-contains 'could not apply the prepared configuration'
+	assert_equals 1 "$(cat "$ENGINE_REPLIES/.count")"
+}
+
+function test_setup_apply_transfers_private_config_before_elevation() {
+	local config=$WORK/prepared.json
+	printf '%s\n' '{"version":1,"identity":"example","answers":{},"setup":{}}' >"$config"
+	chmod 600 "$config"
+	mkdir -p "$WORK/bin"
+	cat >"$WORK/bin/sudo" <<-SUDO
+	#!/usr/bin/env bash
+	cat >"$WORK/received-config"
+	SUDO
+	chmod +x "$WORK/bin/sudo"
+	assert_exec "PATH='$WORK/bin:$PATH' OPENSIM_SYSTEM_USER=nobody '$OPENSIM' setup --apply '$config'"
+	assert_equals "$(cat "$config")" "$(cat "$WORK/received-config")"
+}
+
 function test_setup_config_selects_type_and_prefills_answers() {
 	local out
 	SETUP_CONFIG=$WORK/setup.json

@@ -28,7 +28,7 @@ _opensim()
   fi
   case ${COMP_WORDS[1]} in
     setup)
-      COMPREPLY=( $(compgen -W "--config --prepare" -- "$cur") )
+      COMPREPLY=( $(compgen -W "--config --prepare --apply" -- "$cur") )
       ;;
     ports)
       COMPREPLY=( $(compgen -W "$(_opensim_instances) --publish --ufw --private-address" -- "$cur") )

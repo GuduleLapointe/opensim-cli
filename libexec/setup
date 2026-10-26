@@ -2,16 +2,18 @@
 # opensim setup: the engine gives the screens (it is the scenario), this draws the one it gets, sends it back filled with the button that
 # was pressed, and does the action it answers: another screen, the same one with what is wrong, quit with a message, abort with an error.
 
-USAGE="opensim setup [-hqv] [--config FILE] [--prepare FILE]"
+USAGE="opensim setup [-hqv] [--config FILE] [--prepare FILE] [--apply FILE]"
 HELP="Shows the setup questions and applies the confirmed settings.
   --config FILE   prefill answers from a JSON configuration
-  --prepare FILE  save answers privately without creating the installation"
+  --prepare FILE  save answers privately without creating the installation
+  --apply FILE    apply a prepared configuration without further questions"
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 source "$CLI_ROOT/src/lib/ui"
 
 setup_config=${OPENSIM_SETUP_CONFIG_FILE:-}
 prepare_file=
+apply_file=
 setup_mode=apply
 while (($#)); do
 	case "$1" in
@@ -21,6 +23,12 @@ while (($#)); do
 			shift 2
 			;;
 		--config=*) setup_config=${1#*=}; [[ -n "$setup_config" ]] || die "opensim setup --config requires a JSON file"; shift ;;
+		--apply)
+			(($# > 1)) && [[ "$2" != --* ]] || die "opensim setup --apply requires a JSON file"
+			apply_file=$2
+			shift 2
+			;;
+		--apply=*) apply_file=${1#*=}; [[ -n "$apply_file" ]] || die "opensim setup --apply requires a JSON file"; shift ;;
 		--prepare)
 			(($# > 1)) && [[ "$2" != -* ]] || die "opensim setup --prepare requires a JSON file"
 			prepare_file=$2
@@ -31,6 +39,16 @@ while (($#)); do
 		*) shift ;;
 	esac
 done
+apply_request=
+if [[ -n "$apply_file" ]]; then
+	[[ -z "$prepare_file" && -z "$setup_config" ]] || die "--apply cannot be combined with --prepare or --config"
+	if [[ "$apply_file" == - ]]; then
+		apply_request=$(jq -ce '{data: {type: "steps", attributes: {mode: "apply", configuration: .}}}') || die "cannot read prepared setup from standard input"
+	else
+		[[ -r "$apply_file" ]] || die "cannot read prepared setup: $apply_file"
+		apply_request=$(jq -ce '{data: {type: "steps", attributes: {mode: "apply", configuration: .}}}' <"$apply_file") || die "invalid prepared setup JSON"
+	fi
+fi
 setup_prefill='{}'
 setup_prefill_type=
 if [[ -n "$setup_config" ]]; then
@@ -75,6 +93,7 @@ fail_engine() {
 while :; do
 	request=$(jq -cn --arg state "$state" --arg button "$button" --arg mode "$setup_mode" --argjson answers "$answers" \
 		'{data: {type: "steps", attributes: {state: $state, button: $button, answers: $answers, mode: $mode}}}')
+	[[ -z "$apply_request" ]] || request=$apply_request
 	# What the engine tells while it works (lines starting with "opensim: ") is shown as it comes. Its answer goes to a file and its
 	# error output to another that is read while it runs: the instances it starts keep both open, a pipe would never end
 	: >"$errors"
@@ -101,6 +120,7 @@ while :; do
 	fi
 	case "$(jq -r .action <<<"$screen")" in
 	screen)
+		[[ -z "$apply_file" ]] || die "The engine could not apply the prepared configuration: $(jq -r '.notice // empty' <<<"$screen")"
 		case "$(jq -r .kind <<<"$screen")" in
 			form) screen=$(jq -c --argjson prefill "$setup_prefill" '.fields |= map(if ($prefill[.name] // null) != null then .value = ($prefill[.name] | tostring) else . end)' <<<"$screen") ;;
 			checks) screen=$(jq -c --argjson prefill "$setup_prefill" '.items |= map(if ($prefill[.name] // null) != null then .checked = (($prefill[.name] | tostring | ascii_downcase) == "true" or ($prefill[.name] | tostring | ascii_downcase) == "yes" or ($prefill[.name] | tostring) == "1") else . end)' <<<"$screen") ;;

@@ -64,6 +64,24 @@ setup)
 		debug_log "prepare-layout not needed"
 	fi
 	# "$libexec/$COMMAND" "$@"
+	# Read private caller-owned configuration before changing user; only its contents cross the privilege boundary.
+	setup_arguments=("$@")
+	for ((index = 0; index < ${#setup_arguments[@]}; index++)); do
+		apply_file=
+		case "${setup_arguments[index]}" in
+			--apply)
+				((index + 1 < ${#setup_arguments[@]})) || die "--apply requires a JSON file"
+				apply_file=${setup_arguments[index+1]}
+				setup_arguments[index+1]=-
+				;;
+			--apply=*) apply_file=${setup_arguments[index]#*=}; setup_arguments[index]=--apply=- ;;
+		esac
+		if [[ -n "$apply_file" && "$apply_file" != - ]]; then
+			[[ -r "$apply_file" ]] || die "cannot read prepared setup: $apply_file"
+			as_system_user "$libexec/$COMMAND" "${setup_arguments[@]}" <"$apply_file"
+			exit $?
+		fi
+	done
 	as_system_user "$libexec/$COMMAND" "$@"
 	# as_root "$libexec/$COMMAND" "$@"
 	;;
