@@ -50,11 +50,13 @@ Validated: the ten Bashunit port-command tests (29 assertions) pass on macOS and
 - [x] Preserve ten-port simulator allocation and the ability to override defaults.
 - [x] Compute the final OpenSim identity before creating paths or the container.
 - [x] Protect saved secrets and transfer them as file contents or standard input.
-- [ ] Test interactive answers and supplied configuration, cancellation, validation failures, config round trips and application without repeated prompts.
+- [x] Test interactive answers and supplied configuration, cancellation, validation failures, config round trips and application without repeated prompts.
 
 Acceptance: cancellation leaves no target container or partial deployment. The confirmed configuration determines both the container identity and setup.
 
 Controller bootstrap decision: a downloaded quick-install installs opensim-cli (and its engine dependency) plus container-tools on the client. The controller suppresses package recommendations so that collecting answers does not install a local SQL server; ordinary target installation keeps its existing dependency behavior. A source checkout reuses its Composer dependencies. No temporary questionnaire container or runtime bundle is used. The engine provides the final identity and random-name defaults. Supplied configuration prefills the same questionnaire; it is confirmed and validated before target creation.
+
+Validation: 81 QuickSetup tests (394 assertions), 32 local quick-install tests (114 assertions), and the setup-engine preparation test (18 assertions) pass. The engine suite reports one upstream Alliteration nullable-parameter deprecation; no test fails.
 
 Credential handoff: quick-install copies the selected SQL credentials into a private rc file in the new container, so the package installation and later setup use the same account/password. Applying a prepared file fills an unspecified SQL administrator from the target's normal rc environment while preserving explicitly supplied credentials. SQL account creation quotes arbitrary passwords using a defined session SQL mode; a live MariaDB check authenticated both temporary accounts with apostrophes and backslashes and removed them afterwards. All 72 local CLI tests passed on Ubuntu 24.04 before the additional SQL quoting regression, which also passed separately.
 
