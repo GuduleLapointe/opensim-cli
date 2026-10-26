@@ -29,7 +29,7 @@ JSON
 printf '%s\n' "$*" >>"$CALL_LOG"
 while [[ "$1" == --connection ]]; do shift 2; done
 case "$1" in
-	host-ports) printf '[8007,9006]\n' ;;
+	host-ports) printf '[8002,8003,8004,9000,9001,9004]\n' ;;
 	info) printf '{"Name":"podman.example.test"}\n' ;;
 	create) printf 'Container created\nName: oliviers_test-grid\n' ;;
 	cp) [[ "$3" != *:/tmp/opensim-setup.json ]] || cp "$2" "$CAPTURED_CONFIG" ;;
