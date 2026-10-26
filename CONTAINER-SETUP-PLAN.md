@@ -139,7 +139,7 @@ Bridge replacement changes the OCI ID and briefly stops that container, but it p
 - [ ] Include OpenSim tools/core dependencies in the reusable image without instance credentials or generated host keys.
 - [ ] Generate instance secrets and SSH host keys at initialization, not build.
 - [ ] Diagnose current `opensim start|stop|restart` inside a container. The engine's current StartService/StopService use its runtime/console machinery; absence of systemd alone does not explain an instance restart failure.
-- [x] Validate systemd as PID 1 through the container-tools API path. The Ubuntu 26.04 image built and booted on Vonda; systemd and SSH became active, the machine ID was populated, and SSH host keys were generated at boot. The generated image tag includes the setup script in its checksum. OpenSim package layers and application-specific service integration remain below.
+- [x] Validate systemd as PID 1 through the container-tools API path. The generated images built and booted on Vonda for Debian 12/13 and Ubuntu 24.04/26.04; systemd and SSH became active, the machine ID was populated, and SSH host keys were generated at boot. The generated image tag includes the setup script in its checksum. OpenSim package layers and application-specific service integration remain below.
 - [ ] Manage MariaDB when bundled, SSH and enabled OpenSim instances; remove the installer's placeholder sleep loop once real service lifecycle is validated.
 - [ ] Start database services according to the instance's selected driver; a reusable image must also run a SQLite-only instance without MariaDB startup.
 - [ ] Ensure signals stop OpenSim and databases cleanly within an appropriate stop timeout. An instance restart must not restart the whole container.
