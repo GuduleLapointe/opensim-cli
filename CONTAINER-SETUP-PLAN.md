@@ -12,7 +12,7 @@ Implementation checklist. Complete and validate one stage before starting the ne
 - Simulator allocation keeps blocks of ten ports, for example `9140–9149`. Allocation and the ports actually used are distinct: publish the configured listeners, with their TCP/UDP protocol and access category.
 - Effective setup configuration is the source of truth for every launch. Image defaults have no authority over configured ports.
 - OpenSim services use the same port inside and outside the container. Alternate internal ports with translated advertised addresses are deferred to 3.1/3.2. Maintenance services such as SSH may use a separate mapping.
-- Changing ports must preserve the deployed instance, its data and identity. Prefer live changes; otherwise allow relaunching the same container with the new ports. Rebuilding or reinstalling the software is not part of this action.
+- Changing ports must preserve the deployed instance, its data and identity. Prefer live changes; where the backend fixes bindings at container creation, replace the OCI container from the same image and persistent mounts without reinstalling the software. The OCI ID may change in this fallback; the OpenSim identity and data do not.
 - Pasta is an optional backend, not a prerequisite for this behavior.
 - Persistent paths belong to the selected Podman host, including remote hosts.
 - Containers include SSH and common maintenance tools: Bash, curl, wget, process/socket inspection, DNS diagnostics and ping.
@@ -107,27 +107,28 @@ Podman distinguishes `run` (create and start) from `start` (start an existing co
 
 - [x] Record the selected hosts' Podman versions and available network backends.
 - [x] Verify explicit TCP and UDP mappings derived from the setup configuration, without depending on image `EXPOSE` metadata or automatic host-port selection.
-- [ ] Prove a supported mechanism to change ports for the same OCI container when Pasta is unavailable. Investigate existing networking/forwarding tools before writing a forwarding service.
+- [x] Resolve port changes when Pasta is unavailable: Podman has no supported API to mutate fixed bridge bindings, so use a controlled container replacement with the same image and persistent mounts; implement this after stage 5 establishes those mounts.
 - [x] Test Pasta live forwarding separately for TCP and UDP where available.
 - [x] Keep public, private and console bindings distinct with every backend; automatic forwarding must not expose SQL or private consoles unintentionally.
-- [ ] Verify changes initiated by the controller and by configuration inside the container, and define how these changes reach the network backend.
-- [ ] Exercise an occupied host port, a new listener outside the old published set, removing a listener and restarting an individual simulator.
-- [ ] Verify published access from another machine, not only container loopback.
-- [ ] Put reusable mechanisms in container-tools and OpenSim policy in the engine.
+- [x] Verify Pasta reacts to listeners started and stopped by the controller or inside the container; its automatic forwarding tracks bound sockets without changing the container.
+- [x] Exercise an occupied host port, a listener outside the initial published set and listener removal/restart on Pasta.
+- [x] Verify published access from another machine, not only container loopback.
+- [x] Keep generic mappings and Pasta forwarding in container-tools and generate OpenSim's access policy in the engine.
+- [ ] Restart an individual OpenSim simulator after changing its configured ports; validate bridge replacement once stage 5 mounts are implemented.
 
-Acceptance: change the configured ports, relaunch if required, and verify the same container ID, instance identity and data, plus the new TCP/UDP bindings. Live changes must leave unrelated simulators running.
+Acceptance: change the configured ports, relaunch if required, and verify the same OpenSim identity and data plus the new TCP/UDP bindings. Pasta keeps the OCI ID for live changes; a bridge fallback may replace the OCI container while preserving mounted data. Live changes must leave unrelated simulators running.
 
 Development hosts checked: Vonda runs rootless Podman 5.7.0 with Netavark (client 5.6.0); Ursull runs rootless Podman 4.9.3 with Netavark (client 5.6.0). The live TCP/UDP integration checks in this stage currently run against Vonda.
 
 Prepared setups now carry engine-generated `port_bindings`: public TCP/UDP listeners bind on all host interfaces; private and console TCP listeners bind to host loopback; disabled consoles are omitted; duplicate standalone/listener ports are collapsed. Quick-install passes those records as explicit container-tools mappings and disables image `EXPOSE` defaults. Validation: 81 QuickSetup tests (394 assertions), 31 quick-install tests (108 assertions), one real-engine-to-installer setup test (15 assertions), and Vonda TCP/UDP listener delivery (one integration test, 11 assertions).
 
-Pasta live forwarding validation: Vonda passed TCP listeners started by the controller and inside the container, and a UDP listener started inside the container. The UDP probe waits for the socket to bind before sending; test port selection checks both TCP and UDP sockets. These checks verify dynamic listener forwarding on Pasta, not fixed `--publish` changes on a bridge container.
+Pasta live forwarding validation: Vonda passed TCP listeners started by the controller and inside the container, and a UDP listener started inside the container. A separate TCP test starts, stops and restarts a listener outside the initial published set and verifies the OCI ID remains unchanged. The UDP probe waits for the socket to bind before sending; test port selection checks both TCP and UDP sockets. These checks verify dynamic listener forwarding on Pasta, not fixed `--publish` changes on a bridge container.
 
 OpenSim uses explicit engine-generated bindings for every network backend; it never enables Pasta auto-publish, which would forward every eligible listening port, including private services. The quick-install engine integration test now asserts that the auto-publish flag is absent while checking public, private, console and UDP mappings.
 
-Same-container port update investigation: Podman's `create` accepts `--publish`, but `update` only changes resource limits and health checks, and `network connect` only accepts network, alias, IP and MAC settings. The REST update endpoint has no port-binding fields either. Therefore fixed bridge `--publish` mappings cannot be changed for the same container through the supported Podman CLI/API. The remaining design decision is whether to require Pasta for live port changes or to replace the OCI container while preserving its volumes and OpenSim identity/data; no replacement behavior is assumed here.
+Same-container port update investigation: Podman's `create` accepts `--publish`, but `update` only changes resource limits and health checks, and `network connect` only accepts network, alias, IP and MAC settings. The REST update endpoint has no port-binding fields either. Therefore fixed bridge `--publish` mappings cannot be changed for the same container through the supported Podman CLI/API. Decision: Pasta can update listeners live; other backends use a controlled OCI container replacement with the same image and persistent mounts, preserving OpenSim identity and data without reinstalling packages. This fallback is implemented and validated in stages 5–6, once the mounts exist. References: [Podman create](https://docs.podman.io/en/v5.7.0/markdown/podman-create.1.html), [Podman update](https://docs.podman.io/en/v4.9.3/markdown/podman-update.1.html), [Podman network connect](https://docs.podman.io/en/latest/markdown/podman-network-connect.1.html), [Podman API update endpoint](https://docs.podman.io/en/latest/_static/api.html?version=v5.0).
 
-If standard Podman mechanisms cannot meet same-container relaunch on a target backend, record that limitation and resolve the design before continuing. Replacing the OCI container while retaining its volumes is a different behavior and requires an explicit decision; it is not silently substituted here.
+Bridge replacement changes the OCI ID and briefly stops that container, but it preserves the logical instance, mounts and unrelated containers. Do not implement the replacement before the persistent mounts and rollback behavior are ready.
 
 ## 4. Build the reusable server image and service lifecycle
 
