@@ -77,7 +77,10 @@ setup skips, no failures.
 
 ## 2. Collect the complete setup before provisioning
 
-- [ ] Separate the engine's questionnaire/validation from setup side effects.
+- [x] Separate the engine's questionnaire/validation from setup side effects.
+- [x] Provide `opensim setup --prepare FILE` with private atomic saving,
+  cancellation that preserves the destination, and refusal of engines that do
+  not acknowledge preparation support.
 - [ ] Let quick-install collect the full grid, standalone or simulator setup,
   rather than just its type and name.
 - [ ] Reuse the same saved answer format in quick-install and `opensim setup`.
@@ -96,6 +99,13 @@ setup skips, no failures.
 
 Acceptance: cancellation leaves no target container or partial deployment.
 The confirmed configuration determines both the container identity and setup.
+
+Preparation foundation validated: 65 engine quick-setup tests pass on Ubuntu
+24.04, and 38 CLI setup/ports tests pass on Ubuntu 26.04. The preparation API
+returns collected answers and a setup preview without provisioning. Integration
+with quick-install, freezing effective settings across hosts, and unattended
+application of those settings remain pending; this stage is not complete yet.
+The updated local application suite passes: 62 passed, two expected macOS skips.
 
 ## 2a. Provision containers for existing regions
 

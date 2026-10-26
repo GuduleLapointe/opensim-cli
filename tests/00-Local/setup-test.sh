@@ -19,7 +19,14 @@ DATABASE_FORM='{"data":{"attributes":{"action":"screen","kind":"form","title":"D
 function set_up() {
 	WORK="$(mktemp -d)"
 	export HOME="$WORK"
-	unset OPENSIM_RC OPENSIM_DB_HOST OPENSIM_DB_USER OPENSIM_DB_PASS OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
+	export OPENSIM_SYSTEM_USER=
+	unset OPENSIM_CONF OPENSIM_RC OPENSIM_DB_HOST OPENSIM_DB_USER OPENSIM_DB_PASS OPENSIM_DB_ADMIN_USER OPENSIM_DB_ADMIN_PASS
+	mkdir -p "$WORK/etc"
+	cat >"$WORK/.opensim.conf" <<-INI
+		[Defaults]
+		EtcRoot = $WORK/etc
+		SystemUser =
+	INI
 	local fixtures
 	fixtures="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/fixtures"
 	mkdir -p "$WORK/engine/bin" "$WORK/engine/lib"
@@ -39,6 +46,15 @@ function engine_says() {
 	rm -f "$ENGINE_REPLIES"/* "$ENGINE_REPLIES"/.count "$ENGINE_LOG"
 	for reply in "$@"; do
 		printf '%s' "$reply" >"$ENGINE_REPLIES/$((++n)).json"
+	done
+}
+
+function engine_prepares() {
+	engine_says "$@"
+	local file reply
+	for file in "$ENGINE_REPLIES"/*.json; do
+		reply=$(jq '.data.attributes.mode = "prepare"' "$file")
+		printf '%s\n' "$reply" >"$file"
 	done
 }
 
@@ -105,6 +121,52 @@ function test_setup_screens_drawn_and_sent_back_filled() {
 	assert_equals "s4" "$(request 5 .state)"
 	assert_equals "next" "$(request 5 .button)"
 	assert_equals 5 "$(grep -c '' "$ENGINE_LOG")"
+}
+
+function test_setup_prepare_saves_answers_without_system_setup() {
+	local config=$WORK/prepared.json
+	engine_prepares "$MENU" "$FORM" "$CHECKS" "$REVIEW" "$DATABASE_FORM" \
+		'{"data":{"attributes":{"action":"prepared","configuration":{"answers":{"type":"grid","name":"Example","admin_password":"test-secret"},"setup":{"grid":{"nick":"example"}}},"message":"Setup configuration prepared."}}}'
+	printf '%s\n' 1 '' '' '' '' >"$WORK/answers"
+	assert_exec "FE_INPUT_FD=7 FE_TTY='$WORK/none' OPENSIM_SETUP_UI=plain OPENSIM_SYSTEM_USER=nobody OPENSIM_ETC_ROOT='$WORK/missing' '$OPENSIM' setup --prepare '$config' 7<'$WORK/answers'" \
+		--stdout "Setup configuration saved in $config"
+	assert_file_exists "$config"
+	assert_equals 'Example' "$(jq -r .answers.name "$config")"
+	assert_equals 'test-secret' "$(jq -r .answers.admin_password "$config")"
+	assert_equals 0 "$(jq -s '[.[] | select(.data.attributes.mode != "prepare")] | length' "$ENGINE_LOG")"
+	assert_directory_not_exists "$WORK/missing"
+	if [[ $(uname) == Darwin ]]; then
+		assert_equals 600 "$(stat -f '%Lp' "$config")"
+	else
+		assert_equals 600 "$(stat -c '%a' "$config")"
+	fi
+}
+
+function test_setup_prepare_cancellation_preserves_existing_file() {
+	local config=$WORK/prepared.json
+	printf '%s\n' 'keep this configuration' >"$config"
+	engine_prepares "$MENU" '{"data":{"attributes":{"action":"abort","error":"Cancelled"}}}'
+	printf '%s\n' ':quit' >"$WORK/answers"
+	assert_exec "FE_INPUT_FD=7 FE_TTY='$WORK/none' OPENSIM_SETUP_UI=plain '$OPENSIM' setup --prepare='$config' 7<'$WORK/answers' 2>&1" \
+		--exit 1 --stdout-contains 'Cancelled'
+	assert_equals 'keep this configuration' "$(cat "$config")"
+}
+
+function test_setup_prepare_rejects_an_older_engine_before_confirmation() {
+	engine_says "$MENU"
+	assert_exec "FE_TTY='$WORK/none' OPENSIM_SETUP_UI=plain '$OPENSIM' setup --prepare '$WORK/prepared.json' 2>&1" \
+		--exit 1 --stdout-contains 'engine does not support setup preparation'
+	assert_file_not_exists "$WORK/prepared.json"
+	assert_equals 1 "$(cat "$ENGINE_REPLIES/.count")"
+}
+
+function test_setup_prepare_rejects_invalid_output_without_replacing_file() {
+	local config=$WORK/prepared.json
+	printf '%s\n' 'keep this configuration' >"$config"
+	engine_prepares '{"data":{"attributes":{"action":"prepared","configuration":{"answers":"invalid"}}}}'
+	assert_exec "'$OPENSIM' setup --prepare '$config' 2>&1" \
+		--exit 1 --stdout-contains 'invalid setup configuration'
+	assert_equals 'keep this configuration' "$(cat "$config")"
 }
 
 function test_setup_config_selects_type_and_prefills_answers() {

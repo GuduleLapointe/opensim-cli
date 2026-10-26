@@ -73,6 +73,11 @@ for private/console ports. Private mappings bind to `127.0.0.1` unless overridde
 #### Grids
 
 - [x] setup
+
+`opensim setup --prepare setup.json` collects answers without applying the setup
+and saves them in a private file. Use `--config setup.json` to prefill a later
+setup. Preparation requires an engine that supports this mode.
+
 - [ ] import [grid] FILE [--grid] [--simulator] [--users] [--apply]
 - [ ] web [grid] [show|check]
 - [ ] web [grid] snippet <caddy|nginx|apache>

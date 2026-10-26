@@ -40,6 +40,11 @@ case ${COMMAND:-} in
 	;;
 
 setup)
+	for argument in "$@"; do
+		case "$argument" in
+			--prepare | --prepare=*) exec "$libexec/setup" "$@" ;;
+		esac
+	done
 	# A machine without the system layout gets it from the engine (the account, the folders, opensim.conf), which needs root
 	if [[ "$(run needs-layout 2>/dev/null)" == "yes" ]]; then
 		os=$(uname -s)

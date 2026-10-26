@@ -2,13 +2,17 @@
 # opensim setup: the engine gives the screens (it is the scenario), this draws the one it gets, sends it back filled with the button that
 # was pressed, and does the action it answers: another screen, the same one with what is wrong, quit with a message, abort with an error.
 
-USAGE="opensim setup [-hqv]"
-HELP="Shows the screens of the engine, which asks what to set up, the few questions it needs and the options, checks the answers and makes the setup."
+USAGE="opensim setup [-hqv] [--config FILE] [--prepare FILE]"
+HELP="Shows the setup questions and applies the confirmed settings.
+  --config FILE   prefill answers from a JSON configuration
+  --prepare FILE  save answers privately without creating the installation"
 
 source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 source "$CLI_ROOT/src/lib/ui"
 
 setup_config=${OPENSIM_SETUP_CONFIG_FILE:-}
+prepare_file=
+setup_mode=apply
 while (($#)); do
 	case "$1" in
 		--config)
@@ -17,6 +21,13 @@ while (($#)); do
 			shift 2
 			;;
 		--config=*) setup_config=${1#*=}; [[ -n "$setup_config" ]] || die "opensim setup --config requires a JSON file"; shift ;;
+		--prepare)
+			(($# > 1)) && [[ "$2" != -* ]] || die "opensim setup --prepare requires a JSON file"
+			prepare_file=$2
+			setup_mode=prepare
+			shift 2
+			;;
+		--prepare=*) prepare_file=${1#*=}; [[ -n "$prepare_file" ]] || die "opensim setup --prepare requires a JSON file"; setup_mode=prepare; shift ;;
 		*) shift ;;
 	esac
 done
@@ -30,8 +41,8 @@ if [[ -n "$setup_config" ]]; then
 fi
 
 state= button=next answers='{}'
-errors=$(mktemp) answer=$(mktemp)
-trap 'rm -f "$errors" "$answer"' EXIT
+errors=$(mktemp) answer=$(mktemp) prepared_tmp=
+trap 'rm -f "$errors" "$answer"; [[ -z "$prepared_tmp" ]] || rm -f "$prepared_tmp"' EXIT
 
 # Show what the engine told since the last time. A line starting with "~" is what a wait is on: on a terminal it takes one line
 # that the next one replaces, elsewhere it is not shown.
@@ -62,8 +73,8 @@ fail_engine() {
 }
 
 while :; do
-	request=$(jq -cn --arg state "$state" --arg button "$button" --argjson answers "$answers" \
-		'{data: {type: "steps", attributes: {state: $state, button: $button, answers: $answers}}}')
+	request=$(jq -cn --arg state "$state" --arg button "$button" --arg mode "$setup_mode" --argjson answers "$answers" \
+		'{data: {type: "steps", attributes: {state: $state, button: $button, answers: $answers, mode: $mode}}}')
 	# What the engine tells while it works (lines starting with "opensim: ") is shown as it comes. Its answer goes to a file and its
 	# error output to another that is read while it runs: the instances it starts keep both open, a pipe would never end
 	: >"$errors"
@@ -79,6 +90,9 @@ while :; do
 	reply=$(<"$answer")
 	screen=$(jq -c '.data.attributes' 2>/dev/null <<<"$reply") && [[ "$(jq -r '.action // empty' <<<"$screen")" != "" ]] ||
 		fail_engine "$reply"
+	if [[ "$setup_mode" == prepare && "$(jq -r '.mode // empty' <<<"$screen")" != prepare ]]; then
+		die "The engine does not support setup preparation; update opensim-engine"
+	fi
 	if [[ "$(jq -r '.action + ":" + (.kind // "")' <<<"$screen")" == screen:menu && -n "$setup_prefill_type" ]]; then
 		state=$(jq -r '.state' <<<"$screen")
 		answers=$(jq -cn --arg type "$setup_prefill_type" '{type:$type}')
@@ -93,7 +107,17 @@ while :; do
 		esac
 		ui_screen "$screen"
 		;;
+	prepared)
+		[[ "$setup_mode" == prepare ]] || die "The engine returned an unexpected prepared configuration"
+		prepared_tmp=$(mktemp "${prepare_file}.XXXXXXXX") || die "cannot write setup configuration: $prepare_file"
+		jq -ce '.configuration | select(type == "object" and (.answers | type) == "object")' <<<"$screen" >"$prepared_tmp" || die "The engine returned an invalid setup configuration"
+		chmod 600 "$prepared_tmp" && mv -f "$prepared_tmp" "$prepare_file" || die "cannot save setup configuration: $prepare_file"
+		prepared_tmp=
+		say "Setup configuration saved in $prepare_file"
+		exit 0
+		;;
 	quit)
+		[[ "$setup_mode" != prepare ]] || die "The engine ended preparation without a configuration"
 		jq -r .message <<<"$screen"
 		exit 0
 		;;
