@@ -451,20 +451,20 @@
         },
         {
             "name": "magicoli/build-tools",
-            "version": "0.1.9",
+            "version": "0.1.11",
             "source": {
                 "type": "git",
                 "url": "https://github.com/magicoli/build-tools.git",
-                "reference": "0296f73c8647e7363cd018511675636f2eda16ad"
+                "reference": "23830de70a31794375c40ad937a3e360c4820b27"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/magicoli/build-tools/zipball/0296f73c8647e7363cd018511675636f2eda16ad",
-                "reference": "0296f73c8647e7363cd018511675636f2eda16ad",
+                "url": "https://api.github.com/repos/magicoli/build-tools/zipball/23830de70a31794375c40ad937a3e360c4820b27",
+                "reference": "23830de70a31794375c40ad937a3e360c4820b27",
                 "shasum": ""
             },
             "require": {
-                "magicoli/bash-tools": "^1.0.6"
+                "magicoli/bash-tools": "@dev"
             },
             "bin": [
                 "bin/build-tools",
@@ -485,22 +485,22 @@
             "description": "Build, release and publish a project: Debian packages, zip, GitHub release, apt repository.",
             "support": {
                 "issues": "https://github.com/magicoli/build-tools/issues",
-                "source": "https://github.com/magicoli/build-tools/tree/0.1.9"
+                "source": "https://github.com/magicoli/build-tools/tree/0.1.11"
             },
-            "time": "2026-10-24T04:02:05+00:00"
+            "time": "2026-10-26T13:16:05+00:00"
         },
         {
             "name": "magicoli/container-tools",
-            "version": "dev-master",
+            "version": "0.1.0-alpha.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/magicoli/container-tools.git",
-                "reference": "0ed55d9819b6de9d1c54cdd2f97175dacbd638c2"
+                "reference": "ed5027c11fb6d6441904fce3a272d4b4afc6590d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/magicoli/container-tools/zipball/0ed55d9819b6de9d1c54cdd2f97175dacbd638c2",
-                "reference": "0ed55d9819b6de9d1c54cdd2f97175dacbd638c2",
+                "url": "https://api.github.com/repos/magicoli/container-tools/zipball/ed5027c11fb6d6441904fce3a272d4b4afc6590d",
+                "reference": "ed5027c11fb6d6441904fce3a272d4b4afc6590d",
                 "shasum": ""
             },
             "require": {
@@ -513,7 +513,6 @@
                 "magicoli/pest-failure-summary": "^1.0",
                 "pestphp/pest": "^3.0"
             },
-            "default-branch": true,
             "bin": [
                 "bin/container-tools"
             ],
@@ -536,9 +535,9 @@
             "description": "PHP library and command-line adapter for managing containers with Podman.",
             "support": {
                 "issues": "https://github.com/magicoli/container-tools/issues",
-                "source": "https://github.com/magicoli/container-tools/tree/0.1.0-dev.2"
+                "source": "https://github.com/magicoli/container-tools/tree/0.1.0-alpha.2"
             },
-            "time": "2026-10-25T07:22:26+00:00"
+            "time": "2026-10-26T13:21:50+00:00"
         },
         {
             "name": "magicoli/kick-inside",

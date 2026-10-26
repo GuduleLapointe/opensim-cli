@@ -2,6 +2,11 @@
 
 ### Unreleased
 
+- magicoli/build-tools 0.1.9 => 0.1.11
+- magicoli/container-tools dev-master 0ed55d9 => 0.1.0-alpha.2
+
+### 3.0.0-beta.1
+
 - feature (install): apply confirmed setup and transfer private inputs
 - feature (setup): accept existing region files through the cli
 - feature (setup): apply a private prepared configuration from the cli
