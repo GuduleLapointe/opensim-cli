@@ -20,16 +20,16 @@ function tear_down() {
 	rm -rf "$WORK"
 }
 
-function test_podman_prepares_with_the_real_engine() {
+function test_podman_setup_uses_selected_host_ports_when_preparing_the_grid() {
 	cat >"$WORK/answers.json" <<'JSON'
-{"type":"grid","name":"Olivier's Test-Grid","login_uri":"login.example.test:18102","avatar":"Example Resident","password":"fixture-password","password2":"fixture-password","database_host":"localhost","database_user":"opensim","database_password":"fixture-db-password","admin_user":"opensim_admin","admin_password":"fixture-admin-password"}
+{"type":"grid","name":"Olivier's Test-Grid","login_uri":"login.example.test","avatar":"Example Resident","password":"fixture-password","password2":"fixture-password","database_host":"localhost","database_user":"opensim","database_password":"fixture-db-password","admin_user":"opensim_admin","admin_password":"fixture-admin-password"}
 JSON
 	cat >"$WORK/container-tools" <<'CLI'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$CALL_LOG"
 while [[ "$1" == --connection ]]; do shift 2; done
 case "$1" in
-	host-ports) printf '[8002,9000]\n' ;;
+	host-ports) printf '[8002,8003,8004,9000]\n' ;;
 	info) printf '{"Name":"podman.example.test"}\n' ;;
 	create) printf 'Container created\nName: oliviers_test-grid\n' ;;
 	cp) [[ "$3" != *:/tmp/opensim-setup.json ]] || cp "$2" "$CAPTURED_CONFIG" ;;
@@ -43,7 +43,7 @@ CLI
 	assert_contains 'create --name oliviers_test-grid' "$(cat "$WORK/calls")"
 	assert_equals oliviers_test-grid "$(jq -r .identity "$WORK/prepared.json")"
 	assert_equals 1 "$(jq -r .version "$WORK/prepared.json")"
-	assert_equals 18102 "$(jq -r .setup.grid.public_port "$WORK/prepared.json")"
+	assert_equals 8012 "$(jq -r .setup.grid.public_port "$WORK/prepared.json")"
 	assert_equals fixture-admin-password "$(jq -r .answers.admin_password "$WORK/prepared.json")"
 	assert_directory_not_exists "$WORK/etc/grids"
 }
