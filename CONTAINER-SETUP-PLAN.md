@@ -93,7 +93,7 @@ An already migrated region can serve as a read-only manual investigation referen
 
 - [ ] Reuse OSPDO's existing `driver=sqlite` and database-file/DSN support.
 - [ ] Audit DatabaseService, SqlRunner and model queries for MySQL-only extension checks, SQL, account creation and connection assumptions. OSPDO's connection support does not by itself validate the complete setup/runtime workflow.
-- [x] Carry the selected driver through standalone setup answers, saved configuration, engine access and the OpenSim SQLite storage provider.
+- [x] Carry the simulator's selected driver through setup and saved configuration; keep Robust's grid database separate from simulator storage.
 - [ ] Verify the selected OpenSim release/profile supports the chosen SQLite stores and initialize their schemas using existing supported mechanisms.
 - [ ] Provide the PHP SQLite extension and core-native SQLite dependencies in the reusable image, without requiring a MariaDB service for SQLite instances.
 - [ ] Skip SQL administrator/application account questions and server startup for SQLite; create database files with the instance's correct permissions.
