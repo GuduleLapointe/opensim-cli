@@ -64,13 +64,15 @@ Preparation foundation validated: 65 engine quick-setup tests pass on Ubuntu 24.
 
 Prioritize this reported bug before extending the new-region-only workflow.
 
+Engine adoption is implemented and validated: the setup accepts original Region.ini contents, checks registered identity by name and, when needed, UUID, and stages an inactive simulator using the existing region configuration. It keeps UUID, estate ID, dimensions, unknown options and legacy names. No database, avatar, estate or replacement region is created and no instance is started. A repeat preserves identical files and refuses to overwrite edited target region data. All 161 targeted engine tests pass on Ubuntu 24.04. The CLI input path, database/file restoration, release/schema checks and live cutover remain pending; staging alone is not a completed migration.
+
 Planning foundation validated: applying a fixed-region move now preserves its existing UUID, name, roles and estate, and rejects a missing or invalid UUID. The fixed-region path accepts only location/port changes. The 137 targeted engine tests pass on Ubuntu 24.04. This fixes a destructive planning primitive; it does not yet expose the complete adoption/import workflow or move a live source.
 
-- [ ] Reproduce rejection of an existing region when provisioning its new simulator/container, using a fixture with its existing grid registration.
-- [ ] Reuse the engine's existing move/adoption mechanisms where applicable; inspect RegionPlanner's existing-region context and uniqueness checks.
-- [ ] Distinguish adopting the same region from creating a conflicting new region. Keep genuine duplicate-name/UUID protection.
-- [ ] Allow the simulator/container to be provisioned without creating any new region, SQL schema, estate or registry entry for a placeholder.
-- [ ] Import or reference the existing Region.ini, preserving region UUID, name, location, estate associations and settings except explicitly changed values.
+- [x] Reproduce rejection of an existing region when provisioning its new simulator/container, using a fixture with its existing grid registration.
+- [x] Reuse the engine's existing move/adoption mechanisms where applicable; inspect RegionPlanner's existing-region context and uniqueness checks.
+- [x] Distinguish adopting the same region from creating a conflicting new region. Keep genuine duplicate-name/UUID protection.
+- [x] Allow the simulator/container to be provisioned without creating any new region, SQL schema, estate or registry entry for a placeholder.
+- [x] Import or reference the existing Region.ini, preserving region UUID, name, location, estate associations and settings except explicitly changed values.
 - [ ] Transfer/reconnect the existing database and required files using the appropriate backup/restore workflow for their current driver. Do not assume migration into a container also means conversion from MySQL to SQLite.
 - [ ] Validate compatible core/schema versions before applying migrations.
 - [ ] Define the source shutdown, final data copy and destination startup sequence so the same region is not running from two simulators at once.
