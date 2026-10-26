@@ -16,14 +16,9 @@ chmod +x quick-install.sh
 
 See `./quick-install.sh --help` for other options.
 
-To run the installer on an SSH server, download it locally first, then run
-`./quick-install.sh --remote root@server --setup`.
+To run the installer on an SSH server, download it locally first, then run `./quick-install.sh --remote root@server --setup`.
 
-For a Podman install, run the downloaded script as a file. It creates a
-persistent Ubuntu 26.04 container by default; choose another image with
-`--image` or `OPENSIM_CONTAINER_IMAGE`. Podman uses `CONTAINER_CONNECTION` if
-set, or `--connection=local` to force the local engine. Run `opensim setup`
-from the container terminal after installation.
+For a Podman install, run the downloaded script as a file. It creates a persistent Ubuntu 26.04 container by default; choose another image with `--image` or `OPENSIM_CONTAINER_IMAGE`. Podman uses `CONTAINER_CONNECTION` if set, or `--connection=local` to force the local engine. Run `opensim setup` from the container terminal after installation.
 
 ## Requirements
 
@@ -44,7 +39,12 @@ from the container terminal after installation.
 - [x] from local git clone
 - [x] from local deb packages
 - [x] multi-platform testing through `container-tools` on Podman
-- [x] install as podman container
+- [ ] install as podman container
+    - [x] create, start, stop and destroy preconfigured containers
+    - [ ] use a single image with passed specific settings and mounts
+    - [ ] map required tcp and udp ports (prerequisite: enable `opensim ports`)
+    - [ ] hot change of required tcp and udp ports
+    - [ ] enable terminal maintenance through ssh
 - [ ] install as docker container
 - [x] remote shortcut to install on a distant server
 - [ ] advanced/expert install
