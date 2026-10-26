@@ -130,7 +130,7 @@ fi
 
 while :; do
 	request=$(jq -c --rawfile state <(printf '%s' "$state") --arg button "$button" --arg mode "$setup_mode" --slurpfile prefill <(printf '%s' "$setup_prefill") \
-		'{data: {type: "steps", attributes: {state: $state, button: $button, answers: (. + ($prefill[0] | {existing_region} | with_entries(select(.value != null)))), mode: $mode}}}' <<<"$answers")
+		'{data: {type: "steps", attributes: {state: $state, button: $button, answers: (. + ($prefill[0] | {existing_region,hostname} | with_entries(select(.value != null)))), mode: $mode}}}' <<<"$answers")
 	[[ -z "$apply_request" ]] || request=$apply_request
 	# What the engine tells while it works (lines starting with "opensim: ") is shown as it comes. Its answer goes to a file and its
 	# error output to another that is read while it runs: the instances it starts keep both open, a pipe would never end
@@ -152,7 +152,7 @@ while :; do
 	fi
 	if [[ "$(jq -r '.action + ":" + (.kind // "")' <<<"$screen")" == screen:menu && -n "$setup_prefill_type" ]]; then
 		state=$(jq -r '.state' <<<"$screen")
-		answers=$(jq -c '{type,existing_region} | with_entries(select(.value != null))' <<<"$setup_prefill")
+		answers=$(jq -c '{type,existing_region,hostname,login_uri} | with_entries(select(.value != null))' <<<"$setup_prefill")
 		setup_prefill_type=
 		continue
 	fi

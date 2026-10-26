@@ -39,8 +39,13 @@ while (($#)); do
 done
 [[ -n "${destination:-}" ]] || exit 0
 if [[ -n "${config:-}" ]]; then
-    jq -e '.identity' "$config" >/dev/null || { echo 'invalid setup config' >&2; exit 1; }
-    cp "$config" "$destination"
+    [[ -z "${CAPTURED_SETUP:-}" ]] || cp "$config" "$CAPTURED_SETUP"
+    if jq -e 'keys == ["hostname"]' "$config" >/dev/null; then
+        printf '{"identity":"test_grid","answers":{"type":"grid","name":"Test Grid"},"setup":{}}\n' >"$destination"
+    else
+        jq -e '.identity' "$config" >/dev/null || { echo 'invalid setup config' >&2; exit 1; }
+        cp "$config" "$destination"
+    fi
 else
     printf '{"identity":"test_grid","answers":{"type":"grid","name":"Test Grid"},"setup":{}}\n' >"$destination"
 fi
@@ -110,6 +115,9 @@ action=$1
 [[ "$action" == --connection ]] && { shift 2; action=$1; }
 if [[ "$action" == cp && -n "${CAPTURED_RC:-}" && "${3:-}" == *:/root/.opensimrc ]]; then
 	cp "$2" "$CAPTURED_RC"
+fi
+if [[ "$action" == info ]]; then
+    printf '{"Name":"podman.example.test"}\n'
 fi
 if [[ "$action" == create ]]; then
 	printf 'Container created\nName: test-opensim\n'
@@ -201,7 +209,7 @@ function test_podman_prepares_an_existing_region() {
 	printf '[Existing Region]\n' >"$region"
 	create_container_tools_stub "$fake_bin"
 	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --region-config '$region'"
-	assert_contains '<--region-config> <'"$region"'>' "$(head -n 1 "$calls")"
+	assert_contains '<--region-config> <'"$region"'>' "$(grep '^setup ' "$calls")"
 	assert_not_contains '<--region-config>' "$(grep '<exec>' "$calls")"
 }
 
@@ -237,8 +245,8 @@ function test_podman_prepares_before_container_creation() {
 	local fake_bin=$WORK/tools calls=$WORK/prepare-calls
 	create_container_tools_stub "$fake_bin"
 	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --yes"
-	assert_contains 'setup <setup> <--prepare>' "$(head -n 1 "$calls")"
-	assert_contains '<create>' "$(sed -n '2p' "$calls")"
+	assert_contains '<--prepare>' "$(grep -E '^setup |<create>' "$calls" | head -n 1)"
+	assert_contains '<create>' "$(cat "$calls")"
 }
 
 function test_podman_cancel_creates_no_container() {
@@ -246,7 +254,7 @@ function test_podman_cancel_creates_no_container() {
 	create_container_tools_stub "$fake_bin"
 	printf '#!/usr/bin/env bash\necho Cancelled >&2\nexit 1\n' >"$WORK/project/bin/opensim"
 	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman 2>&1" --exit 1 --stdout-contains Cancelled
-	assert_file_not_exists "$calls"
+	assert_not_contains '<create>' "$(cat "$calls")"
 }
 
 function test_podman_bootstrap_installs_only_management_packages() {
@@ -298,6 +306,8 @@ SOURCES
 }
 
 function test_default_apt_repository_is_charm_stable() {
+	local APT_SOURCE= APT_SOURCE_TESTS=
+	QUICK_INSTALL_LIBRARY_LOADED=no
 	quick_install_load_library || return
 	assert_equals 1 "${#APT_REPOSITORIES[@]}"
 	assert_equals 'deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable' "${APT_REPOSITORIES[0]}"
@@ -463,3 +473,12 @@ function test_dotnet_installer_uses_supported_runtime_channel() {
 	assert_contains '--azure-feed https://builds.dotnet.microsoft.com/dotnet' "$output"
 }
 
+
+function test_podman_setup_proposes_selected_server_hostname() {
+    local fake_bin=$WORK/tools calls=$WORK/host-calls
+    create_container_tools_stub "$fake_bin"
+    assert_exec "CALL_LOG='$calls' CAPTURED_SETUP='$WORK/prefill.json' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --connection=podman-host --yes"
+    assert_file_exists "$WORK/prefill.json"
+    assert_equals podman.example.test "$(jq -r '.hostname' "$WORK/prefill.json")"
+    assert_contains '<--connection> <podman-host> <info>' "$(cat "$calls")"
+}

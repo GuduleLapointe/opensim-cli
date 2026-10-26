@@ -166,6 +166,7 @@ SETUP_CLI_SELECTED=
 SETUP_CONFIG_FILE=${OPENSIM_SETUP_CONFIG_FILE:-${OPENSIM_SETUP_CONFIG:-}}
 REGION_CONFIG_FILE=
 SETUP_CONFIG_TEMP=
+SETUP_PREFILL_TEMP=
 SETUP_RC_TEMP=
 PODMAN_CONTAINER_NAME=
 
@@ -248,7 +249,7 @@ run_remote_install() (
 run_podman_install() {
 	local source_script=${BASH_SOURCE[0]} source_dir output name status=0 debs_in_container=
 	local -a environment=()
-	prepare_podman_setup_config
+	bootstrap_podman_manager || die "could not install the local OpenSim manager"
 	if [[ -n "${CONTAINER_TOOLS_CLI:-}" ]]; then
 		CONTAINER_TOOLS_CLI_SELECTED=$CONTAINER_TOOLS_CLI
 	else
@@ -264,6 +265,7 @@ run_podman_install() {
 		fi
 	fi
 	[[ -x "$CONTAINER_TOOLS_CLI_SELECTED" ]] || die "container-tools is not executable: $CONTAINER_TOOLS_CLI_SELECTED"
+	prepare_podman_setup_config
 	[[ -f "$source_script" ]] || die "--podman requires quick-install.sh to be run from a local file"
 	output=$(run_container_tool create --name "$PODMAN_CONTAINER_NAME" --image "$PODMAN_IMAGE" -- sh -c 'while :; do sleep 3600; done') || status=$?
 	printf '%s\n' "$output"
@@ -313,10 +315,17 @@ bootstrap_podman_manager() {
 }
 
 prepare_podman_setup_config() {
+	local hostname
 	local -a arguments=(setup)
-	bootstrap_podman_manager || die "could not install the local OpenSim manager"
 	command -v jq >/dev/null 2>&1 || die "jq is required by the OpenSim manager"
-	[[ -z "$SETUP_CONFIG_FILE" ]] || arguments+=(--config "$SETUP_CONFIG_FILE")
+	if [[ "$PODMAN_FORCE_LOCAL" != yes ]]; then
+		hostname=$(run_container_tool info | jq -er '.Name | select(type == "string" and length > 0)') || die "could not read the selected Podman server hostname"
+		SETUP_PREFILL_TEMP=$(mktemp "$TMP.prefill.XXXXXXXX") || die "could not create a private setup prefill"
+		jq --arg hostname "$hostname" 'if (.answers | type) == "object" then .answers.hostname //= $hostname else .hostname //= $hostname end' "${SETUP_CONFIG_FILE:-/dev/stdin}" >"$SETUP_PREFILL_TEMP" <<<'{}' || die "could not prepare the destination hostname"
+		arguments+=(--config "$SETUP_PREFILL_TEMP")
+	elif [[ -n "$SETUP_CONFIG_FILE" ]]; then
+		arguments+=(--config "$SETUP_CONFIG_FILE")
+	fi
 	[[ -z "$REGION_CONFIG_FILE" ]] || arguments+=(--region-config "$REGION_CONFIG_FILE")
 	SETUP_CONFIG_TEMP=$(mktemp "$TMP.setup.XXXXXXXX") || die "could not create a private setup file"
 	arguments+=(--prepare "$SETUP_CONFIG_TEMP")
@@ -913,7 +922,7 @@ fi
 PGM=$(basename "$0")
 TMP=/tmp/$PGM.$$
 DEBUG=${DEBUG:-}
-trap 'rm -rf "$TMP" "$TMP.$$"; [[ -z "$SETUP_CONFIG_TEMP" ]] || rm -f "$SETUP_CONFIG_TEMP"; [[ -z "$SETUP_RC_TEMP" ]] || rm -f "$SETUP_RC_TEMP"' EXIT
+trap 'rm -rf "$TMP" "$TMP.$$"; [[ -z "$SETUP_CONFIG_TEMP" ]] || rm -f "$SETUP_CONFIG_TEMP"; [[ -z "$SETUP_RC_TEMP" ]] || rm -f "$SETUP_RC_TEMP"; [[ -z "$SETUP_PREFILL_TEMP" ]] || rm -f "$SETUP_PREFILL_TEMP"' EXIT
 
 while (($#)); do
 	argument=$1

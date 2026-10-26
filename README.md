@@ -77,7 +77,7 @@ for private/console ports. Private mappings bind to `127.0.0.1` unless overridde
 `opensim setup --prepare setup.json` collects answers without applying the setup
 and saves them in a private file. Use `--config setup.json` to prefill a later setup or `--apply setup.json` to apply the confirmed configuration without further questions. Preparation and application require an engine that supports these modes.
 
-`quick-install.sh --podman` uses this questionnaire before creating the target container. From a downloaded script, it installs the local CLI, engine and container tools first; a source checkout reuses its Composer dependencies. Cancelling the questionnaire creates no target container. Add `--setup` to apply the confirmed settings after installation without repeating the questionnaire. Use `--region-config /path/to/Region.ini` to stage an existing region; its database and files must still be restored before activation.
+`quick-install.sh --podman` uses this questionnaire before creating the target container. From a downloaded script, it installs the local CLI, engine and container tools first; a source checkout reuses its Composer dependencies. The proposed grid hostname comes from the selected Podman server; an explicit `login_uri` in the setup configuration takes precedence. Cancelling the questionnaire creates no target container. Add `--setup` to apply the confirmed settings after installation without repeating the questionnaire. Use `--region-config /path/to/Region.ini` to stage an existing region; its database and files must still be restored before activation.
 
 To stage an existing region without a replacement region or database:
 
