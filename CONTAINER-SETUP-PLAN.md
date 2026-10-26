@@ -108,7 +108,7 @@ Podman distinguishes `run` (create and start) from `start` (start an existing co
 - [x] Record the selected hosts' Podman versions and available network backends.
 - [x] Verify explicit TCP and UDP mappings derived from the setup configuration, without depending on image `EXPOSE` metadata or automatic host-port selection.
 - [ ] Prove a supported mechanism to change ports for the same OCI container when Pasta is unavailable. Investigate existing networking/forwarding tools before writing a forwarding service.
-- [ ] Test Pasta live forwarding separately for TCP and UDP where available.
+- [x] Test Pasta live forwarding separately for TCP and UDP where available.
 - [ ] Keep public, private and console bindings distinct with every backend; automatic forwarding must not expose SQL or private consoles unintentionally.
 - [ ] Verify changes initiated by the controller and by configuration inside the container, and define how these changes reach the network backend.
 - [ ] Exercise an occupied host port, a new listener outside the old published set, removing a listener and restarting an individual simulator.
@@ -120,6 +120,10 @@ Acceptance: change the configured ports, relaunch if required, and verify the sa
 Development hosts checked: Vonda runs rootless Podman 5.7.0 with Netavark (client 5.6.0); Ursull runs rootless Podman 4.9.3 with Netavark (client 5.6.0). The live TCP/UDP integration checks in this stage currently run against Vonda.
 
 Prepared setups now carry engine-generated `port_bindings`: public TCP/UDP listeners bind on all host interfaces; private and console TCP listeners bind to host loopback; disabled consoles are omitted; duplicate standalone/listener ports are collapsed. Quick-install passes those records as explicit container-tools mappings and disables image `EXPOSE` defaults. Validation: 81 QuickSetup tests (394 assertions), 31 quick-install tests (108 assertions), one real-engine-to-installer setup test (15 assertions), and Vonda TCP/UDP listener delivery (one integration test, 11 assertions).
+
+Pasta live forwarding validation: Vonda passed TCP listeners started by the controller and inside the container, and a UDP listener started inside the container. The UDP probe waits for the socket to bind before sending; test port selection checks both TCP and UDP sockets. These checks verify dynamic listener forwarding on Pasta, not fixed `--publish` changes on a bridge container.
+
+Same-container port update investigation: Podman's `create` accepts `--publish`, but `update` only changes resource limits and health checks, and `network connect` only accepts network, alias, IP and MAC settings. The REST update endpoint has no port-binding fields either. Therefore fixed bridge `--publish` mappings cannot be changed for the same container through the supported Podman CLI/API. The remaining design decision is whether to require Pasta for live port changes or to replace the OCI container while preserving its volumes and OpenSim identity/data; no replacement behavior is assumed here.
 
 If standard Podman mechanisms cannot meet same-container relaunch on a target backend, record that limitation and resolve the design before continuing. Replacing the OCI container while retaining its volumes is a different behavior and requires an explicit decision; it is not silently substituted here.
 
