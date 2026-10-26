@@ -12,7 +12,14 @@ OPENSIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bin/opensim"
 function set_up() {
     WORK="$(mktemp -d)"
     export HOME="$WORK"
+    unset OPENSIM_CONF OPENSIM_RC
+    export OPENSIM_SYSTEM_USER=
     mkdir -p "$WORK/bin" "$WORK/etc/opensim"
+    cat >"$WORK/.opensim.conf" <<-INI
+	[Defaults]
+	EtcRoot = $WORK/etc/opensim
+	SystemUser =
+	INI
 }
 
 function tear_down() {
@@ -27,17 +34,5 @@ function test_opensim_without_command_shows_usage() {
 }
 
 function test_opensim_status_works() {
-    # On macOS, status should work without containers
-    if [[ "$(uname)" == Darwin ]]; then
-        local output
-        output=$("$OPENSIM" status 2>&1)
-        # On macOS with existing instances, this should show the table
-        # On macOS without instances, it may show empty or error
-        # Just check it doesn't crash with a syntax error
-        assert_equals 0 $?
-    fi
+    assert_exec "'$OPENSIM' status"
 }
-
-# Container-based tests would go here
-# They require CONTAINER_CONNECTION to be set
-# For now, we just confirm local behavior
