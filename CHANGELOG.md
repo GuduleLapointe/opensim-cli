@@ -1,5 +1,39 @@
 ## Changelog
 
+### Unreleased
+
+- feature (install): apply confirmed setup and transfer private inputs
+- feature (setup): accept existing region files through the cli
+- feature (setup): apply a private prepared configuration from the cli
+- feature (install): prepare setup through the local engine before podman creation
+- feature (setup): save collected answers before provisioning
+- feature (cli): restore instance port reports
+- feature (installer): configure apt sources
+- feature (installer): prefill Podman setup from config
+- feature (installer): install OpenSim in Podman
+- feature (installer): support SSH installs
+- fix (install): retain prepared database credentials through container setup
+- fix (tests): report Podman connection failures in deployment checks
+- fix (tests): validate persistent deployments across platforms
+- fix (tests): load environment with project overrides
+- doc: record validated setup port selection
+- doc: track validated existing region staging and remaining migration work
+- doc: record validated region move planning
+- doc: extend container plan for existing regions and sqlite
+- doc: record staged container setup plan
+- doc (installer): document SSH installation
+- doc (readme): list administrator access requirement
+- doc (readme): simplify runtime requirements
+- doc (contributing): add repository agent instructions
+- doc (readme): update current features and install instructions
+- refactor (tests): route container tests through container-tools
+- test (install): prepare podman setup through the real engine
+- test: isolate cli checks from the installed system layout
+- test (tests): clarify command failure reporting
+- update (installer): default Podman image to Ubuntu 26.04
+- update (packaging): require podman-compose for cli
+- dev swith to dev mode (sibling packkages from local sources, not suitable for release)
+
 ### 3.0.0-dev.1
 
 Complete rewrite of opensim terminal tools, using new opensim-engine 3.x API

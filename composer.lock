@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "0b02e565c9a34fe26406e7ee080b00ba",
+    "content-hash": "0cad0bd3f55e7a72de3e1fb632408fa7",
     "packages": [
         {
             "name": "guzzlehttp/guzzle",
-            "version": "7.16.0",
+            "version": "7.16.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/guzzle/guzzle.git",
-                "reference": "ffb62ec787050ae4fa9449cdd6b80335db69bda2"
+                "reference": "81755d989b3007ca7f88a069857553cd08e7dc2e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/guzzle/guzzle/zipball/ffb62ec787050ae4fa9449cdd6b80335db69bda2",
-                "reference": "ffb62ec787050ae4fa9449cdd6b80335db69bda2",
+                "url": "https://api.github.com/repos/guzzle/guzzle/zipball/81755d989b3007ca7f88a069857553cd08e7dc2e",
+                "reference": "81755d989b3007ca7f88a069857553cd08e7dc2e",
                 "shasum": ""
             },
             "require": {
@@ -116,7 +116,7 @@
             ],
             "support": {
                 "issues": "https://github.com/guzzle/guzzle/issues",
-                "source": "https://github.com/guzzle/guzzle/tree/7.16.0"
+                "source": "https://github.com/guzzle/guzzle/tree/7.16.1"
             },
             "funding": [
                 {
@@ -132,7 +132,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-10-18T13:38:36+00:00"
+            "time": "2026-10-25T21:35:21+00:00"
         },
         {
             "name": "guzzlehttp/promises",
@@ -400,11 +400,17 @@
         },
         {
             "name": "magicoli/bash-tools",
-            "version": "dev-dev",
+            "version": "1.0.9",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/magicoli/bash-tools.git",
+                "reference": "781def8f2fa4cc6d9b8952b566023c730e01c569"
+            },
             "dist": {
-                "type": "path",
-                "url": "../bash-tools",
-                "reference": "bc6cf896b3e26dac88e04da6466c7d6e8b0e30f3"
+                "type": "zip",
+                "url": "https://api.github.com/repos/magicoli/bash-tools/zipball/781def8f2fa4cc6d9b8952b566023c730e01c569",
+                "reference": "781def8f2fa4cc6d9b8952b566023c730e01c569",
+                "shasum": ""
             },
             "bin": [
                 "bin/cpuinfo",
@@ -426,6 +432,7 @@
                     "Magicoli\\BashHelpers\\": "src/"
                 }
             },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "AGPL-3.0-or-later"
             ],
@@ -436,21 +443,28 @@
                 }
             ],
             "description": "Eclectic collection of bash tools and helpers.",
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "support": {
+                "issues": "https://github.com/magicoli/bash-tools/issues",
+                "source": "https://github.com/magicoli/bash-tools/tree/1.0.9"
+            },
+            "time": "2026-10-24T11:40:03+00:00"
         },
         {
             "name": "magicoli/build-tools",
-            "version": "dev-dev",
+            "version": "0.1.9",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/magicoli/build-tools.git",
+                "reference": "0296f73c8647e7363cd018511675636f2eda16ad"
+            },
             "dist": {
-                "type": "path",
-                "url": "../build-tools",
-                "reference": "db3f24b175c54ae263ced61e9840e7c71d21be19"
+                "type": "zip",
+                "url": "https://api.github.com/repos/magicoli/build-tools/zipball/0296f73c8647e7363cd018511675636f2eda16ad",
+                "reference": "0296f73c8647e7363cd018511675636f2eda16ad",
+                "shasum": ""
             },
             "require": {
-                "magicoli/bash-tools": "@dev"
+                "magicoli/bash-tools": "^1.0.6"
             },
             "bin": [
                 "bin/build-tools",
@@ -458,6 +472,7 @@
                 "bin/apt-publish"
             ],
             "type": "library",
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "AGPL-3.0-or-later"
             ],
@@ -468,18 +483,25 @@
                 }
             ],
             "description": "Build, release and publish a project: Debian packages, zip, GitHub release, apt repository.",
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "support": {
+                "issues": "https://github.com/magicoli/build-tools/issues",
+                "source": "https://github.com/magicoli/build-tools/tree/0.1.9"
+            },
+            "time": "2026-10-24T04:02:05+00:00"
         },
         {
             "name": "magicoli/container-tools",
             "version": "dev-master",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/magicoli/container-tools.git",
+                "reference": "0ed55d9819b6de9d1c54cdd2f97175dacbd638c2"
+            },
             "dist": {
-                "type": "path",
-                "url": "../container-tools",
-                "reference": "e5ef24aa3564814b427e2dc3a3b73bacd07ad631"
+                "type": "zip",
+                "url": "https://api.github.com/repos/magicoli/container-tools/zipball/0ed55d9819b6de9d1c54cdd2f97175dacbd638c2",
+                "reference": "0ed55d9819b6de9d1c54cdd2f97175dacbd638c2",
+                "shasum": ""
             },
             "require": {
                 "ext-curl": "*",
@@ -491,6 +513,7 @@
                 "magicoli/pest-failure-summary": "^1.0",
                 "pestphp/pest": "^3.0"
             },
+            "default-branch": true,
             "bin": [
                 "bin/container-tools"
             ],
@@ -500,11 +523,7 @@
                     "Magicoli\\ContainerTools\\": "src/"
                 }
             },
-            "scripts": {
-                "test": [
-                    "pest"
-                ]
-            },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "AGPL-3.0-or-later"
             ],
@@ -515,10 +534,11 @@
                 }
             ],
             "description": "PHP library and command-line adapter for managing containers with Podman.",
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "support": {
+                "issues": "https://github.com/magicoli/container-tools/issues",
+                "source": "https://github.com/magicoli/container-tools/tree/0.1.0-dev.2"
+            },
+            "time": "2026-10-25T07:22:26+00:00"
         },
         {
             "name": "magicoli/kick-inside",
@@ -592,11 +612,17 @@
         },
         {
             "name": "magicoli/opensim-engine",
-            "version": "3.x-dev",
+            "version": "3.0.0-beta.8",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/GuduleLapointe/opensim-engine.git",
+                "reference": "1ac0a56f8a6bd3726ae1026db0b3246ff83650a4"
+            },
             "dist": {
-                "type": "path",
-                "url": "../opensim-engine",
-                "reference": "8f4d7f3d8758cfcbf984201d51307f0ef5a4bab6"
+                "type": "zip",
+                "url": "https://api.github.com/repos/GuduleLapointe/opensim-engine/zipball/1ac0a56f8a6bd3726ae1026db0b3246ff83650a4",
+                "reference": "1ac0a56f8a6bd3726ae1026db0b3246ff83650a4",
+                "shasum": ""
             },
             "require": {
                 "ext-curl": "*",
@@ -610,9 +636,8 @@
                 "ext-session": "*",
                 "ext-simplexml": "*",
                 "laminas/laminas-escaper": "^2.12@stable",
-                "magicoli/container-tools": "dev-master",
                 "magicoli/kick-inside": "^0.1.0",
-                "magicoli/opensim-rest-php": "@dev",
+                "magicoli/opensim-rest-php": "^1.1.3",
                 "nubs/random-name-generator": "^2.2",
                 "php": ">=8.2",
                 "phpxmlrpc/phpxmlrpc": "^4.11",
@@ -623,7 +648,7 @@
             },
             "require-dev": {
                 "dealerdirect/phpcodesniffer-composer-installer": "^1.2",
-                "magicoli/bash-tools": "^1.0",
+                "magicoli/bash-tools": "^1.0.7",
                 "magicoli/build-tools": "^0.1.2",
                 "magicoli/pest-failure-summary": "^1.0",
                 "nyholm/psr7": "^1.8",
@@ -637,28 +662,20 @@
                 "nyholm/psr7": "A PSR-7 and PSR-17 implementation to serve the API with Api\\Handler (any other works)"
             },
             "bin": [
-                "bin/opensim-api",
-                "bin/opensim-container.php"
+                "bin/opensim-api"
             ],
             "type": "library",
             "autoload": {
-                "psr-4": {
-                    "OpenSim\\": "src/"
-                },
                 "files": [
                     "includes/functions-gettext.php",
                     "includes/constants.php",
                     "includes/polyfills.php"
-                ]
-            },
-            "scripts": {
-                "test": [
-                    "pest"
                 ],
-                "docs": [
-                    "php dev/api-docs.php"
-                ]
+                "psr-4": {
+                    "OpenSim\\": "src/"
+                }
             },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "AGPL-3.0-or-later"
             ],
@@ -669,18 +686,25 @@
                 }
             ],
             "description": "OpenSimulator Engine - Framework-agnostic core functionality for OpenSim grids",
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "support": {
+                "issues": "https://github.com/GuduleLapointe/opensim-engine/issues",
+                "source": "https://github.com/GuduleLapointe/opensim-engine/tree/3.0.0-beta.8"
+            },
+            "time": "2026-10-24T04:09:34+00:00"
         },
         {
             "name": "magicoli/opensim-rest-php",
-            "version": "dev-opensim-kit",
+            "version": "1.1.3",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/GuduleLapointe/opensim-rest-php.git",
+                "reference": "66cfb967e051581e3aac007a8490352fc4038914"
+            },
             "dist": {
-                "type": "path",
-                "url": "../opensim-rest-php",
-                "reference": "9a4b5da1b9818f68c749057c8a4c7315f14c7946"
+                "type": "zip",
+                "url": "https://api.github.com/repos/GuduleLapointe/opensim-rest-php/zipball/66cfb967e051581e3aac007a8490352fc4038914",
+                "reference": "66cfb967e051581e3aac007a8490352fc4038914",
+                "shasum": ""
             },
             "require": {
                 "ext-curl": "*",
@@ -703,11 +727,7 @@
                     "class-rest.php"
                 ]
             },
-            "scripts": {
-                "test": [
-                    "pest"
-                ]
-            },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "AGPL-3.0-or-later"
             ],
@@ -718,10 +738,11 @@
                 }
             ],
             "description": "OpenSimulator REST PHP library and command-line client",
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
+            "support": {
+                "issues": "https://github.com/GuduleLapointe/opensim-rest-php/issues",
+                "source": "https://github.com/GuduleLapointe/opensim-rest-php/tree/1.1.3"
+            },
+            "time": "2026-10-05T22:14:53+00:00"
         },
         {
             "name": "nubs/random-name-generator",
