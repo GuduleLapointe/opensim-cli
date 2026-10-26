@@ -95,6 +95,9 @@ printf ' <%s>' "$@" >>"$CALL_LOG"
 printf '\n' >>"$CALL_LOG"
 action=$1
 [[ "$action" == --connection ]] && { shift 2; action=$1; }
+if [[ "$action" == cp && -n "${CAPTURED_RC:-}" && "${3:-}" == *:/root/.opensimrc ]]; then
+	cp "$2" "$CAPTURED_RC"
+fi
 if [[ "$action" == create ]]; then
 	printf 'Container created\nName: test-opensim\n'
 fi
@@ -126,6 +129,19 @@ JSON
 	assert_contains '<--name> <ile_de_re.ile_de_re>' "$(cat "$calls")"
 	assert_contains '> <test-opensim:/tmp/opensim-setup.json>' "$(cat "$calls")"
 	assert_contains '<OPENSIM_SETUP_CONFIG_FILE=/tmp/opensim-setup.json>' "$(cat "$calls")"
+}
+
+function test_podman_transfers_database_credentials_privately() {
+	local fake_bin=$WORK/tools calls=$WORK/rc-calls config=$WORK/setup.json
+	create_container_tools_stub "$fake_bin"
+	cat >"$config" <<'JSON'
+{"identity":"example","answers":{"type":"grid","name":"Example","database_user":"example_db","database_password":"quote' dollar$","admin_user":"example_admin","admin_password":"admin-fixture"},"setup":{}}
+JSON
+	assert_exec "CALL_LOG='$calls' CAPTURED_RC='$WORK/target-rc' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --config '$config' --yes"
+	assert_file_exists "$WORK/target-rc"
+	assert_equals "quote' dollar\$" "$(source "$WORK/target-rc"; printf '%s' "$OPENSIM_DB_PASS")"
+	assert_equals example_admin "$(source "$WORK/target-rc"; printf '%s' "$OPENSIM_DB_ADMIN_USER")"
+	assert_not_contains admin-fixture "$(cat "$calls")"
 }
 
 function test_podman_config_rejects_missing_setup_identity_before_create() {
@@ -308,6 +324,26 @@ function test_custom_apt_source_does_not_fetch_magiiic_signing_key() {
 	configure_package_sources
 	unset -f apt-get dpkg-query apt_update as_root uname curl
 	assert_equals no "$key_downloaded"
+}
+
+function test_database_passwords_are_quoted_as_sql_literals() {
+	quick_install_load_library || return
+	local sql=$WORK/accounts.sql
+	configure_package_sources() { return 0; }
+	database_server_installed() { return 0; }
+	start_sql_server() { return 0; }
+	save_database_credentials() { return 0; }
+	uname() { printf 'Linux\n'; }
+	as_root() { "$@"; }
+	mariadb() {
+		if [[ "${1:-}" == -Nse ]]; then printf '0\n'; else cat >"$sql"; fi
+	}
+	OPENSIM_DB_ADMIN_USER=example_admin OPENSIM_DB_ADMIN_PASS="ad'min"
+	OPENSIM_DB_USER=example_user OPENSIM_DB_PASS="p'ass\\word"
+	phase_database
+	assert_contains "SET SESSION sql_mode='NO_BACKSLASH_ESCAPES';" "$(cat "$sql")"
+	assert_contains "IDENTIFIED BY 'ad''min';" "$(cat "$sql")"
+	assert_contains "IDENTIFIED BY 'p''ass\\word';" "$(cat "$sql")"
 }
 
 function test_dotnet_phase_requests_libgdiplus_directly_from_apt_when_missing() {

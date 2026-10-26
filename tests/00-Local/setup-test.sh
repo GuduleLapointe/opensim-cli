@@ -174,9 +174,11 @@ function test_setup_applies_prepared_config_without_questions() {
 	printf '%s\n' '{"version":1,"identity":"example","answers":{"type":"grid","password":"secret"},"setup":{}}' >"$config"
 	chmod 600 "$config"
 	engine_says "$QUIT"
-	assert_exec "FE_TTY='$WORK/none' '$OPENSIM' setup --apply '$config' </dev/null" --stdout-contains 'Grid name:'
+	assert_exec "OPENSIM_SETUP_CONFIG_FILE='$WORK/ignored.json' OPENSIM_DB_ADMIN_USER=example_admin OPENSIM_DB_ADMIN_PASS=admin-fixture FE_TTY='$WORK/none' '$OPENSIM' setup --apply '$config' </dev/null" --stdout-contains 'Grid name:'
 	assert_equals example "$(request 1 .configuration.identity)"
 	assert_equals secret "$(request 1 .configuration.answers.password)"
+	assert_equals example_admin "$(request 1 .configuration.answers.admin_user)"
+	assert_equals admin-fixture "$(request 1 .configuration.answers.admin_password)"
 	assert_equals 1 "$(cat "$ENGINE_REPLIES/.count")"
 }
 

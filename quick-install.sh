@@ -164,6 +164,7 @@ CONTAINER_TOOLS_CLI_SELECTED=
 SETUP_CLI_SELECTED=
 SETUP_CONFIG_FILE=${OPENSIM_SETUP_CONFIG_FILE:-${OPENSIM_SETUP_CONFIG:-}}
 SETUP_CONFIG_TEMP=
+SETUP_RC_TEMP=
 PODMAN_CONTAINER_NAME=
 
 # === Define helper functions first ===
@@ -250,6 +251,15 @@ run_podman_install() {
 	say "Install OpenSim in container $name"
 	run_container_tool cp "$source_script" "$name:/tmp/quick-install.sh" || die "could not copy quick-install.sh to container $name"
 	run_container_tool cp "$SETUP_CONFIG_FILE" "$name:/tmp/opensim-setup.json" || die "could not copy setup config to container $name"
+	SETUP_RC_TEMP=$(mktemp "$TMP.rc.XXXXXXXX") || die "could not create a private database configuration"
+	jq -r '.answers | {
+		OPENSIM_DB_HOST: .database_host,
+		OPENSIM_DB_USER: .database_user,
+		OPENSIM_DB_PASS: .database_password,
+		OPENSIM_DB_ADMIN_USER: .admin_user,
+		OPENSIM_DB_ADMIN_PASS: .admin_password
+	} | to_entries[] | select(.value != null and .value != "") | "export \(.key)=\(.value | @sh)"' "$SETUP_CONFIG_FILE" >"$SETUP_RC_TEMP" || die "could not prepare database credentials"
+	run_container_tool cp "$SETUP_RC_TEMP" "$name:/root/.opensimrc" || die "could not copy database credentials to container $name"
 	if [[ -n "$APT_SOURCE_DIR" ]]; then
 		[[ -d "$APT_SOURCE_DIR" ]] || die "APT_SOURCE_DIR must be a local directory when installing in a container"
 		debs_in_container=/tmp/opensim-kit-debs
@@ -693,9 +703,11 @@ phase_database() {
 	[[ $admin_exists != 1 || $had_admin_pass == 1 ]] || die "SQL account $OPENSIM_DB_ADMIN_USER already exists; set OPENSIM_DB_ADMIN_PASS in ~/.opensimrc to preserve its password"
 	[[ $app_exists != 1 || $had_app_pass == 1 ]] || die "SQL account $OPENSIM_DB_USER already exists; set OPENSIM_DB_PASS in ~/.opensimrc to preserve its password"
 	if [[ $admin_exists != 1 || $app_exists != 1 ]]; then
+		local admin_password_sql=${OPENSIM_DB_ADMIN_PASS//\'/\'\'} app_password_sql=${OPENSIM_DB_PASS//\'/\'\'}
 		{
-			[[ $admin_exists == 1 ]] || printf "CREATE USER '%s'@'localhost' IDENTIFIED BY '%s'; GRANT ALL PRIVILEGES ON *.* TO '%s'@'localhost' WITH GRANT OPTION;\n" "$OPENSIM_DB_ADMIN_USER" "$OPENSIM_DB_ADMIN_PASS" "$OPENSIM_DB_ADMIN_USER"
-			[[ $app_exists == 1 ]] || printf "CREATE USER '%s'@'localhost' IDENTIFIED BY '%s'; GRANT ALL PRIVILEGES ON *.* TO '%s'@'localhost';\n" "$OPENSIM_DB_USER" "$OPENSIM_DB_PASS" "$OPENSIM_DB_USER"
+			printf '%s\n' "SET SESSION sql_mode='NO_BACKSLASH_ESCAPES';"
+			[[ $admin_exists == 1 ]] || printf "CREATE USER '%s'@'localhost' IDENTIFIED BY '%s'; GRANT ALL PRIVILEGES ON *.* TO '%s'@'localhost' WITH GRANT OPTION;\n" "$OPENSIM_DB_ADMIN_USER" "$admin_password_sql" "$OPENSIM_DB_ADMIN_USER"
+			[[ $app_exists == 1 ]] || printf "CREATE USER '%s'@'localhost' IDENTIFIED BY '%s'; GRANT ALL PRIVILEGES ON *.* TO '%s'@'localhost';\n" "$OPENSIM_DB_USER" "$app_password_sql" "$OPENSIM_DB_USER"
 			printf 'FLUSH PRIVILEGES;\n'
 		} | as_root "$sql_client" || die "could not create the OpenSim SQL accounts"
 	fi
@@ -871,7 +883,7 @@ fi
 PGM=$(basename "$0")
 TMP=/tmp/$PGM.$$
 DEBUG=${DEBUG:-}
-trap 'rm -rf "$TMP" "$TMP.$$"; [[ -z "$SETUP_CONFIG_TEMP" ]] || rm -f "$SETUP_CONFIG_TEMP"' EXIT
+trap 'rm -rf "$TMP" "$TMP.$$"; [[ -z "$SETUP_CONFIG_TEMP" ]] || rm -f "$SETUP_CONFIG_TEMP"; [[ -z "$SETUP_RC_TEMP" ]] || rm -f "$SETUP_RC_TEMP"' EXIT
 
 while (($#)); do
 	argument=$1

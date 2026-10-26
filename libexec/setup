@@ -12,6 +12,7 @@ source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SO
 source "$CLI_ROOT/src/lib/ui"
 
 setup_config=${OPENSIM_SETUP_CONFIG_FILE:-}
+setup_config_explicit=no
 prepare_file=
 apply_file=
 setup_mode=apply
@@ -20,9 +21,10 @@ while (($#)); do
 		--config)
 			(($# > 1)) || die "opensim setup --config requires a JSON file"
 			setup_config=$2
+			setup_config_explicit=yes
 			shift 2
 			;;
-		--config=*) setup_config=${1#*=}; [[ -n "$setup_config" ]] || die "opensim setup --config requires a JSON file"; shift ;;
+		--config=*) setup_config_explicit=yes; setup_config=${1#*=}; [[ -n "$setup_config" ]] || die "opensim setup --config requires a JSON file"; shift ;;
 		--apply)
 			(($# > 1)) && [[ "$2" != --* ]] || die "opensim setup --apply requires a JSON file"
 			apply_file=$2
@@ -41,12 +43,22 @@ while (($#)); do
 done
 apply_request=
 if [[ -n "$apply_file" ]]; then
+	[[ "$setup_config_explicit" == yes ]] || setup_config=
 	[[ -z "$prepare_file" && -z "$setup_config" ]] || die "--apply cannot be combined with --prepare or --config"
+	apply_filter='
+		if (.answers.admin_user // "") == "" then
+			.answers.admin_user = (env.OPENSIM_DB_ADMIN_USER // "") |
+			.answers.admin_password = (env.OPENSIM_DB_ADMIN_PASS // "")
+		elif (.answers.admin_password // "") == "" and .answers.admin_user == env.OPENSIM_DB_ADMIN_USER then
+			.answers.admin_password = (env.OPENSIM_DB_ADMIN_PASS // "")
+		else . end |
+		{data: {type: "steps", attributes: {mode: "apply", configuration: .}}}
+	'
 	if [[ "$apply_file" == - ]]; then
-		apply_request=$(jq -ce '{data: {type: "steps", attributes: {mode: "apply", configuration: .}}}') || die "cannot read prepared setup from standard input"
+		apply_request=$(jq -ce "$apply_filter") || die "cannot read prepared setup from standard input"
 	else
 		[[ -r "$apply_file" ]] || die "cannot read prepared setup: $apply_file"
-		apply_request=$(jq -ce '{data: {type: "steps", attributes: {mode: "apply", configuration: .}}}' <"$apply_file") || die "invalid prepared setup JSON"
+		apply_request=$(jq -ce "$apply_filter" <"$apply_file") || die "invalid prepared setup JSON"
 	fi
 fi
 setup_prefill='{}'
