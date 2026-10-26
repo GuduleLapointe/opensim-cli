@@ -427,13 +427,13 @@ prepare_podman_setup_config() {
 	local hostname= occupied_ports
 	local -a arguments=(setup)
 	command -v jq >/dev/null 2>&1 || die "jq is required by the OpenSim manager"
-	say "Checking occupied ports on the selected Podman host"
-	occupied_ports=$(run_container_tool host-ports | jq -cer 'select(type == "array" and all(.[]; type == "number" and floor == . and . >= 1 and . <= 65535))') || die "could not inspect ports on the selected Podman host"
 	if [[ "$PODMAN_FORCE_LOCAL" == yes ]]; then
 		hostname=$(hostname -f 2>/dev/null || hostname) || die "could not read the local host name"
 	else
 		hostname=$(run_container_tool info | jq -er '.Name | select(type == "string" and length > 0)') || die "could not read the selected Podman server hostname"
 	fi
+	say "Find available ports on $hostname"
+	occupied_ports=$(run_container_tool host-ports | jq -cer 'select(type == "array" and all(.[]; type == "number" and floor == . and . >= 1 and . <= 65535))') || die "could not inspect ports on $hostname"
 	SETUP_PREFILL_TEMP=$(mktemp "$TMP.prefill.XXXXXXXX") || die "could not create a private setup prefill"
 	jq --argjson occupied_ports "$occupied_ports" --arg hostname "$hostname" '.occupied_ports = $occupied_ports | if (.answers | type) == "object" then (if $hostname == "" then . else .answers.hostname //= $hostname end) else (if $hostname == "" then . else .hostname //= $hostname end) end' "${SETUP_CONFIG_FILE:-/dev/stdin}" >"$SETUP_PREFILL_TEMP" <<<'{}' || die "could not prepare the selected host setup context"
 	arguments+=(--config "$SETUP_PREFILL_TEMP")
@@ -910,8 +910,28 @@ end_installation() {
 	INSTALL_COMPLETED
 	if [[ "${RUN_SETUP:-}" =~ ^(yes|true|1)$ ]]; then
 		"$basedir/bin/opensim" "${setup_arguments[@]}" || die "Error $? while executing opensim setup"
+		say "Setup completed"
+		if [[ -n "$setup_config" && -r "$setup_config" ]]; then
+			print_setup_summary "$setup_config"
+		fi
 	fi
 	exit 0
+}
+
+print_setup_summary() {
+	local config=$1 summary
+	[[ -r "$config" ]] || return 0
+	summary=$(jq -r '
+		.answers as $answers | .setup as $setup |
+		[
+			(if ($setup.grid.name // $answers.name // "") != "" then "Grid:       \($setup.grid.name // $answers.name)" else empty end),
+			(if ($setup.grid.hostname // $answers.login_uri // "") != "" then "Login URI:  \(if $setup.grid.hostname then "http://\($setup.grid.hostname):\($setup.grid.public_port // 8002)" else $answers.login_uri end)" else empty end),
+			(if ($answers.avatar // $setup.simulators[0].estate.owner // "") != "" then "Avatar:     \($answers.avatar // $setup.simulators[0].estate.owner)" else empty end)
+		] | .[]
+	' "$config") || return 0
+	[[ -n "$summary" ]] || return 0
+	say "Setup summary"
+	say "$summary"
 }
 
 phase_dotnet() {

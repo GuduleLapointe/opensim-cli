@@ -498,12 +498,26 @@ function test_dotnet_installer_uses_supported_runtime_channel() {
 function test_podman_setup_proposes_selected_server_hostname() {
     local fake_bin=$WORK/tools calls=$WORK/host-calls
     create_container_tools_stub "$fake_bin"
-    assert_exec "CALL_LOG='$calls' CAPTURED_SETUP='$WORK/prefill.json' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --connection=podman-host --yes"
+    assert_exec "CALL_LOG='$calls' CAPTURED_SETUP='$WORK/prefill.json' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null bash '$QUICK_INSTALL' --podman --connection=podman-host --yes" --stdout-contains 'Find available ports on podman.example.test'
     assert_file_exists "$WORK/prefill.json"
     assert_equals podman.example.test "$(jq -r '.hostname' "$WORK/prefill.json")"
     assert_equals '[8002,9001]' "$(jq -c '.occupied_ports' "$WORK/prefill.json")"
     assert_contains '<host-ports>' "$(cat "$calls")"
     assert_contains '<--connection> <podman-host> <info>' "$(cat "$calls")"
+}
+
+function test_confirmed_setup_ends_with_a_grid_summary() {
+	quick_install_load_library || return
+	local config="$WORK/Confirmed Setup.json"
+	cat >"$config" <<'JSON'
+{"version":1,"identity":"test_grid","answers":{"type":"grid","name":"Test Grid","avatar":"Ada Resident"},"setup":{"grid":{"name":"Test Grid","hostname":"grid.example.test","public_port":8123},"simulators":[]}}
+JSON
+	clone=$WORK/project
+	SETUP_CONFIG_FILE=$config
+	unset OPENSIM_SETUP_CONFIG_FILE
+	RUN_SETUP=yes
+	uname() { printf 'Darwin\n'; }
+	assert_exec '(end_installation)' --stdout-contains 'Installation completed' --stdout-contains 'Grid:       Test Grid' --stdout-contains 'Login URI:  http://grid.example.test:8123' --stdout-contains 'Avatar:     Ada Resident'
 }
 
 function test_podman_install_rechecks_prepared_ports_before_creating_the_container() {
