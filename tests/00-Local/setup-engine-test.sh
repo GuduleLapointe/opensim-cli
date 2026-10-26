@@ -29,7 +29,7 @@ JSON
 printf '%s\n' "$*" >>"$CALL_LOG"
 while [[ "$1" == --connection ]]; do shift 2; done
 case "$1" in
-	host-ports) printf '[8002,8003,8004,9000]\n' ;;
+	host-ports) printf '[8007,9006]\n' ;;
 	info) printf '{"Name":"podman.example.test"}\n' ;;
 	create) printf 'Container created\nName: oliviers_test-grid\n' ;;
 	cp) [[ "$3" != *:/tmp/opensim-setup.json ]] || cp "$2" "$CAPTURED_CONFIG" ;;
@@ -51,6 +51,8 @@ CLI
 	assert_equals oliviers_test-grid "$(jq -r .identity "$WORK/prepared.json")"
 	assert_equals 1 "$(jq -r .version "$WORK/prepared.json")"
 	assert_equals 8012 "$(jq -r .setup.grid.public_port "$WORK/prepared.json")"
+	assert_equals 9010 "$(jq -r '.setup.simulators[0].http_port' "$WORK/prepared.json")"
+	assert_equals 9011 "$(jq -r '.setup.simulators[0].regions[0].port' "$WORK/prepared.json")"
 	assert_equals tcp "$(jq -r '.port_bindings[] | select(.port == 8012) | .protocol' "$WORK/prepared.json")"
 	assert_equals fixture-admin-password "$(jq -r .answers.admin_password "$WORK/prepared.json")"
 	assert_directory_not_exists "$WORK/etc/grids"
