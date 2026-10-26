@@ -343,7 +343,6 @@ deploy_run_step() {
 				--label "org.opensim-cli.deploy.ephemeral=$DEPLOY_EPHEMERAL"
 				--label "org.opensim-cli.deploy.run=$DEPLOY_RUN_ID")
 			[[ -n "${MEMORY:-}" ]] && create_args+=(--memory "$MEMORY")
-			create_args+=(-- sh -c 'while :; do sleep 3600; done')
 			local create_log create_command
 			create_log=$(deploy_log_dir "$DEPLOY_PLATFORM")/create.log
 			mkdir -p "$(dirname "$create_log")"

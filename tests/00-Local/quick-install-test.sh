@@ -133,6 +133,7 @@ function test_podman_install_uses_connection_image_and_forwards_install_options(
 	assert_exec "CALL_LOG='$calls' CONTAINER_TOOLS_CLI='$fake_bin/container-tools' OPENSIM_RC=/dev/null CONTAINER_CONNECTION=podman-host APT_SOURCE_DIR='$debs' bash '$QUICK_INSTALL' --podman --connection=podman-host --image=docker.io/library/ubuntu:24.04 --opensim --yes"
 	assert_contains '<--name> <test_grid>' "$(cat "$calls")"
 	assert_contains '<--connection> <podman-host> <create> <--name> <test_grid> <--image> <docker.io/library/ubuntu:24.04>' "$(cat "$calls")"
+	assert_not_contains '<-->' "$(grep '<create>' "$calls")"
 	assert_contains '<cp> ' "$(cat "$calls")"
 	assert_contains '<cp> <'"$debs"'> <test-opensim:/tmp/opensim-kit-debs>' "$(cat "$calls")"
 	assert_contains '<exec> <test-opensim> <-->' "$(cat "$calls")"

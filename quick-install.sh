@@ -267,7 +267,7 @@ run_podman_install() {
 	[[ -x "$CONTAINER_TOOLS_CLI_SELECTED" ]] || die "container-tools is not executable: $CONTAINER_TOOLS_CLI_SELECTED"
 	prepare_podman_setup_config
 	[[ -f "$source_script" ]] || die "--podman requires quick-install.sh to be run from a local file"
-	output=$(run_container_tool create --name "$PODMAN_CONTAINER_NAME" --image "$PODMAN_IMAGE" -- sh -c 'while :; do sleep 3600; done') || status=$?
+	output=$(run_container_tool create --name "$PODMAN_CONTAINER_NAME" --image "$PODMAN_IMAGE") || status=$?
 	printf '%s\n' "$output"
 	((status == 0)) || die "could not create the Podman container"
 	name=$(sed -n 's/^Name: //p' <<<"$output" | tail -n 1)
