@@ -44,7 +44,8 @@ Validated: the ten Bashunit port-command tests (29 assertions) pass on macOS and
 - [x] Reuse the same saved answer format in quick-install and `opensim setup`.
 - [ ] Include the database driver and the choice to create a region or adopt an existing one in the collected answers.
 - [x] Resolve how the engine-owned questionnaire is available before target installation without requiring the full OpenSim stack on the client host. Preserve quick-install's ability to be downloaded and run independently.
-- [ ] Check the selected Podman host's occupied/reserved ports during planning; repeat collision checks immediately before launch to catch intervening changes.
+- [ ] **CRITICAL BUG**: properly detect selected Podman host's occupied/reserved ports during planning; repeat collision checks immediately before launch to catch intervening changes.
+- [ ] `opensim setup --podman [--connection <host>]` should also allow the setup of a new or existing podman instance
 - [x] Preserve ten-port simulator allocation and the ability to override defaults.
 - [x] Compute the final OpenSim identity before creating paths or the container.
 - [x] Protect saved secrets and transfer them as file contents or standard input.
@@ -131,6 +132,7 @@ If standard Podman mechanisms cannot meet same-container relaunch on a target ba
 - [ ] Ensure signals stop OpenSim and databases cleanly within an appropriate stop timeout. An instance restart must not restart the whole container.
 - [ ] Clean build-only files and package indexes from the image.
 - [ ] Test start, individual restart, stop, container restart and startup with no configured instances yet. Do not reboot a shared test host for this check.
+- [ ] **CRITICAL BUG**: Test actual answer from detected ports, ensure it comes from the intended container (e.g. with host:port/get_grid_info for grid)
 
 Acceptance: the server starts its configured services autonomously and stops them cleanly, with readable status and logs and no personal data in its image.
 
