@@ -44,6 +44,7 @@ CLI
 	create_call=$(grep '^create ' "$WORK/calls")
 	assert_contains 'create --name oliviers_test-grid' "$create_call"
 	assert_contains '--no-publish-defaults' "$create_call"
+	assert_not_contains '--pasta-auto-publish' "$create_call"
 	while IFS= read -r mapping; do
 		assert_contains '--publish '"$mapping" "$create_call"
 	done < <(jq -r '.port_bindings[] | if .host_ip == null then "\(.port):\(.port)/\(.protocol)" else "\(.host_ip):\(.port):\(.port)/\(.protocol)" end' "$WORK/prepared.json")
