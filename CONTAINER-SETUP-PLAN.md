@@ -105,7 +105,7 @@ This stage uses small TCP/UDP listeners, avoiding repeated full installations.
 
 Podman distinguishes `run` (create and start) from `start` (start an existing container). Standard `--publish` mappings are supplied to `create`/`run`; `start` does not offer a replacement port list. Merely stopping and starting an existing bridge container does not implement the required update behavior.
 
-- [ ] Record the selected hosts' Podman versions and available network backends.
+- [x] Record the selected hosts' Podman versions and available network backends.
 - [ ] Verify explicit TCP and UDP mappings derived from the setup configuration, without depending on image `EXPOSE` metadata or automatic host-port selection.
 - [ ] Prove a supported mechanism to change ports for the same OCI container when Pasta is unavailable. Investigate existing networking/forwarding tools before writing a forwarding service.
 - [ ] Test Pasta live forwarding separately for TCP and UDP where available.
@@ -116,6 +116,8 @@ Podman distinguishes `run` (create and start) from `start` (start an existing co
 - [ ] Put reusable mechanisms in container-tools and OpenSim policy in the engine.
 
 Acceptance: change the configured ports, relaunch if required, and verify the same container ID, instance identity and data, plus the new TCP/UDP bindings. Live changes must leave unrelated simulators running.
+
+Development hosts checked: Vonda runs rootless Podman 5.7.0 with Netavark (client 5.6.0); Ursull runs rootless Podman 4.9.3 with Netavark (client 5.6.0). The live TCP/UDP integration checks in this stage currently run against Vonda.
 
 If standard Podman mechanisms cannot meet same-container relaunch on a target backend, record that limitation and resolve the design before continuing. Replacing the OCI container while retaining its volumes is a different behavior and requires an explicit decision; it is not silently substituted here.
 
