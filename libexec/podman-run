@@ -34,7 +34,7 @@ if [ -z "$1" ]; then
 	cat $TMP.images | sed "s/^/  /"
 	exit
 fi
-image_id=opensimhelpers.dev/charm/opensim-$1
+image_id=localhost/opensim-$1
 shift
 args=(
 	-d

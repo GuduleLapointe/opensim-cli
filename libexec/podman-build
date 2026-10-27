@@ -45,19 +45,15 @@ for key in $*; do
 			label=["$os_version"]
 			;;
 		esac
-		args+=("--network host")
-		args+=("--from=$image")
-		# args+=("--isolation=rootless")
-		args+=("--tag opensimhelpers.dev/charm/opensim-$key")
-		args+=("--label $label")
+		args=(
+			--network host
+			--from $image
+			--isolation rootless
+			--tag opensim-$key
+			--label $label
+		)
 
-		say building $key image from $image
-		say build $SHAREDIR/podman/debian ${args[@]}
-
-		# read -p "start container (Y/n)? " start
-		# start=${start:-y}
-		# if [ "$start" = "y" ]; then
-		podman build $SHAREDIR/podman/debian $args || exit $?
-		# fi
+		say podman build $SHAREDIR/podman/debian ${args[@]}
+		podman build $SHAREDIR/podman/debian ${args[@]} || exit $?
 	done
 done
