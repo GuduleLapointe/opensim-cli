@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+set -e
+
+say() {
+	[ -n "$*" ] && echo "$PGM: $*" >&2 || return
+}
+log() {
+	DEBUG=${DEBUG:-no}
+	[ ! "${DEBUG:-}" = "yes" ] && return
+	say "$*"
+}
+
+PGM=$(basename "$0")
+TMP=$(mktemp) || exit $?
+trap "rm -rf $TMP $TMP.*" EXIT
+
+BASEDIR=$(cd $(dirname $0)/.. && pwd)
+log BASEDIR $BASEDIR
+SHAREDIR=$(cd $BASEDIR/share 2>/dev/null ||
+	cd /usr/share/opensim-cli/share 2>/dev/null && pwd) ||
+	exit 2
+log SHAREDIR $SHAREDIR
+log Images $SHAREDIR/podman/images
+
+if ! cut -d"#" -f 1 $SHAREDIR/podman/images | grep "." >$TMP.images; then
+	log empty images list $SHAREDIR/podman/images
+	exit 1
+fi
+
+if [ -z "$1" ]; then
+	echo "usage: $PGM <container-id>"
+	echo
+	cat $TMP.images | sed "s/^/  /"
+	exit
+fi
+
+container_id=$(podman run -d -i -P opensimhelpers.dev/charm/opensim-debian-13)
+podman container inspect $container_id | grep '"Name":' | head -1 | sed 's/"//g; s/,$//; s/^ *//'
+echo "Id: $container_id"

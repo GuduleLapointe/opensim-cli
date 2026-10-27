@@ -27,25 +27,31 @@ RUN apt-get update \
 
 COPY magiiic.list /etc/apt/sources.list.d/magiiic.list
 
+#dotnet-runtime-10.0
 RUN curl -fsSL https://apt.magiiic.com/magiiic-packaging.asc \
     | gpg --dearmor -o /usr/share/keyrings/magiiic-packaging.gpg \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-        libsqlite3-0 mariadb-server dotnet-runtime-10.0 \
+        libsqlite3-0 mariadb-server \
         php-cli php-curl php-intl php-mbstring php-mysql php-xml \
         composer git unzip screen \
         openssh-server \
+        libgdiplus \
     && apt-get install -y --no-install-recommends \
-        opensim-cli \
-    && rm -rf /pkgs /var/lib/apt/lists/*
+        opensim-cli
 
-USER root
+# Install dotnet with opensim CLI to allow Debian fallback
+
+RUN opensim install-dotnet
+
 WORKDIR /var/lib/opensim
 
 # Config, data and logs belong to the volumes; the cache can be a tmpfs
 VOLUME ["/etc/opensim", "/var/lib/opensim", "/var/log/opensim"]
 
-EXPOSE 22 80 443 8000-8009 9000 9001/udp
+# EXPOSE 22 80 443 8000-8009 9000 9001/udp
+
+RUN rm -rf /pkgs /var/lib/apt/lists/*
 
 STOPSIGNAL SIGTERM
 

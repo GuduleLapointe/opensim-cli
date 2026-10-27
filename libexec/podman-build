@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+
+set -e
+
+say() {
+	[ -n "$*" ] && echo "$PGM: $*" >&2 || return
+}
+log() {
+	DEBUG=${DEBUG:-no}
+	[ ! "${DEBUG:-}" = "yes" ] && return
+	say "$*"
+}
+
+PGM=$(basename "$0")
+TMP=$(mktemp) || exit $?
+trap "rm -rf $TMP $TMP.*" EXIT
+
+BASEDIR=$(cd $(dirname $0)/.. && pwd)
+log BASEDIR $BASEDIR
+SHAREDIR=$(cd $BASEDIR/share 2>/dev/null ||
+	cd /usr/share/opensim-cli/share 2>/dev/null && pwd) ||
+	exit 2
+log SHAREDIR $SHAREDIR
+log Images $SHAREDIR/podman/images
+
+if ! cut -d"#" -f 1 $SHAREDIR/podman/images | grep "." >$TMP.images; then
+	log empty images list $SHAREDIR/podman/images
+	exit 1
+fi
+
+if [ -z "$1" ]; then
+	echo "usage: $PGM <image>"
+	echo
+	cat $TMP.images | sed "s/^/  /"
+	exit
+fi
+
+for key in $*; do
+	grep "^$key\b" $TMP.images |
+		while read key image os_id os_version; do
+			case $key in
+			debian-13 | ubuntu-26.04)
+				label=["latest","$os_version"]
+				;;
+			*)
+				label=["$os_version"]
+				;;
+			esac
+
+			say building $key image from $image
+			podman build $SHAREDIR/podman/debian --network host \
+				--from $image \
+				--tag "opensimhelpers.dev/charm/opensim-$key" \
+				--label $label
+		done
+done
