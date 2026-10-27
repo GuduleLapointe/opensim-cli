@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+- fix (containers): map OpenSim user to bind mount owner
 - fix (install): request all OpenSim packages on every install
 - feature (cli): restore console, grid, web and archive commands
 - feature (cli): add backups and reviewable user ban plans

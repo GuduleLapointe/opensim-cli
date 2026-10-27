@@ -13,8 +13,8 @@ RUN echo 'Acquire::Retries "5";' >/etc/apt/apt.conf.d/80retries
 
 # The account of the instances, with a fixed ID: a folder of the host shared
 # with the container can be given to it (chown 8002:8002)
-RUN groupadd --system  opensim \
-    && useradd --system --gid opensim --home-dir /var/lib/opensim --create-home --shell /bin/bash opensim
+RUN groupadd --system -g 8002 opensim \
+    && useradd --system -g 8002 -u 8002 --home-dir /var/lib/opensim --create-home --shell /bin/bash opensim
 
 # The packages depend on "a database server, or PostgreSQL, or SQLite" and on
 # "a MySQL client": what is installed first satisfies them, so no server is added

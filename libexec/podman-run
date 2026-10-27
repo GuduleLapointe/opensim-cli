@@ -35,12 +35,15 @@ if [ -z "$1" ]; then
 	exit
 fi
 image_id=localhost/opensim-$1
+log image_id $image_id
 shift
+
 args=(
 	-d
 	-i
 )
 if [ -n "${1:-}" ]; then
+	log setting name to $1
 	args+=("--name $1")
 	args+=("--hostname $1")
 
@@ -49,6 +52,8 @@ if [ -n "${1:-}" ]; then
 else
 	args+=("-P")
 fi
+
+log setting mount points
 mount_points=(
 	/etc/opensim
 	/var/lib/opensim
@@ -58,6 +63,45 @@ for mount_point in ${mount_points[@]}; do
 	args+=("--volume $mount_point:$mount_point")
 	# args+=("--mount=type=bind,source=$mount_point,destination=$mount_point")
 done
+
+remote=${CONTAINER_CONNECTION:+ssh ${CONTAINER_CONNECTION}}
+image_uid=opensim
+image_gid=opensim
+host_uid=${CONTAINER_USER:-$(id -u $image_uid 2>/dev/null || id -u)}
+host_gid=${CONTAINER_GROUP:-$(id -g $image_uid 2>/dev/null || id -u)}
+if [ -n "$CONTAINER_CONNECTION" ]; then
+	log get host user on $CONTAINER_CONNECTION
+	ssh $CONTAINER_CONNECTION "echo host_uid=\$(id -u $image_uid 2>/dev/null || id -u);
+    echo host_gid=\$(id -u $image_uid 2>/dev/null || id -u)" >$TMP.remote_user
+	. $TMP.remote_user
+fi
+log host user $host_uid:$host_gid
+
+log check rootless availability
+rootless=$(podman info --format '{{.Host.Security.Rootless}}')
+
+# if [[ "$rootless" == "true" ]]; then
+# 	say "Rootless true, map user namespace"
+# 	# if [[ "$host_uid" != 0:0 ]]; then
+# 	# 	say "rootless Podman cannot map OpenSim volumes owned by $host_uid; run Podman as their owner or use a rootful connection"
+# 	# 	exit 1
+# 	# fi
+# 	args+=(--userns=keep-id:uid=$host_uid,gid=$host_uid)
+# elif [[ "$image_uid" != "$host_uid" ]]; then
+# say "Rootless false, set mapping $image_uid to $host_uid"
+args+=(
+	--uidmap 0:0:65536
+	--gidmap 0:0:65536
+	--uidmap +$image_uid:$host_uid:1
+	--uidmap +$host_uid:65536:1
+	--gidmap +$image_gid:$host_gid:1
+	--gidmap +$host_gid:65536:1
+	# --uidmap +$host_uid:$image_uid:1
+	# --uidmap +$image_uid:65536:1
+	# --gidmap +$host_gid:$image_gid:1
+	# --gidmap +$image_gid:65536:1
+)
+# fi
 
 env | egrep "^(APT_SOURCE|OPENSIM_DB|DEFAULT_)" >$TMP.env
 echo "CONTAINER_HOST=$(hostname -f)" >>$TMP.env
