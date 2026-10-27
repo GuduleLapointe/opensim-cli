@@ -38,11 +38,6 @@ RUN curl -fsSL https://apt.magiiic.com/magiiic-packaging.asc \
     | gpg --dearmor -o /usr/share/keyrings/magiiic-packaging.gpg \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
-        libsqlite3-0 mariadb-server \
-        php-cli php-curl php-intl php-mbstring php-mysql php-xml \
-        composer git unzip screen \
-        openssh-server \
-        libgdiplus \
         opensim-cli
 
 # Install dotnet with opensim CLI to allow Debian fallback
