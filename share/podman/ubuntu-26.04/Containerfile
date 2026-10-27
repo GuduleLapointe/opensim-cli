@@ -13,7 +13,7 @@ RUN echo 'Acquire::Retries "5";' >/etc/apt/apt.conf.d/80retries
 # The account of the instances, with a fixed ID: a folder of the host shared
 # with the container can be given to it (chown 8002:8002)
 RUN groupadd --system  opensim \
- && useradd --system --gid opensim --home-dir /var/lib/opensim --create-home --shell /bin/bash opensim
+    && useradd --system --gid opensim --home-dir /var/lib/opensim --create-home --shell /bin/bash opensim
 
 # The packages depend on "a database server, or PostgreSQL, or SQLite" and on
 # "a MySQL client": what is installed first satisfies them, so no server is added
@@ -22,26 +22,29 @@ RUN groupadd --system  opensim \
 
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends \
- ca-certificates curl gpg openssl
+    && apt-get install -y --no-install-recommends \
+    ca-certificates curl gpg openssl
 
 COPY magiiic.list /etc/apt/sources.list.d/magiiic.list
 
 RUN curl -fsSL https://apt.magiiic.com/magiiic-packaging.asc \
- | gpg --dearmor -o /usr/share/keyrings/magiiic-packaging.gpg \
- && apt-get update \
- && apt-get install -y --no-install-recommends \
- libsqlite3-0 mariadb-server dotnet-runtime-10.0 \
- php-cli php-curl php-intl php-mbstring php-mysql php-xml \
- && apt-get install -y --no-install-recommends \
- opensim-cli \
- && rm -rf /pkgs /var/lib/apt/lists/*
+    | gpg --dearmor -o /usr/share/keyrings/magiiic-packaging.gpg \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libsqlite3-0 mariadb-server dotnet-runtime-10.0 \
+        php-cli php-curl php-intl php-mbstring php-mysql php-xml \
+        composer git unzip screen \
+    && apt-get install -y --no-install-recommends \
+        opensim-cli \
+    && rm -rf /pkgs /var/lib/apt/lists/*
 
-USER opensim
+USER root
 WORKDIR /var/lib/opensim
 
 # Config, data and logs belong to the volumes; the cache can be a tmpfs
 VOLUME ["/etc/opensim", "/var/lib/opensim", "/var/log/opensim"]
+
+EXPOSE 22 80 443 3306 8002 9000 9001-9009/udp
 
 STOPSIGNAL SIGTERM
 # ENTRYPOINT ["/usr/local/bin/opensim-container"]
