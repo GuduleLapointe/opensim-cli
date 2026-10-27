@@ -256,6 +256,26 @@ function test_dotnet_runtime_detection_accepts_apt_candidate_with_pipefail() {
 	unset -f apt-cache
 }
 
+function test_clone_install_requests_core_when_cli_and_engine_are_installed() {
+	quick_install_load_library || return
+	local calls=$WORK/install-calls
+	clone=$WORK/project
+	APT_SOURCE_DIR=
+	OPENSIM_KIT_APT_DIST=charm
+	uname() { printf 'Linux\n'; }
+	dpkg-query() {
+		case "$*" in
+		*opensim-cli* | *opensim-engine*) printf 'installed\n' ;;
+		*) return 1 ;;
+		esac
+	}
+	configure_package_sources() { return 0; }
+	install_packages() { printf '%s\n' "$*" >>"$calls"; }
+	end_installation() { return 0; }
+	phase_opensim
+	assert_equals 'opensim opensim-0.9.3.0 opensim-0.9.3.0-gloebit opensim-0.9.3.0-opensimsearch' "$(cat "$calls")"
+}
+
 function test_dotnet_installer_uses_supported_runtime_channel() {
 	quick_install_load_library || return
 	PGM=quick-install
