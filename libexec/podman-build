@@ -52,7 +52,12 @@ for key in $*; do
 		args+=("--label $label")
 
 		say building $key image from $image
-		say build $SHAREDIR/podman/debian $args
+		say build $SHAREDIR/podman/debian ${args[@]}
+
+		# read -p "start container (Y/n)? " start
+		# start=${start:-y}
+		# if [ "$start" = "y" ]; then
 		podman build $SHAREDIR/podman/debian $args
+		# fi
 	done
 done
