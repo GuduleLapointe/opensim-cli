@@ -53,20 +53,33 @@ function test_opensim_without_command_shows_usage() {
 }
 
 function test_layout_env_outputs_sourceable_system_and_current_identities() {
-    local api="$WORK/opensim-api"
+    local api="$WORK/opensim-api" etc_real var_real logs_real
+    mkdir -p "$WORK/layout/etc-target" "$WORK/layout/var-target" "$WORK/layout/logs-target"
+    ln -s "$WORK/layout/etc-target" "$WORK/layout/etc-link"
+    ln -s "$WORK/layout/var-target" "$WORK/layout/var-link"
+    ln -s "$WORK/layout/logs-target" "$WORK/layout/logs-link"
+    etc_real=$(php -r 'echo realpath($argv[1]);' "$WORK/layout/etc-link")
+    var_real=$(php -r 'echo realpath($argv[1]);' "$WORK/layout/var-link")
+    logs_real=$(php -r 'echo realpath($argv[1]);' "$WORK/layout/logs-link")
+    export LAYOUT_ETC_ROOT="$WORK/layout/etc-link" LAYOUT_VAR_ROOT="$WORK/layout/var-link" LAYOUT_LOGS_ROOT="$WORK/layout/logs-link"
     cat >"$api" <<'API'
 #!/usr/bin/env bash
 [[ "$1 $2" == "GET /layout" ]] || exit 2
-cat <<'JSON'
-{"data":{"type":"layout","attributes":{"systemUser":"opensim","systemUid":123,"systemGroup":"opensim","systemGid":456,"currentUser":"magic","currentUid":501,"currentGroup":"staff","currentGid":20,"etcRoot":"/etc/opensim","varRoot":"/var/lib/opensim","logsRoot":"/var/log/opensim"}}}
-JSON
+jq -cn --arg etc "$LAYOUT_ETC_ROOT" --arg var "$LAYOUT_VAR_ROOT" --arg logs "$LAYOUT_LOGS_ROOT" \
+    '{data:{type:"layout",attributes:{systemUser:"opensim",systemUid:123,systemGroup:"opensim",systemGid:456,currentUser:"magic",currentUid:501,currentGroup:"staff",currentGid:20,etcRoot:$etc,varRoot:$var,logsRoot:$logs}}}'
 API
     chmod +x "$api"
     assert_exec "OPENSIM_API='$api' '$OPENSIM' --layout --format=env" \
-        --stdout-contains "export OPENSIM_SYSTEM_USER='opensim'" \
-        --stdout-contains "export OPENSIM_SYSTEM_UID='123'" \
-        --stdout-contains "export OPENSIM_CURRENT_USER='magic'" \
-        --stdout-contains "export OPENSIM_ETC_ROOT='/etc/opensim'"
+        --stdout-contains "OPENSIM_SYSTEM_USER='opensim'" \
+        --stdout-contains "OPENSIM_SYSTEM_UID='123'" \
+        --stdout-contains "OPENSIM_CURRENT_USER='magic'" \
+        --stdout-contains "OPENSIM_ETC_ROOT='$WORK/layout/etc-link'" \
+        --stdout-contains "OPENSIM_ETC_ROOT_REALPATH='$etc_real'" \
+        --stdout-contains "OPENSIM_VAR_ROOT='$WORK/layout/var-link'" \
+        --stdout-contains "OPENSIM_VAR_ROOT_REALPATH='$var_real'" \
+        --stdout-contains "OPENSIM_LOGS_ROOT='$WORK/layout/logs-link'" \
+        --stdout-contains "OPENSIM_LOGS_ROOT_REALPATH='$logs_real'" \
+        --stdout-not-contains 'export '
 }
 
 function test_layout_rejects_unsupported_format() {

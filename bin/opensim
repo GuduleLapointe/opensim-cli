@@ -56,6 +56,18 @@ if [[ "${1:-}" == --layout ]]; then
 	done
 	[[ "$format" == env ]] || die "--layout requires --format=env"
 	layout=$(engine GET /layout) || die "could not read the OpenSim system layout"
+	layout=$(php -r '
+		$layout = json_decode(stream_get_contents(STDIN), true, flags: JSON_THROW_ON_ERROR);
+		foreach (["etcRoot", "varRoot", "logsRoot"] as $key) {
+			$path = realpath($layout["data"]["attributes"][$key] ?? "");
+			if ($path === false) {
+				fwrite(STDERR, "Layout path does not exist: " . ($layout["data"]["attributes"][$key] ?? "") . "\n");
+				exit(1);
+			}
+			$layout["data"]["attributes"][$key . "Realpath"] = $path;
+		}
+		echo json_encode($layout, JSON_THROW_ON_ERROR);
+	' <<<"$layout") || die "could not resolve the OpenSim layout paths"
 	jq -er '
 		.data | select(.type == "layout") | .attributes |
 		[
@@ -63,12 +75,14 @@ if [[ "${1:-}" == --layout ]]; then
 			["systemGroup", "OPENSIM_SYSTEM_GROUP"], ["systemGid", "OPENSIM_SYSTEM_GID"],
 			["currentUser", "OPENSIM_CURRENT_USER"], ["currentUid", "OPENSIM_CURRENT_UID"],
 			["currentGroup", "OPENSIM_CURRENT_GROUP"], ["currentGid", "OPENSIM_CURRENT_GID"],
-			["etcRoot", "OPENSIM_ETC_ROOT"], ["varRoot", "OPENSIM_VAR_ROOT"], ["logsRoot", "OPENSIM_LOGS_ROOT"]
+			["etcRoot", "OPENSIM_ETC_ROOT"], ["etcRootRealpath", "OPENSIM_ETC_ROOT_REALPATH"],
+			["varRoot", "OPENSIM_VAR_ROOT"], ["varRootRealpath", "OPENSIM_VAR_ROOT_REALPATH"],
+			["logsRoot", "OPENSIM_LOGS_ROOT"], ["logsRootRealpath", "OPENSIM_LOGS_ROOT_REALPATH"]
 		] as $fields |
 		. as $attributes |
 		select(all($fields[]; .[0] as $key | $attributes | has($key) and .[$key] != null)) |
 		$fields[] as [$key, $variable] |
-		"export \($variable)=\(.[$key] | tostring | @sh)"
+		"\($variable)=\(.[$key] | tostring | @sh)"
 	' <<<"$layout" || die "the OpenSim layout response is incomplete"
 	exit 0
 fi
