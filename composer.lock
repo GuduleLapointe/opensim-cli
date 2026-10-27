@@ -596,7 +596,7 @@
             "dist": {
                 "type": "path",
                 "url": "../opensim-engine",
-                "reference": "9a5ba17aa43a2b9f08a19e0244ebb4ee4e6dda97"
+                "reference": "9d259007eb6bc5f5ddfd7dde37f3e26278bac538"
             },
             "require": {
                 "ext-curl": "*",
@@ -607,6 +607,7 @@
                 "ext-mbstring": "*",
                 "ext-mysqli": "*",
                 "ext-pdo": "*",
+                "ext-posix": "*",
                 "ext-session": "*",
                 "ext-simplexml": "*",
                 "laminas/laminas-escaper": "^2.12@stable",

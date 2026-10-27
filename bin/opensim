@@ -45,13 +45,16 @@ if [[ "${1:-}" == --layout ]]; then
 	format=
 	while (($#)); do
 		case "$1" in
-			--format)
-				(($# > 1)) || die "--format requires a value"
-				format=$2
-				shift 2
-				;;
-			--format=*) format=${1#*=}; shift ;;
-			*) die "unexpected argument for --layout: $1" ;;
+		--format)
+			(($# > 1)) || die "--format requires a value"
+			format=$2
+			shift 2
+			;;
+		--format=*)
+			format=${1#*=}
+			shift
+			;;
+		*) die "unexpected argument for --layout: $1" ;;
 		esac
 	done
 	[[ "$format" == env ]] || die "--layout requires --format=env"
@@ -75,9 +78,12 @@ if [[ "${1:-}" == --layout ]]; then
 			["systemGroup", "OPENSIM_SYSTEM_GROUP"], ["systemGid", "OPENSIM_SYSTEM_GID"],
 			["currentUser", "OPENSIM_CURRENT_USER"], ["currentUid", "OPENSIM_CURRENT_UID"],
 			["currentGroup", "OPENSIM_CURRENT_GROUP"], ["currentGid", "OPENSIM_CURRENT_GID"],
-			["etcRoot", "OPENSIM_ETC_ROOT"], ["etcRootRealpath", "OPENSIM_ETC_ROOT_REALPATH"],
-			["varRoot", "OPENSIM_VAR_ROOT"], ["varRootRealpath", "OPENSIM_VAR_ROOT_REALPATH"],
-			["logsRoot", "OPENSIM_LOGS_ROOT"], ["logsRootRealpath", "OPENSIM_LOGS_ROOT_REALPATH"]
+			["etcRoot", "OPENSIM_ETC_ROOT"],
+			["varRoot", "OPENSIM_VAR_ROOT"],
+			["logsRoot", "OPENSIM_LOGS_ROOT"],
+		    ["etcRootRealpath", "CANONICAL_ETC_ROOT"],
+			["varRootRealpath", "CANONICAL_VAR_ROOT"],
+			["logsRootRealpath", "CANONICAL_LOGS_ROOT"]
 		] as $fields |
 		. as $attributes |
 		select(all($fields[]; .[0] as $key | $attributes | has($key) and .[$key] != null)) |
@@ -99,7 +105,7 @@ case ${COMMAND:-} in
 setup)
 	for argument in "$@"; do
 		case "$argument" in
-			--prepare | --prepare=*) exec "$libexec/setup" "$@" ;;
+		--prepare | --prepare=*) exec "$libexec/setup" "$@" ;;
 		esac
 	done
 	# A machine without the system layout gets it from the engine (the account, the folders, opensim.conf), which needs root
