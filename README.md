@@ -50,19 +50,17 @@ To run the installer on an SSH server, download it locally first, then run `./qu
 - [ ] enable|disable <grid> search [<url prefix>]
 - [ ] enable|disable <grid> economy [beta|gloebit] [<url prefix>]
 - [ ] enable|disable <grid> profiles
-- [x] console|screen <instance>
+- [ ] console|screen <instance>
 - [ ] command <instance> <text>|-
 - [x] ports [instance...] [--ufw] [--private-address ADDRESS]
 
-`opensim ports` lists configured listeners and their TCP/UDP protocol. `--ufw`
-prints public firewall rules and comments for private/console ports.
+`opensim ports` lists configured listeners and their TCP/UDP protocol. `--ufw` prints public firewall rules and comments for private/console ports.
 
 #### Grids
 
 - [x] setup
 
-`opensim setup --prepare setup.json` collects answers without applying the setup
-and saves them in a private file. Use `--config setup.json` to prefill a later setup or `--apply setup.json` to apply the confirmed configuration without further questions. Preparation and application require an engine that supports these modes.
+`opensim setup --prepare setup.json` collects answers without applying the setup and saves them in a private file. Use `--config setup.json` to prefill a later setup or `--apply setup.json` to apply the confirmed configuration without further questions. Preparation and application require an engine that supports these modes.
 
 To stage an existing region without a replacement region or database:
 
