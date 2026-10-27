@@ -57,7 +57,7 @@ for key in $*; do
 		# read -p "start container (Y/n)? " start
 		# start=${start:-y}
 		# if [ "$start" = "y" ]; then
-		podman build $SHAREDIR/podman/debian $args
+		podman build $SHAREDIR/podman/debian $args || exit $?
 		# fi
 	done
 done
