@@ -143,10 +143,9 @@ for repository in "${APT_REPOSITORIES[@]}"; do
 done
 # What the tools need on a machine that does not have the packages (a clone): the same as the package opensim-tools
 PHP_PACKAGES=(php-cli php-curl php-intl php-mbstring php-mysql php-xml)
-OPENSIM_CORE_PACKAGES=(opensim opensim-0.9.3.0 opensim-0.9.3.0-gloebit opensim-0.9.3.0-opensimsearch)
-OPENSIM_PACKAGES=("${OPENSIM_CORE_PACKAGES[@]}" opensim-cli opensim-helpers)
+OPENSIM_PACKAGES=(opensim-cli opensim-helpers)
+OPENSIM_PACKAGES+=(opensim-0.9.3.0 opensim-0.9.3.0-gloebit opensim-0.9.3.0-opensimsearch)
 if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
-	OPENSIM_CORE_PACKAGES+=(opensim-unstable)
 	OPENSIM_PACKAGES+=(opensim-unstable)
 fi
 
@@ -1059,7 +1058,7 @@ phase_opensim() {
 	if [[ -n "$clone" && -z "$APT_SOURCE_DIR" ]]; then
 		if [[ $(uname -s) == Linux ]]; then
 			configure_package_sources || return $?
-			install_packages "${OPENSIM_CORE_PACKAGES[@]}" || die "could not install OpenSimulator core packages"
+			install_packages "${OPENSIM_PACKAGES[@]}" || die "could not install OpenSim packages"
 		fi
 		say "Use OpenSim from clone $clone"
 		php -r 'exit(PHP_VERSION_ID >= 80200 ? 0 : 1);' || die "PHP 8.2 or newer is needed"

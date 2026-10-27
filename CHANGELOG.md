@@ -2,7 +2,7 @@
 
 ### Unreleased
 
-- fix (install): install OpenSim core packages when using a clone
+- fix (install): request all OpenSim packages on every install
 - feature (cli): restore console, grid, web and archive commands
 - feature (cli): add backups and reviewable user ban plans
 - magicoli/build-tools 0.1.9 => 0.1.11

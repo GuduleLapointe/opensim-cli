@@ -256,7 +256,7 @@ function test_dotnet_runtime_detection_accepts_apt_candidate_with_pipefail() {
 	unset -f apt-cache
 }
 
-function test_clone_install_requests_core_when_cli_and_engine_are_installed() {
+function test_clone_install_requests_all_packages_when_cli_and_engine_are_installed() {
 	quick_install_load_library || return
 	local calls=$WORK/install-calls
 	clone=$WORK/project
@@ -273,7 +273,7 @@ function test_clone_install_requests_core_when_cli_and_engine_are_installed() {
 	install_packages() { printf '%s\n' "$*" >>"$calls"; }
 	end_installation() { return 0; }
 	phase_opensim
-	assert_equals 'opensim opensim-0.9.3.0 opensim-0.9.3.0-gloebit opensim-0.9.3.0-opensimsearch' "$(cat "$calls")"
+	assert_equals 'opensim-cli opensim-helpers opensim-0.9.3.0 opensim-0.9.3.0-gloebit opensim-0.9.3.0-opensimsearch' "$(cat "$calls")"
 }
 
 function test_dotnet_installer_uses_supported_runtime_channel() {
