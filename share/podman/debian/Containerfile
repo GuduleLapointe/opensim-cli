@@ -6,10 +6,8 @@
 ARG BASE=docker.io/library/ubuntu:26.04
 FROM ${BASE}
 
-ENV DEBIAN_FRONTEND=noninteractive
 
-# Config, data and logs belong to the volumes; the cache can be a tmpfs
-VOLUME ["/etc/opensim", "/var/lib/opensim", "/var/log/opensim"]
+ENV DEBIAN_FRONTEND=noninteractive
 
 # A mirror that does not answer once is asked again
 RUN echo 'Acquire::Retries "5";' >/etc/apt/apt.conf.d/80retries
@@ -19,11 +17,15 @@ RUN echo 'Acquire::Retries "5";' >/etc/apt/apt.conf.d/80retries
 RUN groupadd --system  opensim \
     && useradd --system --gid opensim --home-dir /var/lib/opensim --create-home --shell /bin/bash opensim
 
+# Config, data and logs belong to the volumes; the cache can be a tmpfs
+VOLUME ["/etc/opensim", "/var/lib/opensim", "/var/log/opensim"]
+
+RUN chown -R opensim:opensim /etc/opensim /var/lib/opensim /var/log/opensim
+
 # The packages depend on "a database server, or PostgreSQL, or SQLite" and on
 # "a MySQL client": what is installed first satisfies them, so no server is added
 # (the database is another container, or another machine).
 # The Magiiic repository gives the packages of the family.
-
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

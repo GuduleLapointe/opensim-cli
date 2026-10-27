@@ -36,21 +36,23 @@ if [ -z "$1" ]; then
 fi
 
 for key in $*; do
-	grep "^$key\b" $TMP.images |
-		while read key image os_id os_version; do
-			case $key in
-			debian-13 | ubuntu-26.04)
-				label=["latest","$os_version"]
-				;;
-			*)
-				label=["$os_version"]
-				;;
-			esac
+	grep "^$key\b" $TMP.images | while read key image os_id os_version; do
+		case $key in
+		debian-13 | ubuntu-26.04)
+			label=["latest","$os_version"]
+			;;
+		*)
+			label=["$os_version"]
+			;;
+		esac
+		args+=("--network host")
+		args+=("--from=$image")
+		args+=("--isolation=rootless")
+		args+=("--tag opensimhelpers.dev/charm/opensim-$key")
+		args+=("--label $label")
 
-			say building $key image from $image
-			podman build $SHAREDIR/podman/debian --network host \
-				--from $image \
-				--tag "opensimhelpers.dev/charm/opensim-$key" \
-				--label $label
-		done
+		say building $key image from $image
+		say build $SHAREDIR/podman/debian $args
+		podman build $SHAREDIR/podman/debian $args
+	done
 done
