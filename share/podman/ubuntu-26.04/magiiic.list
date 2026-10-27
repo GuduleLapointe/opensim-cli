@@ -1,0 +1,2 @@
+deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable
+deb [trusted=yes] https://apt.magiiic.com charm-tests dev
