@@ -59,15 +59,15 @@ mount_points=(
 	/var/lib/opensim
 	/var/log/opensim
 )
+remote=${CONTAINER_CONNECTION:+ssh ${CONTAINER_CONNECTION}}
 for mount_point in ${mount_points[@]}; do
 	echo mount_point $mount_point
-	src=$(realpath $mount_point)
+	src=$($remote realpath $mount_point)
 	args+=("--volume ${src}:${mount_point}")
 	# args+=("--mount=type=bind,source=$src,destination=$mount_point")
 	# args+=("--mount type=bind,src=$src,dst=$mount_point,bind-propagation=shared")
 done
 
-remote=${CONTAINER_CONNECTION:+ssh ${CONTAINER_CONNECTION}}
 container_uid=134
 container_gid=143
 host_uid=${CONTAINER_USER:-$(id -u $container_uid 2>/dev/null || id -u)}
