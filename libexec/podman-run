@@ -34,7 +34,42 @@ if [ -z "$1" ]; then
 	cat $TMP.images | sed "s/^/  /"
 	exit
 fi
+image_id=opensimhelpers.dev/charm/opensim-$1
+shift
+args=(
+	-d
+	-i
+)
+if [ -n "${1:-}" ]; then
+	args+=("--name $1")
+	args+=("--hostname $1")
 
-container_id=$(podman run -d -i -P opensimhelpers.dev/charm/opensim-debian-13)
-podman container inspect $container_id | grep '"Name":' | head -1 | sed 's/"//g; s/,$//; s/^ *//'
-echo "Id: $container_id"
+	say getting ports for $*
+	args+=($(opensim ports --publish $*))
+else
+	args+=("-P")
+fi
+mount_points=(
+	/etc/opensim
+	/var/lib/opensim
+)
+for mount_point in ${mount_points[@]}; do
+	echo mount_point $mount_point
+	args+=("--volume $mount_point:$mount_point")
+	# args+=("--mount=type=bind,source=$mount_point,destination=$mount_point")
+done
+
+env | egrep "^(APT_SOURCE|OPENSIM_DB|DEFAULT_)" >$TMP.env
+echo "CONTAINER_HOST=$(hostname -f)" >>$TMP.env
+echo "CONTAINER_NAME=$(hostname -s)" >>$TMP.env
+args+=("--env-file $TMP.env")
+
+echo podman run ${args[@]} $image_id
+
+read -p "start container (Y/n)? " start
+start=${start:-y}
+if [ "$start" = "y" ]; then
+	container_id=$(podman run ${args[@]} $image_id)
+	podman container inspect $container_id | grep '"Name":' | head -1 | sed 's/"//g; s/,$//; s/^ *//'
+	echo "Id: $container_id"
+fi

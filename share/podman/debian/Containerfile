@@ -7,6 +7,10 @@ ARG BASE=docker.io/library/ubuntu:26.04
 FROM ${BASE}
 
 ENV DEBIAN_FRONTEND=noninteractive
+
+# Config, data and logs belong to the volumes; the cache can be a tmpfs
+VOLUME ["/etc/opensim", "/var/lib/opensim", "/var/log/opensim"]
+
 # A mirror that does not answer once is asked again
 RUN echo 'Acquire::Retries "5";' >/etc/apt/apt.conf.d/80retries
 
@@ -45,9 +49,6 @@ RUN curl -fsSL https://apt.magiiic.com/magiiic-packaging.asc \
 RUN opensim install-dotnet
 
 WORKDIR /var/lib/opensim
-
-# Config, data and logs belong to the volumes; the cache can be a tmpfs
-VOLUME ["/etc/opensim", "/var/lib/opensim", "/var/log/opensim"]
 
 # EXPOSE 22 80 443 8000-8009 9000 9001/udp
 
