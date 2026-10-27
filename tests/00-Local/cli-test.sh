@@ -26,6 +26,25 @@ function tear_down() {
     rm -rf "$WORK"
 }
 
+function make_test_grid() {
+    mkdir -p "$WORK/etc/opensim/grids/tender_tern/sims"
+    cat >"$WORK/etc/opensim/grids/tender_tern/Robust.ini" <<'INI'
+[Const]
+BaseURL = "http://127.0.0.1:8002"
+[GridInfoService]
+gridname = "Tender Tern"
+INI
+    cat >"$WORK/etc/opensim/grids/tender_tern/sims/tender_tern.welcome.ini" <<'INI'
+[Network]
+http_listener_port = 9000
+console_port = 9004
+INI
+    cat >"$WORK/etc/opensim/grids/tender_tern/tender_tern.conf" <<'INI'
+[Grid]
+Center = 8002,8002
+INI
+}
+
 function test_opensim_without_command_shows_usage() {
     local output
     output=$("$OPENSIM" 2>&1)
@@ -57,4 +76,92 @@ INI
     assert_exec "'$OPENSIM' console tender_tern.welcome </dev/null" --stderr-contains 'Connection to tender_tern.welcome'
     kill "$CONSOLE_PID" 2>/dev/null || true
     CONSOLE_PID=
+}
+
+function test_next_port_skips_ports_in_configuration() {
+    cat >"$WORK/etc/opensim/opensim.d/port-check.ini" <<'INI'
+[Network]
+http_listener_port = 58130
+INI
+    assert_exec "'$OPENSIM' next port 58130 1" --stdout '58131'
+}
+
+function test_next_location_uses_grid_center() {
+    make_test_grid
+    assert_exec "'$OPENSIM' next tender_tern location" --stdout '8002,8002'
+}
+
+function test_web_reports_missing_grid() {
+    assert_exec "'$OPENSIM' web" --exit 2 --stderr-contains 'no local grid'
+}
+
+function test_web_shows_local_grid_services() {
+    make_test_grid
+    assert_exec "'$OPENSIM' web" --stdout-contains 'Grid:      tender_tern'
+}
+
+function test_web_prints_caddy_snippet() {
+    make_test_grid
+    assert_exec "'$OPENSIM' web tender_tern snippet caddy" --stdout-contains 'php_fastcgi'
+}
+
+function test_ban_reports_missing_grid() {
+    assert_exec "'$OPENSIM' ban Resident" --exit 2 --stderr-contains 'no local grid'
+}
+
+function test_ban_requires_account_database() {
+    make_test_grid
+    assert_exec "'$OPENSIM' ban tender_tern Resident" --exit 1 --stderr-contains 'no account database'
+}
+
+function test_save_requires_archive_kind() {
+    assert_exec "'$OPENSIM' save" --exit 2 --stderr-contains 'usage: opensim save iar|oar'
+}
+
+function test_save_iar_reports_missing_required_arguments() {
+    assert_exec "'$OPENSIM' save iar" --exit 2 --stderr-contains 'missing argument'
+}
+
+function test_backup_reports_missing_grid() {
+    assert_exec "'$OPENSIM' backup" --exit 1 --stderr-contains 'no grid here'
+}
+
+function test_backup_writes_grid_archive() {
+    local archive
+    make_test_grid
+    assert_exec "'$OPENSIM' backup tender_tern --output '$WORK/backups'" --stdout-contains "$WORK/backups/tender_tern-"
+    archive=$(find "$WORK/backups" -maxdepth 1 -name 'tender_tern-*.tar.gz' -print -quit)
+    assert_file_exists "$archive"
+}
+
+function test_rest_delegates_to_rest_cli() {
+    assert_exec "'$OPENSIM' rest --help" --stdout-contains 'Run the opensim-rest-php console client'
+}
+
+function test_enable_links_simulator_configuration() {
+    make_test_grid
+    assert_exec "'$OPENSIM' enable tender_tern.welcome" --stdout-contains 'simulator tender_tern.welcome enabled'
+    assert_file_exists "$WORK/etc/opensim/opensim.d/tender_tern.welcome.ini"
+}
+
+function test_disable_unlinks_simulator_configuration() {
+    make_test_grid
+    ln -s "$WORK/etc/opensim/grids/tender_tern/sims/tender_tern.welcome.ini" "$WORK/etc/opensim/opensim.d/tender_tern.welcome.ini"
+    assert_exec "'$OPENSIM' disable tender_tern.welcome" --stdout-contains 'simulator tender_tern.welcome disabled'
+    assert_file_not_exists "$WORK/etc/opensim/opensim.d/tender_tern.welcome.ini"
+}
+
+function test_enable_applies_grid_feature_preset() {
+    make_test_grid
+    mkdir -p "$WORK/etc/opensim/presets/profiles"
+    cat >"$WORK/etc/opensim/presets/profiles/option.conf" <<'INI'
+[Option]
+Label = Profiles
+INI
+    cat >"$WORK/etc/opensim/presets/profiles/OpenSim.ini" <<'INI'
+[Startup]
+TestProfileSetting = enabled
+INI
+    assert_exec "'$OPENSIM' enable tender_tern profiles" --stdout-contains 'profiles enabled for tender_tern'
+    assert_file_contains "$WORK/etc/opensim/grids/tender_tern/sims/tender_tern.welcome.ini" 'TestProfileSetting = enabled'
 }

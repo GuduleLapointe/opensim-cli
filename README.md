@@ -46,10 +46,10 @@ To run the installer on an SSH server, download it locally first, then run `./qu
 - [x] status
 - [x] start [--simulators] [target...]
 - [x] stop|restart [--simulators] [now] [target...]
-- [ ] enable|disable <instance...>
-- [ ] enable|disable <grid> search [<url prefix>]
-- [ ] enable|disable <grid> economy [beta|gloebit] [<url prefix>]
-- [ ] enable|disable <grid> profiles
+- [x] enable|disable <instance...>
+- [x] enable|disable <grid> search [<url prefix>]
+- [x] enable|disable <grid> economy [beta|gloebit] [<url prefix>]
+- [x] enable|disable <grid> profiles
 - [x] console|screen <instance>
 - [ ] command <instance> <text>|-
 - [x] ports [instance...] [--ufw] [--private-address ADDRESS]
@@ -72,25 +72,25 @@ opensim setup --apply setup.json
 This preserves the region's UUID and original settings and leaves the simulator disabled. Database/file restoration and source shutdown come before enabling it.
 
 - [ ] import [grid] FILE [--grid] [--simulator] [--users] [--apply]
-- [ ] web [grid] [show|check]
-- [ ] web [grid] snippet <caddy|nginx|apache>
-- [ ] next <grid> location [X,Y] [COUNT] [-e X,Y]
-- [ ] ban [grid] <name|uuid>... [--output DIR]
+- [x] web [grid] [show|check]
+- [x] web [grid] snippet <caddy|nginx|apache>
+- [x] next <grid> location [X,Y] [COUNT] [-e X,Y]
+- [x] ban [grid] <name|uuid>... [--output DIR]
 
 #### Archives and backups
 
-- [ ] save iar [GRID [SIM]] [options] [--keep N] FIRST LAST PATH [PASSWORD] [FILE]
-- [ ] load iar [GRID [SIM]] [-m|--merge] FIRST LAST PATH [PASSWORD] [FILE]
-- [ ] save oar [GRID [REGION|SIM]] [options] [--keep N] [FILE]
-- [ ] load oar [GRID [REGION|SIM]] [--merge] [options] [FILE]
-- [ ] backup [GRID [SIM]] [--logs] [--archives] [--output DIR] [--keep N]
+- [x] save iar [GRID [SIM]] [options] [--keep N] FIRST LAST PATH [PASSWORD] [FILE]
+- [x] load iar [GRID [SIM]] [-m|--merge] FIRST LAST PATH [PASSWORD] [FILE]
+- [x] save oar [GRID [REGION|SIM]] [options] [--keep N] [FILE]
+- [x] load oar [GRID [SIM|REGION]] [--merge] [options] [FILE]
+- [x] backup [GRID [SIM]] [--logs] [--archives] [--output DIR] [--keep N]
 
 #### This machine
 
-- [ ] next port [-e PORT] [MIN] [COUNT]
+- [x] next port [-e PORT] [MIN] [COUNT]
 - [ ] profile list|add|default|remove
 - [ ] oar pack|info|check|unpack
-- [ ] rest --url http://HOST:PORT --user USER (-- <command> | - | --repl)
+- [x] rest --url http://HOST:PORT --user USER (-- <command> | - | --repl)
 - [x] install-dotnet install the .NET runtime OpenSim needs (as root)
 
 ### Builds

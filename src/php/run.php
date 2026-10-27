@@ -26,6 +26,7 @@ use OpenSim\Provisioning\UiInterface;
 use OpenSim\Runtime\DotnetInstaller;
 use OpenSim\Runtime\PendingReporterInterface;
 use OpenSim\Runtime\Status;
+use OpenSimCli\Commands;
 
 foreach ([__DIR__ . '/../../vendor/autoload.php', __DIR__ . '/../../../../autoload.php'] as $autoload) {
     if (is_file($autoload)) {
@@ -219,6 +220,8 @@ $words = array_values(array_filter($args, static fn(string $a): bool => $a === '
 $engine = OpenSim::environment(
     new CliReporter(in_array(strtolower((string) getenv('DEBUG')), ['yes', 'true', '1'], true)),
 );
+require_once __DIR__ . '/commands.php';
+require_once __DIR__ . '/BanPlan.php';
 $now = ($words[0] ?? '') === 'now';
 $targets = $now ? array_slice($words, 1) : $words;
 
@@ -235,6 +238,22 @@ switch ($command) {
         exit(outcome(OpenSim::stop($targets ?: null, $now, $engine, $simulators)));
     case 'restart':
         exit(outcome(OpenSim::restart($targets ?: null, $now, $engine, $simulators)));
+    case 'enable':
+    case 'disable':
+        exit(Commands::toggle($command, $engine, $args));
+    case 'web':
+        exit(Commands::web($engine, $args));
+    case 'next':
+        exit(Commands::next($engine, $args));
+    case 'save':
+    case 'load':
+        exit(Commands::archives($command, $engine, $args));
+    case 'backup':
+        exit(Commands::backup($engine, $args));
+    case 'ban':
+        exit(Commands::ban($engine, $args));
+    case 'rest':
+        exit(Commands::rest($args));
     case 'console':
         $name = $words[0] ?? '';
         $instance = $name === '' ? null : OpenSim::instance($engine, $name);

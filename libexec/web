@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# opensim web: show, check, or print web-server snippets for a grid.
+
+USAGE="opensim web [GRID] [show|check|snippet caddy|nginx|apache] [options]"
+HELP="Show grid web services, check their URLs, or print a server snippet. Options: --docroot DIR, --socket PATH."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run web "$@"

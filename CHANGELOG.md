@@ -2,6 +2,8 @@
 
 ### Unreleased
 
+- feature (cli): restore console, grid, web and archive commands
+- feature (cli): add backups and reviewable user ban plans
 - magicoli/build-tools 0.1.9 => 0.1.11
 - magicoli/container-tools dev-master 0ed55d9 => 0.1.0-alpha.2
 

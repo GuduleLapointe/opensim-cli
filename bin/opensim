@@ -5,7 +5,7 @@ set -e
 here=$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")
 libexec=$(cd "$here/../libexec" && pwd)
 
-COMMANDOPTS=setup,status,ports,start,stop,restart,console,screen,install-dotnet
+COMMANDOPTS=setup,status,ports,start,stop,restart,console,screen,enable,disable,web,next,ban,save,load,backup,rest,install-dotnet
 HELP=$(
 	cat <<USAGE
 
@@ -16,6 +16,13 @@ HELP=$(
   stop            stop grids and simulators
   restart         stop, then start grids and simulators
   console|screen  attach to the console of a running instance
+  enable|disable  enable or disable instances and grid features
+  web             inspect grid services and print web-server snippets
+  next            find free ports or region locations
+  ban             prepare user cleanup and estate ban files
+  save|load       save or restore IAR and OAR archives
+  backup          back up grid configuration, data, and databases
+  rest            use the remote OpenSim console client
   install-dotnet  install the .NET runtime OpenSimulator needs
 USAGE
 )

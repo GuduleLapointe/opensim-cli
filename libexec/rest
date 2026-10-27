@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# opensim rest: use the remote OpenSim console client.
+
+USAGE="opensim rest --url http://HOST:PORT --user USER (-- <command> | - | --repl)"
+HELP="Run the opensim-rest-php console client. The password is read from OPENSIM_REST_PASSWORD."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run rest "$@"

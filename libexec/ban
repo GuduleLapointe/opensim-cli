@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# opensim ban: prepare reviewable user cleanup and estate ban SQL.
+
+USAGE="opensim ban [GRID] NAME|UUID... [--output DIR]"
+HELP="Prepare files with user data and SQL statements; databases are not changed."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run ban "$@"

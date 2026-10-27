@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# opensim next: find available ports or grid locations.
+
+USAGE="opensim next port [MIN] [COUNT] [-e PORT] | <grid> location [X,Y] [COUNT] [-e X,Y]"
+HELP="Find free ports or region locations using the same rules as setup. Repeat -e to exclude values."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run next "$@"

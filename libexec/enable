@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# opensim enable: enable a grid or simulator, or a grid feature.
+
+USAGE="opensim enable [-hqv] <instance...> | <grid> <search|economy|profiles> [variant] [url prefix]"
+HELP="Enable a grid or simulator, or a feature of a grid. An enabled instance starts with the other instances."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run enable "$@"

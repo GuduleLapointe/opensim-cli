@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# opensim disable: disable a grid or simulator, or a grid feature.
+
+USAGE="opensim disable [-hqv] <instance...> | <grid> <search|economy|profiles> [variant]"
+HELP="Disable a grid or simulator, or a feature of a grid. Disabling an instance does not stop it."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run disable "$@"

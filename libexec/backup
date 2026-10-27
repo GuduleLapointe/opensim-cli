@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# opensim backup: save grid configuration, data, and databases.
+
+USAGE="opensim backup [GRID [SIM]] [--logs] [--archives] [--output DIR] [--keep N]"
+HELP="Back up grid or simulator configuration, data and databases. --logs includes logs; --archives includes user archives."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run backup "$@"

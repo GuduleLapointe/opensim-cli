@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# opensim load: load an inventory or region archive through a running simulator.
+
+USAGE="opensim load iar|oar [GRID [SIM|REGION]] [options] ..."
+HELP="Load an inventory (IAR) or region (OAR) archive through a running simulator console."
+
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
+
+run load "$@"
