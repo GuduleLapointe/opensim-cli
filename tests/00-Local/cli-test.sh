@@ -52,6 +52,27 @@ function test_opensim_without_command_shows_usage() {
     assert_contains "setup" "$output"
 }
 
+function test_layout_env_outputs_sourceable_system_and_current_identities() {
+    local api="$WORK/opensim-api"
+    cat >"$api" <<'API'
+#!/usr/bin/env bash
+[[ "$1 $2" == "GET /layout" ]] || exit 2
+cat <<'JSON'
+{"data":{"type":"layout","attributes":{"systemUser":"opensim","systemUid":123,"systemGroup":"opensim","systemGid":456,"currentUser":"magic","currentUid":501,"currentGroup":"staff","currentGid":20,"etcRoot":"/etc/opensim","varRoot":"/var/lib/opensim","logsRoot":"/var/log/opensim"}}}
+JSON
+API
+    chmod +x "$api"
+    assert_exec "OPENSIM_API='$api' '$OPENSIM' --layout --format=env" \
+        --stdout-contains "export OPENSIM_SYSTEM_USER='opensim'" \
+        --stdout-contains "export OPENSIM_SYSTEM_UID='123'" \
+        --stdout-contains "export OPENSIM_CURRENT_USER='magic'" \
+        --stdout-contains "export OPENSIM_ETC_ROOT='/etc/opensim'"
+}
+
+function test_layout_rejects_unsupported_format() {
+    assert_exec "'$OPENSIM' --layout --format=json" --exit 1 --stderr-contains '--layout requires --format=env'
+}
+
 function test_opensim_status_works() {
     assert_exec "'$OPENSIM' status"
 }

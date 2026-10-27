@@ -24,6 +24,9 @@ HELP=$(
   backup          back up grid configuration, data, and databases
   rest            use the remote OpenSim console client
   install-dotnet  install the .NET runtime OpenSimulator needs
+
+System information
+  --layout --format=env  print the resolved layout and identities as shell exports
 USAGE
 )
 # Command help uses the command's own usage, before dispatch can prepare a setup or elevate privileges.
@@ -36,6 +39,39 @@ export PRESERVE_ENV=PATH,OPENSIM_API,CONTAINER_CONNECTION,DEFAULT_OWNER_NAME,DEF
 
 # $COMMAND and other runtime values are detected by lib/common
 . "$here/../src/lib/common" || die could not source opensim common helpers
+
+if [[ "${1:-}" == --layout ]]; then
+	shift
+	format=
+	while (($#)); do
+		case "$1" in
+			--format)
+				(($# > 1)) || die "--format requires a value"
+				format=$2
+				shift 2
+				;;
+			--format=*) format=${1#*=}; shift ;;
+			*) die "unexpected argument for --layout: $1" ;;
+		esac
+	done
+	[[ "$format" == env ]] || die "--layout requires --format=env"
+	layout=$(engine GET /layout) || die "could not read the OpenSim system layout"
+	jq -er '
+		.data | select(.type == "layout") | .attributes |
+		[
+			["systemUser", "OPENSIM_SYSTEM_USER"], ["systemUid", "OPENSIM_SYSTEM_UID"],
+			["systemGroup", "OPENSIM_SYSTEM_GROUP"], ["systemGid", "OPENSIM_SYSTEM_GID"],
+			["currentUser", "OPENSIM_CURRENT_USER"], ["currentUid", "OPENSIM_CURRENT_UID"],
+			["currentGroup", "OPENSIM_CURRENT_GROUP"], ["currentGid", "OPENSIM_CURRENT_GID"],
+			["etcRoot", "OPENSIM_ETC_ROOT"], ["varRoot", "OPENSIM_VAR_ROOT"], ["logsRoot", "OPENSIM_LOGS_ROOT"]
+		] as $fields |
+		. as $attributes |
+		select(all($fields[]; .[0] as $key | $attributes | has($key) and .[$key] != null)) |
+		$fields[] as [$key, $variable] |
+		"export \($variable)=\(.[$key] | tostring | @sh)"
+	' <<<"$layout" || die "the OpenSim layout response is incomplete"
+	exit 0
+fi
 
 system_user=$(run system-user 2>/dev/null)
 debug_log system_user $system_user
