@@ -47,7 +47,7 @@ for key in $*; do
 		esac
 		args+=("--network host")
 		args+=("--from=$image")
-		args+=("--isolation=rootless")
+		# args+=("--isolation=rootless")
 		args+=("--tag opensimhelpers.dev/charm/opensim-$key")
 		args+=("--label $label")
 
