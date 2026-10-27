@@ -28,11 +28,6 @@ function test_a_command_runs_as_the_system_user() {
 }
 
 function test_without_sudo_rights_it_stops_at_once_and_says_so() {
-    # On macOS, setup is not implemented, so this test is skipped
-    if [[ "$(uname)" == Darwin ]]; then
-        bashunit::skip "setup not implemented on macOS"
-        return
-    fi
     printf '#!/bin/sh\necho "sudo: access denied for nobody" >&2\nexit 1\n' >"$WORK/bin/sudo"
     chmod +x "$WORK/bin/sudo"
 	assert_exec "PATH='$WORK/bin:$PATH' '$OPENSIM' setup 2>&1" \
@@ -41,11 +36,9 @@ function test_without_sudo_rights_it_stops_at_once_and_says_so() {
 }
 
 function test_a_machine_without_the_layout_gets_it_from_the_engine_through_sudo() {
-    # On macOS, setup is not implemented, so this test is skipped
-    if [[ "$(uname)" == Darwin ]]; then
-        bashunit::skip "setup not implemented on macOS"
-        return
-    fi
+    # Exercise the Linux system-layout branch, regardless of the test host.
+    printf '#!/bin/sh\nprintf "Linux\\n"\n' >"$WORK/bin/uname"
+    chmod +x "$WORK/bin/uname"
     printf '#!/bin/sh\necho "sudo $*"\n' >"$WORK/bin/sudo"
     chmod +x "$WORK/bin/sudo"
     local output real_php
