@@ -15,7 +15,7 @@
 - Dependencies are composer's (or the packages' links in `vendor/magicoli/`): nothing is searched in the PATH or beside the project. `OPENSIM_API` names another engine, which is how the tests use a stand-in.
 - Scripts source `src/lib/common` (it sources bash-tools, reads `~/.opensimrc` through the engine's `lib/rc-helpers`) and use the functions of bash-tools (`die`, `require`, `debug`...).
 - All the questions of a setup are one form, never one question at a time. A label is the shortest word that says it.
-- Dependencies stay `bash`, `jq`, `php-cli`, `podman-compose`, bash-tools and the engine.
+- Runtime requirements are listed in Composer and the Debian package metadata.
 
 ## Tests
 
@@ -28,11 +28,7 @@ composer test
 For an existing clone, initialize Bashunit with
 `git submodule update --init --recursive`. The submodule is pinned to release
 0.50.1. `composer test` runs Bashunit's default `tests/` discovery. The numeric
-test directories put local application tests and the package build before the
-`Deploy` directory; the cleanup test runs last. Run only deployment
-tests with
-`./lib/bashunit/bashunit tests/20-Deploy`; that targeted run leaves its
-containers available for inspection.
+test directories put local application tests before the package build.
 
 The person is a file of answers (`FE_INPUT_FD`); dialog is a fake that logs its arguments and answers from a file, as in the kit.
 

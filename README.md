@@ -18,8 +18,6 @@ See `./quick-install.sh --help` for other options.
 
 To run the installer on an SSH server, download it locally first, then run `./quick-install.sh --remote root@server --setup`.
 
-For a Podman install, run the downloaded script as a file. It builds a cached systemd server image from Ubuntu 26.04 and creates a persistent container by default; choose another image with `--image` or `OPENSIM_CONTAINER_IMAGE`. Podman uses `CONTAINER_CONNECTION` if set, or `--connection=local` to force the local engine. Run `opensim setup` from the container terminal after installation.
-
 ## Requirements
 
 - Bash 5+
@@ -27,7 +25,6 @@ For a Podman install, run the downloaded script as a file. It builds a cached sy
 - `jq`
 - MySQL or MariaDB server and client
 - Root access or `sudo`
-- `container-tools` and Podman (Podman installs); `podman-compose` (Compose support)
 - `ssh` and `scp` (SSH installs)
 - `dialog` (optional; plain prompts are supported)
 
@@ -38,18 +35,9 @@ For a Podman install, run the downloaded script as a file. It builds a cached sy
 - [x] apt official repo (linux, stable by default)
 - [x] from local git clone
 - [x] from local deb packages
-- [x] multi-platform testing through `container-tools` on Podman
-- [ ] install as podman container
-    - [x] create, start, stop and destroy preconfigured containers
-    - [ ] use a single image with passed specific settings and mounts
-    - [ ] map required tcp and udp ports (prerequisite: enable `opensim ports`)
-    - [ ] hot change of required tcp and udp ports
-    - [ ] enable terminal maintenance through ssh
-- [ ] install as docker container
 - [x] remote shortcut to install on a distant server
 - [ ] advanced/expert install
 - [ ] support Homebrew (macos)
-- [ ] support [Alpine container](https://hub.docker.com/r/soupbowl/opensimulator)
 
 ### Command-line interface (CLI): `bin/opensim`
 
@@ -64,11 +52,10 @@ For a Podman install, run the downloaded script as a file. It builds a cached sy
 - [ ] enable|disable <grid> profiles
 - [x] console|screen <instance>
 - [ ] command <instance> <text>|-
-- [x] ports [instance...] [--publish|--ufw] [--private-address ADDRESS]
+- [x] ports [instance...] [--ufw] [--private-address ADDRESS]
 
-`opensim ports` lists configured listeners and their TCP/UDP protocol. `--publish`
-prints Podman/Docker mappings; `--ufw` prints public firewall rules and comments
-for private/console ports. Private mappings bind to `127.0.0.1` unless overridden.
+`opensim ports` lists configured listeners and their TCP/UDP protocol. `--ufw`
+prints public firewall rules and comments for private/console ports.
 
 #### Grids
 
@@ -76,8 +63,6 @@ for private/console ports. Private mappings bind to `127.0.0.1` unless overridde
 
 `opensim setup --prepare setup.json` collects answers without applying the setup
 and saves them in a private file. Use `--config setup.json` to prefill a later setup or `--apply setup.json` to apply the confirmed configuration without further questions. Preparation and application require an engine that supports these modes.
-
-`quick-install.sh --podman` uses this questionnaire before creating the target container. From a downloaded script, it installs the local CLI, engine and container tools first; a source checkout reuses its Composer dependencies. The proposed grid hostname comes from the selected Podman server; an explicit `login_uri` in the setup configuration takes precedence. Cancelling the questionnaire creates no target container. Add `--setup` to apply the confirmed settings after installation without repeating the questionnaire. Use `--region-config /path/to/Region.ini` to stage an existing region; its database and files must still be restored before activation.
 
 To stage an existing region without a replacement region or database:
 

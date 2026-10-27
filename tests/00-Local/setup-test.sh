@@ -555,11 +555,11 @@ function test_wait_warning_is_displayed() {
 
 function test_setup_passes_destination_hostname_and_keeps_edited_login_uri() {
     SETUP_CONFIG=$WORK/prefill.json
-    printf '{"hostname":"podman.example.test"}\n' >"$SETUP_CONFIG"
+    printf '{"hostname":"grid.example.test"}\n' >"$SETUP_CONFIG"
     local form
-    form=$(jq '.data.attributes.fields = [{name:"login_uri",label:"Login URI",value:"podman.example.test:8002",secret:false}]' <<<"$FORM")
+    form=$(jq '.data.attributes.fields = [{name:"login_uri",label:"Login URI",value:"grid.example.test:8002",secret:false}]' <<<"$FORM")
     engine_says "$MENU" "$form" "$QUIT"
     setup_with 1 1 grid.example.test:18302 '' >/dev/null
-    assert_equals podman.example.test "$(request 2 .answers.hostname)"
+    assert_equals grid.example.test "$(request 2 .answers.hostname)"
     assert_equals grid.example.test:18302 "$(request 3 .answers.login_uri)"
 }

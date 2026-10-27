@@ -4,8 +4,7 @@
 # Run with: composer test
 #
 # These tests confirm the current state:
-# - Locally (macOS): ./bin/opensim commands work
-# - Deploy containers are tested separately after the local tests and package build
+# - Locally: ./bin/opensim commands work
 
 OPENSIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/bin/opensim"
 

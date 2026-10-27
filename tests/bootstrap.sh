@@ -1,14 +1,6 @@
 #!/usr/bin/env bash
-# The environment of the tests, sourced by every script of tests/ that starts a container (and by bashunit, which sources the
-# bootstrap of a tests folder itself: this file is plain bash, safe in strict mode, and changes nothing but the environment).
-# Nothing specific to a machine is written in the tests: what is, is in tests/.env (see tests/.env.example), which is made from the
-# example the first time.
-#
-#   CONTAINER_CONNECTION  the Podman connection every container-tools operation uses; it may target a remote host.
-#   MEMORY                optional memory limit for a container; unset means no limit
-#
-# The project's rc-helpers read the project .env and ~/.opensimrc; tests/.env then adds test-specific defaults. What the caller
-# already set (MEMORY=1g tests/Packaging/run) is kept.
+# The test environment, also sourced by Bashunit in strict mode. It loads the shared user and project configuration, then
+# tests/.env for test-only overrides. Caller-provided environment variables keep precedence.
 #
 # Usage: source tests/bootstrap.sh   (from anywhere)
 
@@ -30,7 +22,7 @@ done < <(env)
 
 if [[ ! -f "$__tests_root/tests/.env" && -f "$__tests_root/tests/.env.example" ]]; then
 	cp "$__tests_root/tests/.env.example" "$__tests_root/tests/.env"
-	echo "tests: tests/.env made from tests/.env.example, edit it to run the containers on another machine" >&2
+	echo "tests: tests/.env made from tests/.env.example; edit it for local test overrides" >&2
 fi
 
 # Let the shared helper load ~/.opensimrc and project .env with its standard rules, then add test-only overrides.
@@ -62,11 +54,6 @@ for __tests_name in "${!__tests_caller_env[@]}"; do
 	export "$__tests_name=${__tests_caller_env[$__tests_name]}"
 done
 
-if [[ -n "${CONTAINER_CONNECTION:-}" ]]; then
-	export CONTAINER_CONNECTION
-	[[ -n "${__tests_said:-}" ]] || echo "tests: podman connection: $CONTAINER_CONNECTION" >&2
-	export __tests_said=1
-fi
 unset -f __tests_source_env
 unset __tests_root __tests_name __tests_value __tests_declaration __tests_rc_helpers __tests_caller_env
 true
