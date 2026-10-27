@@ -23,6 +23,9 @@ SHAREDIR=$(cd $BASEDIR/share 2>/dev/null ||
 log SHAREDIR $SHAREDIR
 log Images $SHAREDIR/podman/images
 
+remote=${CONTAINER_CONNECTION:+ssh ${CONTAINER_CONNECTION}}
+log remote $remote
+
 if ! cut -d"#" -f 1 $SHAREDIR/podman/images | grep "." >$TMP.images; then
 	log empty images list $SHAREDIR/podman/images
 	exit 1
@@ -35,6 +38,13 @@ if [ -z "$1" ]; then
 	exit
 fi
 
+OPENSIM_USER=${OPENSIM_USER:-opensim}
+OPENSIM_GROUP=${OPENSIM_GROUP:-opensim}
+OPENSIM_UID=${OPENSIM_UID:-8002}
+OPENSIM_GID=${OPENSIM_GID:-8002}
+PODMAN_USER=${PODMAN_USER:-${OPENSIM_USER}}
+PODMAN_GROUP=${PODMAN_GROUP:-${OPENSIM_GROUP}}
+
 for key in $*; do
 	grep "^$key\b" $TMP.images | while read key image os_id os_version; do
 		case $key in
@@ -46,6 +56,10 @@ for key in $*; do
 			;;
 		esac
 		args=(
+			--build-arg OPENSIM_USER=${OPENSIM_USER}
+			--build-arg OPENSIM_UID=${OPENSIM_UID}
+			--build-arg OPENSIM_GROUP=${OPENSIM_GROUP}
+			--build-arg OPENSIM_GID=${OPENSIM_GID}
 			--network host
 			--from $image
 			--isolation rootless

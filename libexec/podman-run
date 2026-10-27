@@ -68,10 +68,16 @@ for mount_point in ${mount_points[@]}; do
 	# args+=("--mount type=bind,src=$src,dst=$mount_point,bind-propagation=shared")
 done
 
-container_uid=134
-container_gid=143
+# container_uid=134
+# container_gid=143
+# OPENSIM_USER=${OPENSIM_USER:-opensim}
+# OPENSIM_GROUP=${OPENSIM_GROUP:-opensim}
+container_uid=${OPENSIM_UID:-8002}
+container_gid=${OPENSIM_GID:-8002}
+
 host_uid=${CONTAINER_USER:-$(id -u $container_uid 2>/dev/null || id -u)}
 host_gid=${CONTAINER_GROUP:-$(id -g $container_uid 2>/dev/null || id -u)}
+
 if [ -n "$CONTAINER_CONNECTION" ]; then
 	log get host user on $CONTAINER_CONNECTION
 	ssh $CONTAINER_CONNECTION "echo host_uid=\$(id -u $container_uid 2>/dev/null || id -u);

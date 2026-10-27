@@ -34,9 +34,10 @@ RUN curl -fsSL https://apt.magiiic.com/magiiic-packaging.asc \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         opensim-cli \
-    && opensim install-dotnet \
-    && mkdir -p /etc/opensim /var/lib/opensim /var/log/opensim \
-    && chown opensim:opensim /etc/opensim /var/lib/opensim /var/log/opensim
+    && opensim install-dotnet
+    # \
+    # && mkdir -p /etc/opensim /var/lib/opensim /var/log/opensim \
+    # && chown opensim:opensim /etc/opensim /var/lib/opensim /var/log/opensim
     # && /usr/share/opensim-cli/quick-install.sh
 # Install dotnet with opensim CLI to allow Debian fallback
 
