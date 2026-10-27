@@ -143,8 +143,15 @@ for repository in "${APT_REPOSITORIES[@]}"; do
 done
 # What the tools need on a machine that does not have the packages (a clone): the same as the package opensim-tools
 PHP_PACKAGES=(php-cli php-curl php-intl php-mbstring php-mysql php-xml)
-OPENSIM_PACKAGES=(opensim-cli opensim-helpers)
-OPENSIM_PACKAGES+=(opensim-0.9.3.0 opensim-0.9.3.0-gloebit opensim-0.9.3.0-opensimsearch)
+OPENSIM_PACKAGES=(
+	opensim-cli opensim-helpers
+	opensim-0.9.3.0 opensim-0.9.3.0-gloebit opensim-0.9.3.0-opensimsearch
+	libsqlite3-0 mariadb-server
+	php-cli php-curl php-intl php-mbstring php-mysql php-xml
+	composer git unzip screen
+	openssh-server
+	libgdiplus
+)
 if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
 	OPENSIM_PACKAGES+=(opensim-unstable)
 fi
