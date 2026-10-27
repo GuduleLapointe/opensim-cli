@@ -43,7 +43,10 @@ apt_source_uri_index() {
 	read -r -a fields <<<"$source"
 	for ((index = 1; index < ${#fields[@]}; index++)); do
 		case "${fields[$index]}" in
-			http://* | https://* | ftp://* | file:* | cdrom:*) printf '%s\n' "$index"; return 0 ;;
+		http://* | https://* | ftp://* | file:* | cdrom:*)
+			printf '%s\n' "$index"
+			return 0
+			;;
 		esac
 	done
 	return 1
@@ -124,8 +127,8 @@ if [[ -n "${APT_SOURCE:-}" ]]; then
 	if [[ -n "${APT_SOURCE_TESTS:-}" ]]; then APT_REPOSITORIES+=("$APT_SOURCE_TESTS"); fi
 else
 	if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
-		APT_REPOSITORIES+=("deb [trusted=yes] https://apt.magiiic.com charm-tests $OPENSIM_KIT_APT_COMPONENT")
 		APT_REPOSITORIES+=("deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com charm stable unstable")
+		APT_REPOSITORIES+=("deb [trusted=yes] https://apt.magiiic.com charm-tests $OPENSIM_KIT_APT_COMPONENT")
 	else
 		APT_SOURCE="deb [signed-by=/usr/share/keyrings/magiiic-packaging.gpg] https://apt.magiiic.com $OPENSIM_KIT_APT_DIST $OPENSIM_KIT_APT_COMPONENT"
 		APT_REPOSITORIES+=("$APT_SOURCE")
@@ -133,14 +136,18 @@ else
 fi
 for repository in "${APT_REPOSITORIES[@]}"; do
 	read -r -a fields <<<"$repository"
-	if [[ "${fields[0]:-}" != deb && "${fields[0]:-}" != deb-src ]] || ! uri_index=$(apt_source_uri_index "$repository") || (( ${#fields[@]} <= uri_index + 1 )); then
+	if [[ "${fields[0]:-}" != deb && "${fields[0]:-}" != deb-src ]] || ! uri_index=$(apt_source_uri_index "$repository") || ((${#fields[@]} <= uri_index + 1)); then
 		printf 'quick-install: [ERROR] invalid APT source line: %s\n' "$repository" >&2
 		exit 1
 	fi
 done
 # What the tools need on a machine that does not have the packages (a clone): the same as the package opensim-tools
 PHP_PACKAGES=(php-cli php-curl php-intl php-mbstring php-mysql php-xml)
-OPENSIM_PACKAGES=(opensim opensim-cli opensim-helpers)
+OPENSIM_PACKAGES=(opensim opensim-cli opensim-helpers opensim)
+OPENSIM_PACKAGES+=(opensim-0.9.3.0 opensim-0.9.3.0-gloebit opensim-0.9.3.0-opensimsearch)
+if [[ "$OPENSIM_KIT_APT_DIST" == charm-tests ]]; then
+	OPENSIM_PACKAGES+=(opensim-unstable)
+fi
 
 APT_SOURCE_DIR=${APT_SOURCE_DIR:-}
 ASSUME_YES=${ASSUME_YES:-}
@@ -225,9 +232,9 @@ run_remote_install() (
 		argument=$1
 		shift
 		case "$argument" in
-			--config | --region-config) shift ;;
-			--config=* | --region-config=*) ;;
-			*) arguments+=("$argument") ;;
+		--config | --region-config) shift ;;
+		--config=* | --region-config=*) ;;
+		*) arguments+=("$argument") ;;
 		esac
 	done
 	if [[ -n "$SETUP_CONFIG_FILE" ]]; then
@@ -337,7 +344,7 @@ run_podman_install() {
 	validate_prepared_podman_ports "$SETUP_CONFIG_FILE"
 	mapping_output=$(prepared_podman_publish_mappings "$SETUP_CONFIG_FILE") || die "the engine did not provide valid port bindings for the prepared setup"
 	mapfile -t mappings <<<"$mapping_output"
-	(( ${#mappings[@]} > 0 )) || die "the engine did not provide port bindings for the prepared setup"
+	((${#mappings[@]} > 0)) || die "the engine did not provide port bindings for the prepared setup"
 	for mapping in "${mappings[@]}"; do
 		publish_options+=(--publish "$mapping")
 	done
@@ -509,7 +516,7 @@ dotnet_runtime_package() {
 	local package
 	while IFS= read -r package; do
 		[[ "$package" =~ ^dotnet-runtime-([0-9]+)\.0$ ]] || continue
-		(( BASH_REMATCH[1] >= 8 )) || continue
+		((BASH_REMATCH[1] >= 8)) || continue
 		if LC_ALL=C apt-cache policy "$package" 2>/dev/null | awk '$1 == "Candidate:" && $2 != "(none)" { found = 1 } END { exit !found }'; then
 			printf '%s\n' "$package"
 			return 0
@@ -589,7 +596,7 @@ merge_magiiic_repository_components() {
 		printf '%s\n' "$repository"
 		return
 	fi
-	(( ${#fields[@]} > uri_index + 2 )) || {
+	((${#fields[@]} > uri_index + 2)) || {
 		printf '%s\n' "$repository"
 		return
 	}
@@ -828,7 +835,7 @@ start_sql_server() {
 
 phase_database() {
 	[[ $(uname -s) == Linux ]] || die "SQL server installation is available on Debian and Ubuntu"
-		configure_package_sources || return $?
+	configure_package_sources || return $?
 	if database_server_installed; then
 		say "Keep the installed database server"
 	else
@@ -935,7 +942,10 @@ print_setup_summary() {
 }
 
 phase_dotnet() {
-	[[ $(uname -s) == Linux ]] || { say ".NET installation is only run on Linux"; return 0; }
+	[[ $(uname -s) == Linux ]] || {
+		say ".NET installation is only run on Linux"
+		return 0
+	}
 	recover_dpkg_configuration || die "could not complete package configuration"
 	apt_update || die "could not refresh package lists"
 	local runtime_package support_packages=()
@@ -994,7 +1004,10 @@ phase_cleanup() {
 			group=$(basename "$deb" | sed -E 's#(\.[0-9]+(\+g[a-f0-9]+|\+e[a-f0-9]+(-[0-9]+)?|\+git[a-f0-9\.-]+))?(_[a-z0-9]+)?\.deb##')
 			seen=no
 			for package in "${groups[@]}"; do
-				if [[ "$package" == "$group" ]]; then seen=yes; break; fi
+				if [[ "$package" == "$group" ]]; then
+					seen=yes
+					break
+				fi
 			done
 			[[ "$seen" == yes ]] || groups+=("$group")
 		done < <(find "$dist_folder" -maxdepth 1 -type f -name '*.deb' -print0)
@@ -1073,51 +1086,60 @@ while (($#)); do
 		REMOTE_ARGS+=("$argument")
 	fi
 	case "$argument" in
-		--remote)
-			[[ -z "$REMOTE_TARGET" ]] || die "--remote can be specified only once"
-			(($#)) || die "--remote requires an SSH target"
-			REMOTE_TARGET=$1
-			shift
-			;;
-		--remote=*)
-			[[ -z "$REMOTE_TARGET" ]] || die "--remote can be specified only once"
-			REMOTE_TARGET=${argument#*=}
-			[[ -n "$REMOTE_TARGET" ]] || die "--remote requires an SSH target"
-			;;
-		--podman) PODMAN_MODE=yes ;;
-		--connection)
-			(($#)) || die "--connection requires a name (or local|none)"
-			[[ "$1" != -* ]] || die "--connection requires a name (or local|none)"
-			[[ "$PODMAN_CONNECTION_SELECTED" == no ]] || die "--connection can be specified only once"
-			PODMAN_CONNECTION=$1
-			REMOTE_ARGS+=("$1")
-			shift
-			PODMAN_CONNECTION_SELECTED=yes
-			case "$PODMAN_CONNECTION" in local | none) PODMAN_FORCE_LOCAL=yes ;; esac
-			;;
-		--connection=*)
-			[[ "$PODMAN_CONNECTION_SELECTED" == no ]] || die "--connection can be specified only once"
-			PODMAN_CONNECTION=${argument#*=}
-			[[ -n "$PODMAN_CONNECTION" ]] || die "--connection requires a name (or local|none)"
-			PODMAN_CONNECTION_SELECTED=yes
-			case "$PODMAN_CONNECTION" in local | none) PODMAN_FORCE_LOCAL=yes ;; esac
-			;;
-		--image)
-			(($#)) || die "--image requires an image name"
-			[[ "$1" != -* ]] || die "--image requires an image name"
-			PODMAN_IMAGE=$1
-			PODMAN_IMAGE_SELECTED=yes
-			REMOTE_ARGS+=("$1")
-			shift
-			;;
-		--image=*)
-			PODMAN_IMAGE=${argument#*=}
-			[[ -n "$PODMAN_IMAGE" ]] || die "--image requires an image name"
-			PODMAN_IMAGE_SELECTED=yes
-			;;
-		-y | --yes) ASSUME_YES=yes; PODMAN_INSTALL_ARGS+=("$argument") ;;
-		--cleanup) RUN_CLEANUP=yes; PODMAN_INSTALL_ARGS+=("$argument") ;;
-	--setup) RUN_SETUP=yes; PODMAN_INSTALL_ARGS+=("$argument") ;;
+	--remote)
+		[[ -z "$REMOTE_TARGET" ]] || die "--remote can be specified only once"
+		(($#)) || die "--remote requires an SSH target"
+		REMOTE_TARGET=$1
+		shift
+		;;
+	--remote=*)
+		[[ -z "$REMOTE_TARGET" ]] || die "--remote can be specified only once"
+		REMOTE_TARGET=${argument#*=}
+		[[ -n "$REMOTE_TARGET" ]] || die "--remote requires an SSH target"
+		;;
+	--podman) PODMAN_MODE=yes ;;
+	--connection)
+		(($#)) || die "--connection requires a name (or local|none)"
+		[[ "$1" != -* ]] || die "--connection requires a name (or local|none)"
+		[[ "$PODMAN_CONNECTION_SELECTED" == no ]] || die "--connection can be specified only once"
+		PODMAN_CONNECTION=$1
+		REMOTE_ARGS+=("$1")
+		shift
+		PODMAN_CONNECTION_SELECTED=yes
+		case "$PODMAN_CONNECTION" in local | none) PODMAN_FORCE_LOCAL=yes ;; esac
+		;;
+	--connection=*)
+		[[ "$PODMAN_CONNECTION_SELECTED" == no ]] || die "--connection can be specified only once"
+		PODMAN_CONNECTION=${argument#*=}
+		[[ -n "$PODMAN_CONNECTION" ]] || die "--connection requires a name (or local|none)"
+		PODMAN_CONNECTION_SELECTED=yes
+		case "$PODMAN_CONNECTION" in local | none) PODMAN_FORCE_LOCAL=yes ;; esac
+		;;
+	--image)
+		(($#)) || die "--image requires an image name"
+		[[ "$1" != -* ]] || die "--image requires an image name"
+		PODMAN_IMAGE=$1
+		PODMAN_IMAGE_SELECTED=yes
+		REMOTE_ARGS+=("$1")
+		shift
+		;;
+	--image=*)
+		PODMAN_IMAGE=${argument#*=}
+		[[ -n "$PODMAN_IMAGE" ]] || die "--image requires an image name"
+		PODMAN_IMAGE_SELECTED=yes
+		;;
+	-y | --yes)
+		ASSUME_YES=yes
+		PODMAN_INSTALL_ARGS+=("$argument")
+		;;
+	--cleanup)
+		RUN_CLEANUP=yes
+		PODMAN_INSTALL_ARGS+=("$argument")
+		;;
+	--setup)
+		RUN_SETUP=yes
+		PODMAN_INSTALL_ARGS+=("$argument")
+		;;
 	--config)
 		(($#)) || die "--config requires a JSON setup file"
 		[[ "$1" != -* ]] || die "--config requires a JSON setup file"
@@ -1125,7 +1147,10 @@ while (($#)); do
 		REMOTE_ARGS+=("$1")
 		shift
 		;;
-	--config=*) SETUP_CONFIG_FILE=${argument#*=}; [[ -n "$SETUP_CONFIG_FILE" ]] || die "--config requires a JSON setup file" ;;
+	--config=*)
+		SETUP_CONFIG_FILE=${argument#*=}
+		[[ -n "$SETUP_CONFIG_FILE" ]] || die "--config requires a JSON setup file"
+		;;
 	--region-config)
 		(($#)) || die "--region-config requires a Region.ini file"
 		[[ "$1" != -* ]] || die "--region-config requires a Region.ini file"
@@ -1133,15 +1158,24 @@ while (($#)); do
 		REMOTE_ARGS+=("$1")
 		shift
 		;;
-	--region-config=*) REGION_CONFIG_FILE=${argument#*=}; [[ -n "$REGION_CONFIG_FILE" ]] || die "--region-config requires a Region.ini file" ;;
+	--region-config=*)
+		REGION_CONFIG_FILE=${argument#*=}
+		[[ -n "$REGION_CONFIG_FILE" ]] || die "--region-config requires a Region.ini file"
+		;;
 	--dependencies | --mariadb | --mysql | --dotnet | --opensim)
 		[[ "$PHASE_SELECTED" == no ]] || die "choose only one installation phase"
 		PHASE_SELECTED=yes
 		PODMAN_INSTALL_ARGS+=("$argument")
 		case "$argument" in
 		--dependencies) INSTALL_PHASE=dependencies ;;
-		--mariadb) INSTALL_PHASE=mariadb ; DATABASE_CHOICE=mariadb ;;
-		--mysql) INSTALL_PHASE=mysql ; DATABASE_CHOICE=mysql ;;
+		--mariadb)
+			INSTALL_PHASE=mariadb
+			DATABASE_CHOICE=mariadb
+			;;
+		--mysql)
+			INSTALL_PHASE=mysql
+			DATABASE_CHOICE=mysql
+			;;
 		--dotnet) INSTALL_PHASE=dotnet ;;
 		--opensim) INSTALL_PHASE=opensim ;;
 		esac
@@ -1160,8 +1194,8 @@ while (($#)); do
 	esac
 done
 case "$INSTALL_PHASE" in
-	all | dependencies | mariadb | mysql | dotnet | opensim) ;;
-	*) die "invalid installation phase $INSTALL_PHASE" ;;
+all | dependencies | mariadb | mysql | dotnet | opensim) ;;
+*) die "invalid installation phase $INSTALL_PHASE" ;;
 esac
 [[ "$INSTALL_PHASE" == all || "$INSTALL_PHASE" == opensim ]] || [[ -z "$RUN_SETUP" ]] || die "--setup is only valid for the full install or --opensim"
 [[ "$PODMAN_CONNECTION_SELECTED" == no || "$PODMAN_MODE" == yes ]] || die "--connection requires --podman"
