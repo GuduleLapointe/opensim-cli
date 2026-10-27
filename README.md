@@ -50,7 +50,7 @@ To run the installer on an SSH server, download it locally first, then run `./qu
 - [ ] enable|disable <grid> search [<url prefix>]
 - [ ] enable|disable <grid> economy [beta|gloebit] [<url prefix>]
 - [ ] enable|disable <grid> profiles
-- [ ] console|screen <instance>
+- [x] console|screen <instance>
 - [ ] command <instance> <text>|-
 - [x] ports [instance...] [--ufw] [--private-address ADDRESS]
 
