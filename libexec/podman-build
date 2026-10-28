@@ -53,7 +53,9 @@ OPENSIM_SYSTEM_GROUP=${OPENSIM_SYSTEM_GROUP:-opensim}
 OPENSIM_SYSTEM_UID=${OPENSIM_SYSTEM_UID:-8002}
 OPENSIM_SYSTEM_GID=${OPENSIM_SYSTEM_GID:-8002}
 OPENSIM_ADMIN_USER=${OPENSIM_ADMIN_USER:-${OPENSIM_SYSTEM_USER}}
+OPENSIM_ADMIN_UID=${OPENSIM_ADMIN_UID:-${OPENSIM_SYSTEM_UID}}
 OPENSIM_ADMIN_GROUP=${OPENSIM_ADMIN_GROUP:-${OPENSIM_SYSTEM_GROUP}}
+OPENSIM_ADMIN_GID=${OPENSIM_ADMIN_GID:-${OPENSIM_SYSTEM_GID}}
 
 for key in $*; do
 	grep "^$key\b" $TMP.images | while read key image os_id os_version; do
@@ -66,15 +68,22 @@ for key in $*; do
 			;;
 		esac
 		args=(
-			"--build-arg OPENSIM_SYSTEM_USER=${OPENSIM_SYSTEM_USER}"
-			"--build-arg OPENSIM_SYSTEM_UID=${OPENSIM_SYSTEM_UID}"
-			"--build-arg OPENSIM_SYSTEM_GROUP=${OPENSIM_SYSTEM_GROUP}"
-			"--build-arg OPENSIM_SYSTEM_GID=${OPENSIM_SYSTEM_GID}"
 			"--network host"
 			"--from $image"
 			"--isolation rootless"
 			"--tag opensim-$key"
 			"--label $label"
+			"--build-arg OPENSIM_SYSTEM_USER=${OPENSIM_SYSTEM_USER}"
+			"--build-arg OPENSIM_SYSTEM_UID=${OPENSIM_SYSTEM_UID}"
+			"--build-arg OPENSIM_SYSTEM_GROUP=${OPENSIM_SYSTEM_GROUP}"
+			"--build-arg OPENSIM_SYSTEM_GID=${OPENSIM_SYSTEM_GID}"
+			"--build-arg OPENSIM_ADMIN_USER=${OPENSIM_ADMIN_USER}"
+		)
+		args+=(
+			"--build-arg OPENSIM_ADMIN_UID=${OPENSIM_ADMIN_UID}"
+			"--build-arg OPENSIM_ADMIN_GROUP=${OPENSIM_ADMIN_GROUP}"
+			"--build-arg OPENSIM_ADMIN_GID=${OPENSIM_ADMIN_GID}"
+			"--build-arg OPENSIM_VAR_ROOT=${OPENSIM_VAR_ROOT}"
 		)
 
 		command="podman build $SHAREDIR/podman/debian ${args[@]}"

@@ -11,8 +11,13 @@ ARG OPENSIM_SYSTEM_USER=opensim
 ARG OPENSIM_SYSTEM_UID=8002
 ARG OPENSIM_SYSTEM_GROUP=opensim
 ARG OPENSIM_SYSTEM_GID=8002
-ARG OPENSIM_ADMIN_USER=opensim
+
 ARG OPENSIM_VAR_ROOT=/var/lib/opensim
+
+ARG OPENSIM_ADMIN_USER=opensim_admin
+ARG OPENSIM_ADMIN_UID=1000
+ARG OPENSIM_ADMIN_GROUP=opensim_admin
+ARG OPENSIM_ADMIN_GID=1000
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -22,7 +27,16 @@ RUN echo 'Acquire::Retries "5";' >/etc/apt/apt.conf.d/80retries
 # The account of the instances, with a fixed ID: a folder of the host shared
 # with the container can be given to it (chown 8002:8002)
 RUN groupadd --system -g ${OPENSIM_SYSTEM_GID} ${OPENSIM_SYSTEM_GROUP}
-RUN useradd --system -g ${OPENSIM_SYSTEM_GID} -u ${OPENSIM_SYSTEM_UID} --home-dir ${OPENSIM_VAR_ROOT} --create-home --shell /bin/bash ${OPENSIM_SYSTEM_GROUP}
+RUN useradd --system -u ${OPENSIM_SYSTEM_UID} -g ${OPENSIM_SYSTEM_GID} \
+    --home-dir ${OPENSIM_VAR_ROOT} --create-home --shell /bin/bash \
+    ${OPENSIM_SYSTEM_USER}
+
+RUN groupadd --system -g ${OPENSIM_ADMIN_GID} ${OPENSIM_ADMIN_GROUP}
+RUN useradd -u ${OPENSIM_ADMIN_UID} -g ${OPENSIM_ADMIN_GID} \
+    -G ${OPENSIM_SYSTEM_GID},sudo \
+    --create-home --shell /bin/bash ${OPENSIM_ADMIN_USER}
+
+RUN echo ${OPENSIM_ADMIN_USER} ALL = (ALL) NOPASSWD: ALL > /etc/sudoers.d/opensim_admin
 
 # The packages depend on "a database server, or PostgreSQL, or SQLite" and on
 # "a MySQL client": what is installed first satisfies them, so no server is added
@@ -56,7 +70,8 @@ RUN rm -rf /pkgs /var/lib/apt/lists/*
 # VOLUME ["/etc/opensim", "${OPENSIM_VAR_ROOT}", "/var/log/opensim"]
 
 USER ${OPENSIM_ADMIN_USER}
-WORKDIR ${OPENSIM_VAR_ROOT}
+# WORKDIR ${OPENSIM_VAR_ROOT}
+WORKDIR /home/${OPENSIM_ADMIN_USER}
 
 STOPSIGNAL SIGTERM
 
