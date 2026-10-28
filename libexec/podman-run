@@ -15,6 +15,12 @@ PGM=$(basename "$0")
 TMP=$(mktemp) || exit $?
 trap "rm -rf $TMP $TMP.*" EXIT
 
+dry_run=
+if [ "${DRY_RUN:-}" = "yes" ]; then
+	dry_run="say [DRY_RUN]"
+	$dry_run enabled
+fi
+
 BASEDIR=$(cd $(dirname $0)/.. && pwd)
 log BASEDIR $BASEDIR
 SHAREDIR=$(cd $BASEDIR/share 2>/dev/null ||
@@ -75,9 +81,6 @@ log rootless $rootless
 log host user $CURRENT_UID:$CURRENT_GID
 log system user $OPENSIM_SYSTEM_UID:$OPENSIM_SYSTEM_GID
 
-set | egrep "^(OPENSIM_|CURRENT_|CONTAINER_)"
-
-exit # DEBUG
 for mount_point in ${mount_points[@]}; do
 	echo mount_point $mount_point
 	src=$($remote realpath $mount_point)
@@ -90,16 +93,7 @@ log PODMAN_USERNS ${PODMAN_USERNS:-(not set)}
 
 if [[ "$rootless" == "true" ]]; then
 	say "Rootless true, map user namespace"
-	# 	# if [[ "$CURRENT_UID" != 0:0 ]]; then
-	# 	# 	say "rootless Podman cannot map OpenSim volumes owned by $CURRENT_UID; run Podman as their owner or use a rootful connection"
-	# 	# 	exit 1
-	# 	# fi
 	args+=(--userns=keep-id:uid=$OPENSIM_SYSTEM_UID,gid=$OPENSIM_SYSTEM_GID)
-else
-	say "Rootless false, map user namespace"
-	args+=(--userns=host)
-fi
-# 	args+=(--userns=keep-id:uid=$CURRENT_UID,gid=$CURRENT_GID)
 # elif [[ "$OPENSIM_SYSTEM_UID" != "$CURRENT_UID" ]]; then
 # 	say "Rootless false, set mapping $OPENSIM_SYSTEM_UID to $CURRENT_UID"
 # 	args+=(
@@ -114,14 +108,15 @@ fi
 # 		# --gidmap +$CURRENT_GID:$OPENSIM_SYSTEM_GID:1
 # 		# --gidmap +$OPENSIM_SYSTEM_GID:65536:1
 # 	)
-# fi
+else
+	say "Rootless false, map user namespace"
+	args+=(--userns=host)
+fi
 
 env | egrep "^(APT_SOURCE|OPENSIM_DB|DEFAULT_)" >$TMP.env
 echo "CONTAINER_HOST=$(hostname -f)" >>$TMP.env
 echo "CONTAINER_NAME=$(hostname -s)" >>$TMP.env
 args+=("--env-file $TMP.env")
-
-echo podman run ${args[@]} $image_id
 
 if [ "$YES" = yes ]; then
 	start=y
@@ -130,7 +125,7 @@ else
 	start=${start:-y}
 fi
 if [ "$start" = "y" ]; then
-	container_id=$(podman run ${args[@]} $image_id)
-	podman container inspect $container_id | grep '"Name":' | head -1 | sed 's/"//g; s/,$//; s/^ *//'
+	container_id=$($dry_run podman run ${args[@]} $image_id)
+	$dry_run podman container inspect $container_id | grep '"Name":' | head -1 | sed 's/"//g; s/,$//; s/^ *//'
 	echo "Id: $container_id"
 fi
