@@ -60,6 +60,9 @@ done
 ((candidate + range_size - 1 <= max_subid)) || die "no free subuid/subgid range of $range_size IDs"
 range_end=$((candidate + range_size - 1))
 
+say target user: $target_user
+say subuids: "$candidate-$range_end"
+
 $dry_run $as_root usermod --add-subuids "$candidate-$range_end" --add-subgids "$candidate-$range_end" "$target_user" ||
 	die "could not assign the subuid/subgid range to $target_user"
 
