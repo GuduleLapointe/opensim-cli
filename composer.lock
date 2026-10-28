@@ -404,7 +404,7 @@
             "dist": {
                 "type": "path",
                 "url": "../bash-tools",
-                "reference": "bc6cf896b3e26dac88e04da6466c7d6e8b0e30f3"
+                "reference": "ff64cc480d7e15b0465dd6c33c75c3a424b2b897"
             },
             "bin": [
                 "bin/cpuinfo",
