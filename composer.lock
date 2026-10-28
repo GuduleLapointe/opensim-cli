@@ -596,7 +596,7 @@
             "dist": {
                 "type": "path",
                 "url": "../opensim-engine",
-                "reference": "9d259007eb6bc5f5ddfd7dde37f3e26278bac538"
+                "reference": "f23c04b1cf753e8cc099487a8466d935378ce487"
             },
             "require": {
                 "ext-curl": "*",
@@ -1341,16 +1341,16 @@
         },
         {
             "name": "symfony/yaml",
-            "version": "v7.4.21",
+            "version": "v7.4.22",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/yaml.git",
-                "reference": "044907929c7999814378be22da34722c7a86bad4"
+                "reference": "1ed6afa13d48c579c51cbf32e38f50686313497b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/yaml/zipball/044907929c7999814378be22da34722c7a86bad4",
-                "reference": "044907929c7999814378be22da34722c7a86bad4",
+                "url": "https://api.github.com/repos/symfony/yaml/zipball/1ed6afa13d48c579c51cbf32e38f50686313497b",
+                "reference": "1ed6afa13d48c579c51cbf32e38f50686313497b",
                 "shasum": ""
             },
             "require": {
@@ -1393,7 +1393,7 @@
             "description": "Loads and dumps YAML files",
             "homepage": "https://symfony.com",
             "support": {
-                "source": "https://github.com/symfony/yaml/tree/v7.4.21"
+                "source": "https://github.com/symfony/yaml/tree/v7.4.22"
             },
             "funding": [
                 {
@@ -1413,7 +1413,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-10-12T12:34:30+00:00"
+            "time": "2026-10-18T14:39:27+00:00"
         }
     ],
     "packages-dev": [],
