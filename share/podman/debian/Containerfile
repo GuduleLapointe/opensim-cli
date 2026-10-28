@@ -4,12 +4,14 @@
 # database is another container, or the host's (see packaging/container/README.md).
 # Built by packaging/container/build, which gives it the packages (pkgs/).
 ARG BASE=docker.io/library/ubuntu:26.04
-ARG OPENSIM_USER=opensim
-ARG OPENSIM_UID=8002
-ARG OPENSIM_GROUP=opensim
-ARG OPENSIM_GID=8002
 
 FROM ${BASE}
+
+ARG OPENSIM_SYSTEM_USER=opensim
+ARG OPENSIM_SYSTEM_UID=8002
+ARG OPENSIM_SYSTEM_GROUP=opensim
+ARG OPENSIM_SYSTEM_GID=8002
+ARG OPENSIM_VAR_ROOT=/var/lib/opensim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -18,8 +20,8 @@ RUN echo 'Acquire::Retries "5";' >/etc/apt/apt.conf.d/80retries
 
 # The account of the instances, with a fixed ID: a folder of the host shared
 # with the container can be given to it (chown 8002:8002)
-RUN groupadd --system -g ${OPENSIM_GID} ${OPENSIM_USER} \
-    && useradd --system -g ${OPENSIM_GID} -u ${OPENSIM_UID} --home-dir /var/lib/opensim --create-home --shell /bin/bash ${OPENSIM_GROUP}
+RUN groupadd --system -g ${OPENSIM_SYSTEM_GID} ${OPENSIM_SYSTEM_GROUP}
+RUN useradd --system -g ${OPENSIM_SYSTEM_GID} -u ${OPENSIM_SYSTEM_UID} --home-dir ${OPENSIM_VAR_ROOT} --create-home --shell /bin/bash ${OPENSIM_SYSTEM_GROUP}
 
 # The packages depend on "a database server, or PostgreSQL, or SQLite" and on
 # "a MySQL client": what is installed first satisfies them, so no server is added
@@ -41,8 +43,8 @@ RUN curl -fsSL https://apt.magiiic.com/magiiic-packaging.asc \
         opensim-cli \
     && opensim install-dotnet
     # \
-    # && mkdir -p /etc/opensim /var/lib/opensim /var/log/opensim \
-    # && chown opensim:opensim /etc/opensim /var/lib/opensim /var/log/opensim
+    # && mkdir -p /etc/opensim ${OPENSIM_VAR_ROOT} /var/log/opensim \
+    # && chown opensim:opensim /etc/opensim ${OPENSIM_VAR_ROOT} /var/log/opensim
     # && /usr/share/opensim-cli/quick-install.sh
 # Install dotnet with opensim CLI to allow Debian fallback
 
@@ -50,10 +52,10 @@ RUN curl -fsSL https://apt.magiiic.com/magiiic-packaging.asc \
 RUN rm -rf /pkgs /var/lib/apt/lists/*
 
 # Volumes are only relevant if there is no need to access them from host
-# VOLUME ["/etc/opensim", "/var/lib/opensim", "/var/log/opensim"]
+# VOLUME ["/etc/opensim", "${OPENSIM_VAR_ROOT}", "/var/log/opensim"]
 
 USER opensim
-WORKDIR /var/lib/opensim
+WORKDIR ${OPENSIM_VAR_ROOT}
 
 STOPSIGNAL SIGTERM
 
