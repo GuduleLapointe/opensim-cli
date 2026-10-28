@@ -75,13 +75,13 @@ $remote opensim --layout --format=env >$TMP.layout
 [ -z "${CURRENT_UID:-}" ] && say "[ERROR] missing  CURRENT_UID" && exit 1
 [ -z "${CURRENT_GID:-}" ] && say "[ERROR] missing  CURRENT_GID" && exit 1
 
-# rootless=$(podman info --format '{{.Host.Security.Rootless}}')
-say "[DEBUG] forcing rootless=false"
-rootless=false
+rootless=$(podman info --format '{{.Host.Security.Rootless}}')
+# rootless=false
+# say "[DEBUG] forcing rootless=false"
 
-log rootless $rootless
-log host user $CURRENT_UID:$CURRENT_GID
-log system user $OPENSIM_SYSTEM_UID:$OPENSIM_SYSTEM_GID
+log rootless mode $rootless
+log host user $CURRENT_USER $CURRENT_UID:$CURRENT_GID
+log system user $OPENSIM_SYSTEM_USER $OPENSIM_SYSTEM_UID:$OPENSIM_SYSTEM_GID
 
 for mount_point in ${mount_points[@]}; do
 	echo mount_point $mount_point
@@ -95,7 +95,8 @@ log PODMAN_USERNS ${PODMAN_USERNS:-(not set)}
 
 if [[ "$rootless" == "true" ]]; then
 	say "Rootless true, map user namespace"
-	args+=(--userns=keep-id:uid=$OPENSIM_SYSTEM_UID,gid=$OPENSIM_SYSTEM_GID)
+	args+=(--userns=keep-id)
+	# args+=(--userns=keep-id:uid=$OPENSIM_SYSTEM_UID,gid=$OPENSIM_SYSTEM_GID)
 # elif [[ "$OPENSIM_SYSTEM_UID" != "$CURRENT_UID" ]]; then
 # 	say "Rootless false, set mapping $OPENSIM_SYSTEM_UID to $CURRENT_UID"
 # 	args+=(
