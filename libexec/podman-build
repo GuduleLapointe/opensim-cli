@@ -13,6 +13,7 @@ log() {
 
 PGM=$(basename "$0")
 TMP=$(mktemp) || exit $?
+export BUILDAH_ISOLATION=oci
 
 trap "rm -rf $TMP $TMP.*" EXIT
 
@@ -70,7 +71,10 @@ for key in $*; do
 		args=(
 			# "--network host"
 			"--from $image"
-			"--isolation rootless"
+			# "--isolation rootless"
+			# "--isolation oci"
+			"--userns host"
+			# "--userns container"
 			"--tag opensim-$key"
 			"--label $label"
 			"--build-arg OPENSIM_SYSTEM_USER=${OPENSIM_SYSTEM_USER}"

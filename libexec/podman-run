@@ -15,6 +15,8 @@ PGM=$(basename "$0")
 TMP=$(mktemp) || exit $?
 trap "rm -rf $TMP $TMP.*" EXIT
 
+export BUILDAH_ISOLATION=oci
+
 dry_run=
 if [ "${DRY_RUN:-}" = "yes" ]; then
 	dry_run="say [DRY_RUN]"
@@ -62,7 +64,7 @@ fi
 log setting mount points
 mount_points=(
 	/etc/opensim
-	# /var/lib/opensim
+	/var/lib/opensim
 	# /var/log/opensim
 )
 
@@ -95,22 +97,32 @@ log PODMAN_USERNS ${PODMAN_USERNS:-(not set)}
 
 if [[ "$rootless" == "true" ]]; then
 	say "Rootless true, map user namespace"
-	args+=(--userns=keep-id)
 	# args+=(--userns=keep-id:uid=$OPENSIM_SYSTEM_UID,gid=$OPENSIM_SYSTEM_GID)
-# elif [[ "$OPENSIM_SYSTEM_UID" != "$CURRENT_UID" ]]; then
-# 	say "Rootless false, set mapping $OPENSIM_SYSTEM_UID to $CURRENT_UID"
-# 	args+=(
-# 		--uidmap 0:0:65536
-# 		--gidmap 0:0:65536
-# 		--uidmap +$OPENSIM_SYSTEM_UID:$CURRENT_UID:1
-# 		--uidmap +$CURRENT_UID:65536:1
-# 		--gidmap +$OPENSIM_SYSTEM_GID:$CURRENT_GID:1
-# 		--gidmap +$CURRENT_GID:65536:1
-# 		# --uidmap +$CURRENT_UID:$OPENSIM_SYSTEM_UID:1
-# 		# --uidmap +$OPENSIM_SYSTEM_UID:65536:1
-# 		# --gidmap +$CURRENT_GID:$OPENSIM_SYSTEM_GID:1
-# 		# --gidmap +$OPENSIM_SYSTEM_GID:65536:1
-# 	)
+	# args+=(--userns=keep-id:uid=$CURRENT_UID,gid=$CURRENT_GID)
+	args+=(--userns=keep-id)
+	# args+=(--userns=auto)
+	# elif [[ "$OPENSIM_SYSTEM_UID" != "$CURRENT_UID" ]]; then
+	# 	say "Rootless false, set mapping $OPENSIM_SYSTEM_UID to $CURRENT_UID"
+	# args+=(
+	# 	--uidmap 0:0:65536
+	# 	--gidmap 0:0:65536
+	# 	--uidmap +$CURRENT_UID:$OPENSIM_SYSTEM_UID:1
+	# 	--uidmap +$OPENSIM_SYSTEM_UID:65536:1
+	# 	--gidmap +$CURRENT_GID:$OPENSIM_SYSTEM_GID:1
+	# 	--gidmap +$OPENSIM_SYSTEM_GID:65536:1
+	# )
+	# args+=(
+	# 	--uidmap 0:0:65536
+	# 	--gidmap 0:0:65536
+	# 	--uidmap +$OPENSIM_SYSTEM_UID:$CURRENT_UID:1
+	# 	--uidmap +$CURRENT_UID:65536:1
+	# 	--gidmap +$OPENSIM_SYSTEM_GID:$CURRENT_GID:1
+	# 	--gidmap +$CURRENT_GID:65536:1
+	# 	# --uidmap +$CURRENT_UID:$OPENSIM_SYSTEM_UID:1
+	# 	# --uidmap +$OPENSIM_SYSTEM_UID:65536:1
+	# 	# --gidmap +$CURRENT_GID:$OPENSIM_SYSTEM_GID:1
+	# 	# --gidmap +$OPENSIM_SYSTEM_GID:65536:1
+	# )
 else
 	say "Rootless false, map user namespace"
 	args+=(--userns=host)
