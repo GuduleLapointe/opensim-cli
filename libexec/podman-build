@@ -13,7 +13,6 @@ log() {
 
 PGM=$(basename "$0")
 TMP=$(mktemp) || exit $?
-export BUILDAH_ISOLATION=oci
 
 trap "rm -rf $TMP $TMP.*" EXIT
 

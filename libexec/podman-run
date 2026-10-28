@@ -15,8 +15,6 @@ PGM=$(basename "$0")
 TMP=$(mktemp) || exit $?
 trap "rm -rf $TMP $TMP.*" EXIT
 
-export BUILDAH_ISOLATION=oci
-
 dry_run=
 if [ "${DRY_RUN:-}" = "yes" ]; then
 	dry_run="say [DRY_RUN]"
@@ -50,6 +48,7 @@ args=(
 	-d
 	-i
 )
+name=$1
 if [ -n "${1:-}" ]; then
 	log setting name to $1
 	args+=("--name $1")
@@ -63,8 +62,8 @@ fi
 
 log setting mount points
 mount_points=(
-	/etc/opensim
-	/var/lib/opensim
+	# /etc/opensim
+	# /var/lib/opensim
 	# /var/log/opensim
 )
 
@@ -93,23 +92,26 @@ for mount_point in ${mount_points[@]}; do
 	# args+=("--mount type=bind,src=$src,dst=$mount_point,bind-propagation=shared")
 done
 
-log PODMAN_USERNS ${PODMAN_USERNS:-(not set)}
+# args+=(--user=$OPENSIM_SYSTEM_UID:$OPENSIM_SYSTEM_GID)
 
 if [[ "$rootless" == "true" ]]; then
 	say "Rootless true, map user namespace"
-	# args+=(--userns=keep-id:uid=$OPENSIM_SYSTEM_UID,gid=$OPENSIM_SYSTEM_GID)
+	args+=(--userns=keep-id:uid=$OPENSIM_SYSTEM_UID,gid=$OPENSIM_SYSTEM_GID)
 	# args+=(--userns=keep-id:uid=$CURRENT_UID,gid=$CURRENT_GID)
-	args+=(--userns=keep-id)
+	# args+=(--userns=keep-id)
 	# args+=(--userns=auto)
+	# args+=(--userns=host)
+	# args+=(--userns=private)
+	# args+=(--userns=ns:$name-ns)
 	# elif [[ "$OPENSIM_SYSTEM_UID" != "$CURRENT_UID" ]]; then
 	# 	say "Rootless false, set mapping $OPENSIM_SYSTEM_UID to $CURRENT_UID"
 	# args+=(
 	# 	--uidmap 0:0:65536
 	# 	--gidmap 0:0:65536
-	# 	--uidmap +$CURRENT_UID:$OPENSIM_SYSTEM_UID:1
-	# 	--uidmap +$OPENSIM_SYSTEM_UID:65536:1
-	# 	--gidmap +$CURRENT_GID:$OPENSIM_SYSTEM_GID:1
-	# 	--gidmap +$OPENSIM_SYSTEM_GID:65536:1
+	# 	--uidmap +$OPENSIM_SYSTEM_UID:$CURRENT_UID:1
+	# 	--uidmap +$CURRENT_UID:65536:1
+	# 	--gidmap +$OPENSIM_SYSTEM_GID:$CURRENT_GID:1
+	# 	--gidmap +$CURRENT_GID:65536:1
 	# )
 	# args+=(
 	# 	--uidmap 0:0:65536

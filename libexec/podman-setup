@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+
+sudo -u opensim podman system migrate
+sudo usermod --add-subuids 231072-296607 --add-subgids 231072-296607 opensim
+sudo -u opensim podman unshare cat /proc/self/uid_map
+
+# Once done, user can create an image
+# sudo -u opensim /usr/share/opensim-cli/libexec/podman-build debian-13
