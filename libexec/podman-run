@@ -75,7 +75,9 @@ $remote opensim --layout --format=env >$TMP.layout
 [ -z "${CURRENT_UID:-}" ] && say "[ERROR] missing  CURRENT_UID" && exit 1
 [ -z "${CURRENT_GID:-}" ] && say "[ERROR] missing  CURRENT_GID" && exit 1
 
-rootless=$(podman info --format '{{.Host.Security.Rootless}}')
+# rootless=$(podman info --format '{{.Host.Security.Rootless}}')
+say "[DEBUG] forcing rootless=false"
+rootless=false
 
 log rootless $rootless
 log host user $CURRENT_UID:$CURRENT_GID
