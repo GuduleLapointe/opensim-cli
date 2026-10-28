@@ -72,7 +72,7 @@ API
 	assert_exec "OPENSIM_API='$api' '$OPENSIM' --layout --format=env" \
 		--stdout-contains "OPENSIM_SYSTEM_USER='opensim'" \
 		--stdout-contains "OPENSIM_SYSTEM_UID='123'" \
-		--stdout-contains "OPENSIM_CURRENT_USER='magic'" \
+		--stdout-contains "OPENSIM_ADMIN_USER='magic'" \
 		--stdout-contains "OPENSIM_ETC_ROOT='$WORK/layout/etc-link'" \
 		--stdout-contains "CANONICAL_ETC_ROOT='$etc_real'" \
 		--stdout-contains "OPENSIM_VAR_ROOT='$WORK/layout/var-link'" \

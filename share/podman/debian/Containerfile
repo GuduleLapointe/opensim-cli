@@ -11,6 +11,7 @@ ARG OPENSIM_SYSTEM_USER=opensim
 ARG OPENSIM_SYSTEM_UID=8002
 ARG OPENSIM_SYSTEM_GROUP=opensim
 ARG OPENSIM_SYSTEM_GID=8002
+ARG OPENSIM_ADMIN_USER=opensim
 ARG OPENSIM_VAR_ROOT=/var/lib/opensim
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -54,7 +55,7 @@ RUN rm -rf /pkgs /var/lib/apt/lists/*
 # Volumes are only relevant if there is no need to access them from host
 # VOLUME ["/etc/opensim", "${OPENSIM_VAR_ROOT}", "/var/log/opensim"]
 
-USER opensim
+USER ${OPENSIM_ADMIN_USER}
 WORKDIR ${OPENSIM_VAR_ROOT}
 
 STOPSIGNAL SIGTERM
