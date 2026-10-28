@@ -112,27 +112,8 @@ setup)
 		--prepare | --prepare=*) exec "$libexec/setup" "$@" ;;
 		esac
 	done
-	# A machine without the system layout gets it from the engine (the account, the folders, opensim.conf), which needs root
-	if [[ "$(run needs-layout 2>/dev/null)" == "yes" ]]; then
-		os=$(uname -s)
-		case $os in
-		Linux)
-			debug_log prepare-layout as root
-			as_root php "$here/../src/php/run.php" prepare-layout || exit 1
-			;;
-		Darwin)
-			end $COMMAND not implemented for macOS
-			;;
-		*)
-			end 1 $os operating system not supported
-			;;
-		esac
-	else
-		debug_log "prepare-layout not needed"
-	fi
-	# "$libexec/$COMMAND" "$@"
+	# The package installer creates the system layout as root; setup then runs as the system user.
 	run_setup "$@"
-	# as_root "$libexec/$COMMAND" "$@"
 	;;
 
 install-dotnet)

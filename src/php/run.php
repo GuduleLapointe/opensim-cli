@@ -202,15 +202,6 @@ function outcome(array $results): int
 $args = array_slice($argv, 1);
 $command = array_shift($args) ?? '';
 // The user the instances run as, empty when the install has none (the commands then run as whoever calls them)
-// Whether this machine has no system layout yet (the engine's SystemLayout), and making it (as root)
-if ($command === 'needs-layout') {
-    echo \OpenSim\Provisioning\SystemLayout::needed(\OpenSim\Config\Layout::resolve()) ? "yes\n" : "no\n";
-    exit(0);
-}
-if ($command === 'prepare-layout') {
-    $layout = new \OpenSim\Provisioning\SystemLayout(new StdUi());
-    exit($layout->prepare(\OpenSim\Config\Layout::resolve()) ? 0 : 1);
-}
 if ($command === 'system-user') {
     echo \OpenSim\Config\Layout::resolve()->systemUser(), "\n";
     exit(0);
