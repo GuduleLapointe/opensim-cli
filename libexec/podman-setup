@@ -1,8 +1,88 @@
 #!/usr/bin/env bash
 
-sudo -u opensim podman system migrate
-sudo usermod --add-subuids 231072-296607 --add-subgids 231072-296607 opensim
-sudo -u opensim podman unshare cat /proc/self/uid_map
+source "$(dirname "$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")/../src/lib/common"
 
-# Once done, user can create an image
-# sudo -u opensim /usr/share/opensim-cli/libexec/podman-build debian-13
+if (($# != 1)); then
+	printf 'usage: podman-setup USER\n' >&2
+	exit 2
+fi
+
+target_user=$1
+passwd_entry=$(getent passwd "$target_user") || die "unknown user: $target_user"
+IFS=: read -r account _ target_uid _ <<<"$passwd_entry"
+[[ "$account" == "$target_user" ]] || die "unknown user: $target_user"
+[[ "$target_uid" =~ ^[0-9]+$ ]] || die "invalid UID for $target_user"
+((target_uid != 0)) || die "root does not need rootless Podman subid ranges"
+
+require podman
+range_size=65536
+first_subid=100000
+max_subid=4294967294
+subuid_file=${PODMAN_SETUP_SUBUID_FILE:-/etc/subuid}
+subgid_file=${PODMAN_SETUP_SUBGID_FILE:-/etc/subgid}
+
+has_sufficient_range() {
+	local file=$1 owner first count
+	[[ -r "$file" ]] || return 1
+	while IFS=: read -r owner first count _; do
+		[[ -z "$owner" || "$owner" == \#* ]] && continue
+		[[ "$owner" == "$target_user" || "$owner" == "$target_uid" ]] || continue
+		[[ "$first" =~ ^[0-9]+$ && "$count" =~ ^[0-9]+$ ]] || die "invalid subid entry in $file for $owner"
+		((10#$count >= range_size)) && return 0
+	done <"$file"
+	return 1
+}
+
+range_is_free() {
+	local file=$1 owner first count existing_start existing_end requested_end
+	requested_end=$((candidate + range_size - 1))
+	[[ ! -e "$file" ]] && return 0
+	[[ -r "$file" ]] || die "cannot read $file"
+	while IFS=: read -r owner first count _; do
+		[[ -z "$owner" || "$owner" == \#* ]] && continue
+		[[ "$first" =~ ^[0-9]+$ && "$count" =~ ^[0-9]+$ ]] || die "invalid subid entry in $file for $owner"
+		((10#$count > 0)) || die "invalid subid range in $file for $owner"
+		existing_start=$((10#$first))
+		existing_end=$((existing_start + 10#$count - 1))
+		if ((candidate <= existing_end && requested_end >= existing_start)); then
+			return 1
+		fi
+	done <"$file"
+	return 0
+}
+
+if has_sufficient_range "$subuid_file" && has_sufficient_range "$subgid_file"; then
+	say "$target_user already has rootless Podman subuid/subgid ranges"
+	exit 0
+fi
+
+candidate=$first_subid
+while ((candidate + range_size - 1 <= max_subid)); do
+	if range_is_free "$subuid_file" && range_is_free "$subgid_file"; then
+		break
+	fi
+	candidate=$((candidate + range_size))
+done
+((candidate + range_size - 1 <= max_subid)) || die "no free subuid/subgid range of $range_size IDs"
+range_end=$((candidate + range_size - 1))
+
+run_as_target() {
+	if [[ "$(id -un)" == "$target_user" ]]; then
+		"$@"
+	else
+		sudo -u "$target_user" -- "$@"
+	fi
+}
+
+running=$(run_as_target podman ps --quiet) || die "could not inspect Podman containers for $target_user"
+[[ -z "$running" ]] || die "stop running Podman containers for $target_user, then rerun podman-setup"
+
+say "Assigning subuid/subgid range $candidate-$range_end to $target_user"
+as_root usermod --add-subuids "$candidate-$range_end" --add-subgids "$candidate-$range_end" "$target_user" ||
+	die "could not assign the subuid/subgid range to $target_user"
+
+run_as_target podman system migrate || die "could not refresh the rootless Podman namespace for $target_user"
+run_as_target podman unshare cat /proc/self/uid_map || die "could not verify the rootless UID map for $target_user"
+run_as_target podman unshare cat /proc/self/gid_map || die "could not verify the rootless GID map for $target_user"
+
+say "Rootless Podman is configured for $target_user"
