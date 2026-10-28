@@ -69,14 +69,14 @@ RUN rm -rf /pkgs /var/lib/apt/lists/*
 USER root
 WORKDIR ${OPENSIM_VAR_ROOT}
 
-RUN echo "${OPENSIM_ADMIN_USER} ALL = (ALL) NOPASSWD: ALL" > /etc/sudoers.d/opensim_admin
-RUN echo "${OPENSIM_SYSTEM_USER} ALL = (ALL) NOPASSWD: ALL" > /etc/sudoers.d/opensim_admin
+RUN echo "${OPENSIM_ADMIN_USER} ALL = (ALL) NOPASSWD: ALL" >> /etc/sudoers.d/opensim_admin
+# RUN echo "${OPENSIM_SYSTEM_USER} ALL = (ALL) NOPASSWD: ALL" >> /etc/sudoers.d/opensim_admin
 
-USER ${OPENSIM_SYSTEM_USER}
-WORKDIR ${OPENSIM_VAR_ROOT}
-
-# USER ${OPENSIM_ADMIN_USER}
+USER ${OPENSIM_ADMIN_USER}
 # WORKDIR /home/${OPENSIM_ADMIN_USER}
+
+# USER ${OPENSIM_SYSTEM_USER}
+WORKDIR ${OPENSIM_VAR_ROOT}
 
 STOPSIGNAL SIGTERM
 
