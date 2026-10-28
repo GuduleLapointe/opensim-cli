@@ -12,12 +12,12 @@ ARG OPENSIM_SYSTEM_UID=8002
 ARG OPENSIM_SYSTEM_GROUP=opensim
 ARG OPENSIM_SYSTEM_GID=8002
 
-ARG OPENSIM_VAR_ROOT=/var/lib/opensim
-
 ARG OPENSIM_ADMIN_USER=opensim_admin
 ARG OPENSIM_ADMIN_UID=1000
 ARG OPENSIM_ADMIN_GROUP=opensim_admin
 ARG OPENSIM_ADMIN_GID=1000
+
+ARG OPENSIM_VAR_ROOT=/var/lib/opensim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -36,16 +36,14 @@ RUN useradd -u ${OPENSIM_ADMIN_UID} -g ${OPENSIM_ADMIN_GID} \
     -G ${OPENSIM_SYSTEM_GID},sudo \
     --create-home --shell /bin/bash ${OPENSIM_ADMIN_USER}
 
-RUN echo ${OPENSIM_ADMIN_USER} ALL = (ALL) NOPASSWD: ALL > /etc/sudoers.d/opensim_admin
-
 # The packages depend on "a database server, or PostgreSQL, or SQLite" and on
 # "a MySQL client": what is installed first satisfies them, so no server is added
 # (the database is another container, or another machine).
 # The Magiiic repository gives the packages of the family.
 
+# Install ca-certificates curl gpg openssl before adding sources
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-    libsqlite3-0 mariadb-server postgresql \
     ca-certificates curl gpg openssl
 
 COPY magiiic.list /etc/apt/sources.list.d/magiiic.list
@@ -56,22 +54,30 @@ RUN curl -fsSL https://apt.magiiic.com/magiiic-packaging.asc \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         opensim-cli \
-    && opensim install-dotnet
+    && opensim install-dotnet \
+    && /usr/share/opensim-cli/quick-install.sh
     # \
     # && mkdir -p /etc/opensim ${OPENSIM_VAR_ROOT} /var/log/opensim \
     # && chown opensim:opensim /etc/opensim ${OPENSIM_VAR_ROOT} /var/log/opensim
     # && /usr/share/opensim-cli/quick-install.sh
-# Install dotnet with opensim CLI to allow Debian fallback
 
-# RUN opensim install-dotnet || true
 RUN rm -rf /pkgs /var/lib/apt/lists/*
 
 # Volumes are only relevant if there is no need to access them from host
 # VOLUME ["/etc/opensim", "${OPENSIM_VAR_ROOT}", "/var/log/opensim"]
 
-USER ${OPENSIM_ADMIN_USER}
+USER root
+WORKDIR ${OPENSIM_VAR_ROOT}
+
+RUN echo "${OPENSIM_ADMIN_USER} ALL = (ALL) NOPASSWD: ALL" > /etc/sudoers.d/opensim_admin
+RUN echo "${OPENSIM_SYSTEM_USER} ALL = (ALL) NOPASSWD: ALL" > /etc/sudoers.d/opensim_admin
+
+USER ${OPENSIM_SYSTEM_USER}
 # WORKDIR ${OPENSIM_VAR_ROOT}
-WORKDIR /home/${OPENSIM_ADMIN_USER}
+WORKDIR ~${OPENSIM_ADMIN_USER}
+
+# USER ${OPENSIM_ADMIN_USER}
+# WORKDIR /home/${OPENSIM_ADMIN_USER}
 
 STOPSIGNAL SIGTERM
 

@@ -749,16 +749,22 @@ phase_dependencies() {
 	if [[ -n "$clone" ]]; then
 		if [[ $(uname -s) == Darwin ]]; then
 			command -v brew >/dev/null 2>&1 || die "Homebrew is needed on macOS: https://brew.sh"
-			for tool in php composer screen jq; do command -v "$tool" >/dev/null 2>&1 || brew install "$tool" || return $?; done
+			for tool in php composer screen jq; do
+				command -v "$tool" >/dev/null 2>&1 ||
+					brew install "$tool" || return $?
+			done
 		else
 			local missing=()
 			command -v php >/dev/null 2>&1 || missing+=("${PHP_PACKAGES[@]}")
 			command -v composer >/dev/null 2>&1 || missing+=(composer)
-			for tool in curl git unzip screen jq; do command -v "$tool" >/dev/null 2>&1 || missing+=("$tool"); done
-			command -v mysql >/dev/null 2>&1 || command -v mariadb >/dev/null 2>&1 || missing+=(default-mysql-client)
+			for tool in curl git unzip screen jq; do
+				command -v "$tool" >/dev/null 2>&1 || missing+=("$tool")
+			done
+			command -v mysql >/dev/null 2>&1 || command -v mariadb >/dev/null 2>&1 ||
+				missing+=(default-mysql-client)
 			if ((${#missing[@]})); then
-				say "This machine needs: ${missing[*]}"
-				ask "Install them?" || die cancelled
+				# say "Installing ${missing[*]}"
+				# ask "Install them?" || die cancelled
 				install_packages "${missing[@]}" || return $?
 			fi
 		fi

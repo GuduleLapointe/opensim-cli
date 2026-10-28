@@ -17,7 +17,7 @@ TMP=$(mktemp) || exit $?
 trap "rm -rf $TMP $TMP.*" EXIT
 
 BASEDIR=$(cd $(dirname $0)/.. && pwd)
-log BASEDIR $BASEDIR
+say BASEDIR $BASEDIR
 SHAREDIR=$(cd $BASEDIR/share 2>/dev/null ||
 	cd /usr/share/opensim-cli/share 2>/dev/null && pwd) ||
 	exit 2
@@ -68,7 +68,7 @@ for key in $*; do
 			;;
 		esac
 		args=(
-			"--network host"
+			# "--network host"
 			"--from $image"
 			"--isolation rootless"
 			"--tag opensim-$key"
@@ -87,8 +87,7 @@ for key in $*; do
 		)
 
 		command="podman build $SHAREDIR/podman/debian ${args[@]}"
-		$dry_run ${command} &&
-			say "[SUCCESS]" ||
-			say "[ERROR $?] ${command}"
+		$dry_run ${command} || exit $?
+		say "[SUCCESS]"
 	done
 done
