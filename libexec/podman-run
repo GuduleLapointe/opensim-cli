@@ -56,10 +56,28 @@ fi
 log setting mount points
 mount_points=(
 	/etc/opensim
-	/var/lib/opensim
-	/var/log/opensim
+	# /var/lib/opensim
+	# /var/log/opensim
 )
+
 remote=${CONTAINER_CONNECTION:+ssh ${CONTAINER_CONNECTION}}
+$remote opensim --layout --format=env >$TMP.layout
+. $TMP.layout
+
+[ -z "${OPENSIM_SYSTEM_UID:-}" ] && say "[ERROR] missing  OPENSIM_SYSTEM_UID" && exit 1
+[ -z "${OPENSIM_SYSTEM_GID:-}" ] && say "[ERROR] missing  OPENSIM_SYSTEM_GID" && exit 1
+[ -z "${CURRENT_UID:-}" ] && say "[ERROR] missing  CURRENT_UID" && exit 1
+[ -z "${CURRENT_GID:-}" ] && say "[ERROR] missing  CURRENT_GID" && exit 1
+
+rootless=$(podman info --format '{{.Host.Security.Rootless}}')
+
+log rootless $rootless
+log host user $CURRENT_UID:$CURRENT_GID
+log system user $OPENSIM_SYSTEM_UID:$OPENSIM_SYSTEM_GID
+
+set | egrep "^(OPENSIM_|CURRENT_|CONTAINER_)"
+
+exit # DEBUG
 for mount_point in ${mount_points[@]}; do
 	echo mount_point $mount_point
 	src=$($remote realpath $mount_point)
@@ -68,53 +86,33 @@ for mount_point in ${mount_points[@]}; do
 	# args+=("--mount type=bind,src=$src,dst=$mount_point,bind-propagation=shared")
 done
 
-# container_uid=134
-# container_gid=143
-# OPENSIM_USER=${OPENSIM_USER:-opensim}
-# OPENSIM_GROUP=${OPENSIM_GROUP:-opensim}
-container_uid=${OPENSIM_UID:-8002}
-container_gid=${OPENSIM_GID:-8002}
-
-host_uid=${CONTAINER_USER:-$(id -u $container_uid 2>/dev/null || id -u)}
-host_gid=${CONTAINER_GROUP:-$(id -g $container_uid 2>/dev/null || id -u)}
-
-if [ -n "$CONTAINER_CONNECTION" ]; then
-	log get host user on $CONTAINER_CONNECTION
-	ssh $CONTAINER_CONNECTION "echo host_uid=\$(id -u $container_uid 2>/dev/null || id -u);
-    echo host_gid=\$(id -u $container_uid 2>/dev/null || id -u)" >$TMP.remote_user
-	. $TMP.remote_user
-fi
-log host user $host_uid:$host_gid
-
-# log check rootless availability
-# rootless=$(podman info --format '{{.Host.Security.Rootless}}')
-
 log PODMAN_USERNS ${PODMAN_USERNS:-(not set)}
 
 if [[ "$rootless" == "true" ]]; then
-	# 	say "Rootless true, map user namespace"
-	# 	# if [[ "$host_uid" != 0:0 ]]; then
-	# 	# 	say "rootless Podman cannot map OpenSim volumes owned by $host_uid; run Podman as their owner or use a rootful connection"
+	say "Rootless true, map user namespace"
+	# 	# if [[ "$CURRENT_UID" != 0:0 ]]; then
+	# 	# 	say "rootless Podman cannot map OpenSim volumes owned by $CURRENT_UID; run Podman as their owner or use a rootful connection"
 	# 	# 	exit 1
 	# 	# fi
-	args+=(--userns=keep-id:uid=$container_uid,gid=$container_gid)
+	args+=(--userns=keep-id:uid=$OPENSIM_SYSTEM_UID,gid=$OPENSIM_SYSTEM_GID)
 else
+	say "Rootless false, map user namespace"
 	args+=(--userns=host)
 fi
-# 	args+=(--userns=keep-id:uid=$host_uid,gid=$host_gid)
-# elif [[ "$container_uid" != "$host_uid" ]]; then
-# 	say "Rootless false, set mapping $container_uid to $host_uid"
+# 	args+=(--userns=keep-id:uid=$CURRENT_UID,gid=$CURRENT_GID)
+# elif [[ "$OPENSIM_SYSTEM_UID" != "$CURRENT_UID" ]]; then
+# 	say "Rootless false, set mapping $OPENSIM_SYSTEM_UID to $CURRENT_UID"
 # 	args+=(
 # 		--uidmap 0:0:65536
 # 		--gidmap 0:0:65536
-# 		--uidmap +$container_uid:$host_uid:1
-# 		--uidmap +$host_uid:65536:1
-# 		--gidmap +$container_gid:$host_gid:1
-# 		--gidmap +$host_gid:65536:1
-# 		# --uidmap +$host_uid:$container_uid:1
-# 		# --uidmap +$container_uid:65536:1
-# 		# --gidmap +$host_gid:$container_gid:1
-# 		# --gidmap +$container_gid:65536:1
+# 		--uidmap +$OPENSIM_SYSTEM_UID:$CURRENT_UID:1
+# 		--uidmap +$CURRENT_UID:65536:1
+# 		--gidmap +$OPENSIM_SYSTEM_GID:$CURRENT_GID:1
+# 		--gidmap +$CURRENT_GID:65536:1
+# 		# --uidmap +$CURRENT_UID:$OPENSIM_SYSTEM_UID:1
+# 		# --uidmap +$OPENSIM_SYSTEM_UID:65536:1
+# 		# --gidmap +$CURRENT_GID:$OPENSIM_SYSTEM_GID:1
+# 		# --gidmap +$OPENSIM_SYSTEM_GID:65536:1
 # 	)
 # fi
 

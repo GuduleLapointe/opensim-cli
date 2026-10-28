@@ -74,10 +74,14 @@ if [[ "${1:-}" == --layout ]]; then
 	jq -er '
 		.data | select(.type == "layout") | .attributes |
 		[
-			["systemUser", "OPENSIM_SYSTEM_USER"], ["systemUid", "OPENSIM_SYSTEM_UID"],
-			["systemGroup", "OPENSIM_SYSTEM_GROUP"], ["systemGid", "OPENSIM_SYSTEM_GID"],
-			["currentUser", "OPENSIM_ADMIN_USER"], ["currentUid", "OPENSIM_ADMIN_UID"],
-			["currentGroup", "OPENSIM_ADMIN_GROUP"], ["currentGid", "OPENSIM_ADMIN_GID"],
+			["currentUser", "CURRENT_USER"],
+			["currentUid", "CURRENT_UID"],
+			["currentGroup", "CURRENT_GROUP"],
+			["currentGid", "CURRENT_GID"],
+			["systemUser", "OPENSIM_SYSTEM_USER"],
+			["systemUid", "OPENSIM_SYSTEM_UID"],
+			["systemGroup", "OPENSIM_SYSTEM_GROUP"],
+			["systemGid", "OPENSIM_SYSTEM_GID"],
 			["etcRoot", "OPENSIM_ETC_ROOT"],
 			["varRoot", "OPENSIM_VAR_ROOT"],
 			["logsRoot", "OPENSIM_LOGS_ROOT"],
