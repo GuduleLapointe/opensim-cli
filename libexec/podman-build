@@ -13,6 +13,7 @@ log() {
 
 PGM=$(basename "$0")
 TMP=$(mktemp) || exit $?
+
 trap "rm -rf $TMP $TMP.*" EXIT
 
 BASEDIR=$(cd $(dirname $0)/.. && pwd)
@@ -22,9 +23,6 @@ SHAREDIR=$(cd $BASEDIR/share 2>/dev/null ||
 	exit 2
 log SHAREDIR $SHAREDIR
 log Images $SHAREDIR/podman/images
-
-remote=${CONTAINER_CONNECTION:+ssh ${CONTAINER_CONNECTION}}
-log remote $remote
 
 if ! cut -d"#" -f 1 $SHAREDIR/podman/images | grep "." >$TMP.images; then
 	log empty images list $SHAREDIR/podman/images
@@ -38,12 +36,24 @@ if [ -z "$1" ]; then
 	exit
 fi
 
-OPENSIM_USER=${OPENSIM_USER:-opensim}
-OPENSIM_GROUP=${OPENSIM_GROUP:-opensim}
-OPENSIM_UID=${OPENSIM_UID:-8002}
-OPENSIM_GID=${OPENSIM_GID:-8002}
-PODMAN_USER=${PODMAN_USER:-${OPENSIM_USER}}
-PODMAN_GROUP=${PODMAN_GROUP:-${OPENSIM_GROUP}}
+remote=${CONTAINER_CONNECTION:+ssh ${CONTAINER_CONNECTION}}
+$remote opensim --layout --format=env >$TMP.layout
+. $TMP.layout
+[ -z ${OPENSIM_SYSTEM_UID:-} ] &&
+	log "opensim-cli must be installed and up to date on ${CONTAINER_CONNECTION:-local host}" &&
+	exit 1
+
+dry_run=
+if [ "${DRY_RUN:-}" = "yes" ]; then
+	dry_run="say [DRY_RUN]"
+fi
+
+OPENSIM_SYSTEM_USER=${OPENSIM_SYSTEM_USER:-opensim}
+OPENSIM_SYSTEM_GROUP=${OPENSIM_SYSTEM_GROUP:-opensim}
+OPENSIM_SYSTEM_UID=${OPENSIM_SYSTEM_UID:-8002}
+OPENSIM_SYSTEM_GID=${OPENSIM_SYSTEM_GID:-8002}
+OPENSIM_CURRENT_USER=${OPENSIM_CURRENT_USER:-${OPENSIM_SYSTEM_USER}}
+OPENSIM_CURRENT_GROUP=${OPENSIM_CURRENT_GROUP:-${OPENSIM_SYSTEM_GROUP}}
 
 for key in $*; do
 	grep "^$key\b" $TMP.images | while read key image os_id os_version; do
@@ -56,18 +66,20 @@ for key in $*; do
 			;;
 		esac
 		args=(
-			--build-arg OPENSIM_USER=${OPENSIM_USER}
-			--build-arg OPENSIM_UID=${OPENSIM_UID}
-			--build-arg OPENSIM_GROUP=${OPENSIM_GROUP}
-			--build-arg OPENSIM_GID=${OPENSIM_GID}
-			--network host
-			--from $image
-			--isolation rootless
-			--tag opensim-$key
-			--label $label
+			"--build-arg OPENSIM_SYSTEM_USER=${OPENSIM_SYSTEM_USER}"
+			"--build-arg OPENSIM_SYSTEM_UID=${OPENSIM_SYSTEM_UID}"
+			"--build-arg OPENSIM_SYSTEM_GROUP=${OPENSIM_SYSTEM_GROUP}"
+			"--build-arg OPENSIM_SYSTEM_GID=${OPENSIM_SYSTEM_GID}"
+			"--network host"
+			"--from $image"
+			"--isolation rootless"
+			"--tag opensim-$key"
+			"--label $label"
 		)
 
-		say podman build $SHAREDIR/podman/debian ${args[@]}
-		podman build $SHAREDIR/podman/debian ${args[@]} || exit $?
+		command="podman build $SHAREDIR/podman/debian ${args[@]}"
+		$dry_run ${command} &&
+			say "[SUCCESS]" ||
+			say "[ERROR $?] ${command}"
 	done
 done
