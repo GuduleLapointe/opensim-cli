@@ -37,6 +37,9 @@ depends:
     - podman-compose
     - sudo
 
+replaces:
+    - opensim-tools
+
 recommends:
     - default-mysql-server | virtual-mysql-server
     - uuid-runtime
