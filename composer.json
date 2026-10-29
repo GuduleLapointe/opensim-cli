@@ -15,7 +15,7 @@
         "magicoli/bash-tools": "^1.0.10"
     },
     "require-dev": {
-        "magicoli/build-tools": "^0.1.11"
+        "magicoli/build-tools": "0.1.12-beta.1"
     },
     "minimum-stability": "dev",
     "prefer-stable": true,

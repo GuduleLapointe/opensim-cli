@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "fb7118891cab79b977d31e742101da29",
+    "content-hash": "f64a1e29890ecac851c6954f0ec1aba0",
     "packages": [
         {
             "name": "guzzlehttp/guzzle",
@@ -1398,16 +1398,16 @@
     "packages-dev": [
         {
             "name": "magicoli/build-tools",
-            "version": "0.1.11",
+            "version": "0.1.12-beta.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/magicoli/build-tools.git",
-                "reference": "23830de70a31794375c40ad937a3e360c4820b27"
+                "reference": "6669586e7f11665cf9243205abe41bf5c7b294df"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/magicoli/build-tools/zipball/23830de70a31794375c40ad937a3e360c4820b27",
-                "reference": "23830de70a31794375c40ad937a3e360c4820b27",
+                "url": "https://api.github.com/repos/magicoli/build-tools/zipball/6669586e7f11665cf9243205abe41bf5c7b294df",
+                "reference": "6669586e7f11665cf9243205abe41bf5c7b294df",
                 "shasum": ""
             },
             "require": {
@@ -1432,9 +1432,9 @@
             "description": "Build, release and publish a project: Debian packages, zip, GitHub release, apt repository.",
             "support": {
                 "issues": "https://github.com/magicoli/build-tools/issues",
-                "source": "https://github.com/magicoli/build-tools/tree/0.1.11"
+                "source": "https://github.com/magicoli/build-tools/tree/0.1.12-beta.1"
             },
-            "time": "2026-10-26T13:16:05+00:00"
+            "time": "2026-10-29T00:39:11+00:00"
         }
     ],
     "aliases": [],
