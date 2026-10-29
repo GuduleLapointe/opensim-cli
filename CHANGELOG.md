@@ -1,5 +1,9 @@
 ## Changelog
 
+### Unreleased
+
+- fix: duplicate build-tools package in require and require-dev
+
 ### 3.0.0-beta.4
 
 - magicoli/container-tools => ^0.1.0@alpha
