@@ -1,4 +1,4 @@
-# opensim-cli
+# OpenSim CLI
 
 ![Stable](https://img.shields.io/github/release/GuduleLapointe/opensim-cli?label=stable&color=green&include_prerelease) ![GitHub Tag](https://img.shields.io/github/tag/GuduleLapointe/opensim-cli?label=latest&include_prereleases) ![GitHub commits since latest release](https://img.shields.io/github/commits-since/GuduleLapointe/opensim-cli/latest?label=dev) ![PHP](https://img.shields.io/badge/PHP-8.2+-7884bf) ![Bash](https://img.shields.io/badge/bash-5+) [![License](https://img.shields.io/badge/license-AGPL--3.0-552b55)](LICENSE) ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/GuduleLapointe/opensim-cli/total) [![Donate](https://img.shields.io/badge/-Donate-yellow)](https://magiiic.org/donate/)
 
