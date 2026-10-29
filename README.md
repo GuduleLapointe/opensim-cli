@@ -18,6 +18,8 @@ chmod +x kickstart.sh
 
 See `./kickstart.sh --help` for other options.
 
+See our [wiki](https://github.com/GuduleLapointe/opensim-cli/wiki) for detailed instructions.
+
 To run the installer on an SSH server, download it locally first, then run `./kickstart.sh --remote root@server --setup`.
 
 ## Requirements
