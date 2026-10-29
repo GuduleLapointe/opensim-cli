@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "47a4dc3be80fcd789ab9ffffff483a6b",
+    "content-hash": "9001c90b9d0b25a1d154207ae739b2f3",
     "packages": [
         {
             "name": "guzzlehttp/guzzle",
@@ -448,6 +448,46 @@
                 "source": "https://github.com/magicoli/bash-tools/tree/1.0.10"
             },
             "time": "2026-10-28T22:29:07+00:00"
+        },
+        {
+            "name": "magicoli/build-tools",
+            "version": "0.1.11",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/magicoli/build-tools.git",
+                "reference": "23830de70a31794375c40ad937a3e360c4820b27"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/magicoli/build-tools/zipball/23830de70a31794375c40ad937a3e360c4820b27",
+                "reference": "23830de70a31794375c40ad937a3e360c4820b27",
+                "shasum": ""
+            },
+            "require": {
+                "magicoli/bash-tools": "@dev"
+            },
+            "bin": [
+                "bin/build-tools",
+                "bin/apt-package",
+                "bin/apt-publish"
+            ],
+            "type": "library",
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "AGPL-3.0-or-later"
+            ],
+            "authors": [
+                {
+                    "name": "Olivier van Helden",
+                    "homepage": "https://magiiic.com"
+                }
+            ],
+            "description": "Build, release and publish a project: Debian packages, zip, GitHub release, apt repository.",
+            "support": {
+                "issues": "https://github.com/magicoli/build-tools/issues",
+                "source": "https://github.com/magicoli/build-tools/tree/0.1.11"
+            },
+            "time": "2026-10-26T13:16:05+00:00"
         },
         {
             "name": "magicoli/container-tools",
@@ -1395,54 +1435,10 @@
             "time": "2026-10-18T14:39:27+00:00"
         }
     ],
-    "packages-dev": [
-        {
-            "name": "magicoli/build-tools",
-            "version": "0.1.11",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/magicoli/build-tools.git",
-                "reference": "23830de70a31794375c40ad937a3e360c4820b27"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/magicoli/build-tools/zipball/23830de70a31794375c40ad937a3e360c4820b27",
-                "reference": "23830de70a31794375c40ad937a3e360c4820b27",
-                "shasum": ""
-            },
-            "require": {
-                "magicoli/bash-tools": "@dev"
-            },
-            "bin": [
-                "bin/build-tools",
-                "bin/apt-package",
-                "bin/apt-publish"
-            ],
-            "type": "library",
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "AGPL-3.0-or-later"
-            ],
-            "authors": [
-                {
-                    "name": "Olivier van Helden",
-                    "homepage": "https://magiiic.com"
-                }
-            ],
-            "description": "Build, release and publish a project: Debian packages, zip, GitHub release, apt repository.",
-            "support": {
-                "issues": "https://github.com/magicoli/build-tools/issues",
-                "source": "https://github.com/magicoli/build-tools/tree/0.1.11"
-            },
-            "time": "2026-10-26T13:16:05+00:00"
-        }
-    ],
+    "packages-dev": [],
     "aliases": [],
     "minimum-stability": "dev",
-    "stability-flags": {
-        "magicoli/container-tools": 15,
-        "magicoli/opensim-engine": 10
-    },
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {},
