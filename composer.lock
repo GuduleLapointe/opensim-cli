@@ -564,7 +564,7 @@
             "dist": {
                 "type": "path",
                 "url": "../opensim-engine",
-                "reference": "c157dbd0cc8e37f7aa69023d95515d447f26daae"
+                "reference": "9de9d8f00b3f8998ca83d71fecbdccc02879424d"
             },
             "require": {
                 "ext-curl": "*",
@@ -1391,7 +1391,7 @@
             "dist": {
                 "type": "path",
                 "url": "../build-tools",
-                "reference": "726d2b6b470f19a065da24d2141e2ff1d9095c14"
+                "reference": "c240248dec8221864c38f4b0962a1e788c1a9292"
             },
             "require": {
                 "magicoli/bash-tools": "@dev"
