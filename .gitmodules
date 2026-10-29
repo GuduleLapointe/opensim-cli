@@ -1,3 +1,6 @@
 [submodule "bashunit"]
 	path = lib/bashunit
 	url = https://github.com/TypedDevs/bashunit.git
+[submodule "docs"]
+	path = docs
+	url = https://github.com/GuduleLapointe/opensim-cli.wiki.git

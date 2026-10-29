@@ -25,10 +25,7 @@ composer install
 composer test
 ```
 
-For an existing clone, initialize Bashunit with
-`git submodule update --init --recursive`. The submodule is pinned to release
-0.50.1. `composer test` runs Bashunit's default `tests/` discovery. The numeric
-test directories put local application tests before the package build.
+For an existing clone, initialize Bashunit with `git submodule update --init --recursive`. The submodule is pinned to release 0.50.1. `composer test` runs Bashunit's default `tests/` discovery. The numeric test directories put local application tests before the package build.
 
 The person is a file of answers (`FE_INPUT_FD`); dialog is a fake that logs its arguments and answers from a file, as in the kit.
 
@@ -82,3 +79,12 @@ v1.2.3 Main change if applicable
 - Make sure to update all relevant files (.version, README.md, composer.json... ) and update CHANGELOG.md with the exact same description
 - Replace `dev-dev` requires with released constraints (e.g. `^1.0`) and run `composer update` so that `composer.lock` no longer points to local paths, otherwise the release cannot be installed on another machine. Switch back to `dev-dev` after the release
 - after commit, add a tag named with the bare version number ("1.2.3"), with the exact same message as the commit (starting with "v1.2.3")
+
+## Documentation
+
+Keep the documentation up to date as changes are made to the code.
+
+- **README.md**: General overview, summary of features, initial setup instructions for end users, and brief guidelines for developers (with a reference to DEVELOPERS.md for further details).
+- **docs/**: Detailed instructions for end users (a Git submodule of the GitHub wiki; to be included when pushing to the main repository).
+- **DEVELOPERS.md**: Detailed instructions for developers, including the application structure and coding conventions.
+- **CHANGELOG.md**: Add all relevant new changes to the "Unreleased" section in a concise format; specific details should be included in the Git commit messages.
