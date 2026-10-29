@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-QUICK_INSTALL_SOURCE=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/quick-install.sh
+QUICK_INSTALL_SOURCE=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/kickstart.sh
 QUICK_INSTALL_LIBRARY_LOADED=no
 
 function quick_install_load_library() {
@@ -17,7 +17,7 @@ function quick_install_load_library() {
 
 function set_up() {
 	WORK=$(mktemp -d)
-	QUICK_INSTALL=$WORK/project/quick-install.sh
+	QUICK_INSTALL=$WORK/project/kickstart.sh
 	mkdir -p "$WORK/project/bin" "$WORK/project/vendor"
 	cp "$QUICK_INSTALL_SOURCE" "$QUICK_INSTALL"
 	printf '{}\n' >"$WORK/project/composer.json"
@@ -196,7 +196,10 @@ function test_custom_apt_source_does_not_fetch_magiiic_signing_key() {
 	apt_update() { return 0; }
 	as_root() { return 0; }
 	uname() { printf 'Linux\n'; }
-	curl() { key_downloaded=yes; return 1; }
+	curl() {
+		key_downloaded=yes
+		return 1
+	}
 	configure_package_sources
 	unset -f apt-get dpkg-query apt_update as_root uname curl
 	assert_equals no "$key_downloaded"
@@ -293,7 +296,10 @@ function test_dotnet_installer_uses_supported_runtime_channel() {
 	curl() {
 		local output
 		while (($#)); do
-			if [[ "$1" == -o ]]; then output=$2; shift 2; else shift; fi
+			if [[ "$1" == -o ]]; then
+				output=$2
+				shift 2
+			else shift; fi
 		done
 		printf '#!/usr/bin/env bash\nexit 0\n' >"$output"
 	}

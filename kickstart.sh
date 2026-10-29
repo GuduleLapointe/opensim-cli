@@ -3,12 +3,12 @@
 # OpenSim Install script: installs OpenSim and optionally starts `opensim setup`.
 #
 #   One command, from the web (Debian or Ubuntu):
-#     curl -fsSL https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/dev/quick-install.sh | sudo bash
+#     curl -fsSL https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/dev/kickstart.sh | sudo bash
 #
 #   Or from a clone of the repository:
-#     git clone https://github.com/GuduleLapointe/opensim-cli.git && cd opensim-cli && ./quick-install.sh
-#     ./quick-install.sh --remote root@server --setup
-#     ./quick-install.sh --podman
+#     git clone https://github.com/GuduleLapointe/opensim-cli.git && cd opensim-cli && ./kickstart.sh
+#     ./kickstart.sh --remote root@server --setup
+#     ./kickstart.sh --podman
 #
 #   Or with the packages only:  sudo apt install opensim opensim-cli opensim-helpers && opensim setup
 #
@@ -224,7 +224,7 @@ run_remote_install() (
 	local -a arguments=()
 	shift
 	[[ "$target" != -* ]] || die "--remote requires an SSH target, not another option"
-	[[ -f "$source_script" ]] || die "--remote requires quick-install.sh to be run from a local file"
+	[[ -f "$source_script" ]] || die "--remote requires kickstart.sh to be run from a local file"
 	command -v scp >/dev/null 2>&1 || die "scp is required for --remote"
 	command -v ssh >/dev/null 2>&1 || die "ssh is required for --remote"
 	[[ -z "$SETUP_CONFIG_FILE" || -r "$SETUP_CONFIG_FILE" ]] || die "cannot read setup config: $SETUP_CONFIG_FILE"
@@ -233,8 +233,8 @@ run_remote_install() (
 	remote_dir=$(ssh "$target" 'umask 077; mktemp -d /tmp/quick-install.XXXXXXXX') || die "could not create a private installation directory on $target"
 	[[ "$remote_dir" =~ ^/tmp/quick-install\.[a-zA-Z0-9.-]+$ ]] || die "invalid remote installation directory"
 	trap 'ssh "$target" "rm -rf -- $remote_dir" >/dev/null 2>&1 || true' EXIT
-	remote_script=$remote_dir/quick-install.sh
-	scp -- "$source_script" "$target:$remote_script" || die "could not copy quick-install.sh to $target"
+	remote_script=$remote_dir/kickstart.sh
+	scp -- "$source_script" "$target:$remote_script" || die "could not copy kickstart.sh to $target"
 	while (($#)); do
 		argument=$1
 		shift
@@ -346,7 +346,7 @@ run_podman_install() {
 	fi
 	[[ -x "$CONTAINER_TOOLS_CLI_SELECTED" ]] || die "container-tools is not executable: $CONTAINER_TOOLS_CLI_SELECTED"
 	prepare_podman_setup_config
-	[[ -f "$source_script" ]] || die "--podman requires quick-install.sh to be run from a local file"
+	[[ -f "$source_script" ]] || die "--podman requires kickstart.sh to be run from a local file"
 	server_image=$(build_systemd_image "$PODMAN_IMAGE") || die "could not build the systemd server image"
 	validate_prepared_podman_ports "$SETUP_CONFIG_FILE"
 	mapping_output=$(prepared_podman_publish_mappings "$SETUP_CONFIG_FILE") || die "the engine did not provide valid port bindings for the prepared setup"
@@ -362,7 +362,7 @@ run_podman_install() {
 	[[ -n "$name" ]] || die "container-tools did not report the created container name"
 	run_container_tool wait-ready "$name" -- sh -c 'test "$(cat /proc/1/comm)" = systemd && systemctl is-active multi-user.target && systemctl is-active ssh.service' || die "systemd services did not become ready in container $name"
 	say "Install OpenSim in container $name"
-	run_container_tool cp "$source_script" "$name:/tmp/quick-install.sh" || die "could not copy quick-install.sh to container $name"
+	run_container_tool cp "$source_script" "$name:/tmp/kickstart.sh" || die "could not copy kickstart.sh to container $name"
 	run_container_tool cp "$SETUP_CONFIG_FILE" "$name:/tmp/opensim-setup.json" || die "could not copy setup config to container $name"
 	SETUP_RC_TEMP=$(mktemp "$TMP.rc.XXXXXXXX") || die "could not create a private database configuration"
 	jq -r '.answers | {
@@ -385,7 +385,7 @@ run_podman_install() {
 	[[ -z "$ASSUME_YES" ]] || environment+=(ASSUME_YES="$ASSUME_YES")
 	[[ -z "$RUN_SETUP" ]] || environment+=(RUN_SETUP="$RUN_SETUP")
 	[[ -z "$DEBUG" ]] || environment+=(DEBUG="$DEBUG")
-	run_container_tool exec "$name" -- env "${environment[@]}" bash /tmp/quick-install.sh "$@" || status=$?
+	run_container_tool exec "$name" -- env "${environment[@]}" bash /tmp/kickstart.sh "$@" || status=$?
 	return "$status"
 }
 
@@ -798,7 +798,7 @@ save_database_credentials() {
 	mv "$tmp" "$rc" || return $?
 	chmod 600 "$rc" || return $?
 	cat <<-OPENSIM_RC >>"$rc" || return $?
-		# OpenSim database accounts, created by quick-install.sh
+		# OpenSim database accounts, created by kickstart.sh
 		export OPENSIM_DB_HOST=$(shell_quote "${OPENSIM_DB_HOST:-localhost}")
 		export OPENSIM_DB_ADMIN_USER=$(shell_quote "$OPENSIM_DB_ADMIN_USER")
 		export OPENSIM_DB_ADMIN_PASS=$(shell_quote "$OPENSIM_DB_ADMIN_PASS")

@@ -55,11 +55,11 @@ RUN curl -fsSL https://apt.magiiic.com/magiiic-packaging.asc \
     && apt-get install -y --no-install-recommends \
         opensim-cli \
     && opensim install-dotnet \
-    && /usr/share/opensim-cli/quick-install.sh
+    && /usr/share/opensim-cli/kickstart.sh
     # \
     # && mkdir -p /etc/opensim ${OPENSIM_VAR_ROOT} /var/log/opensim \
     # && chown opensim:opensim /etc/opensim ${OPENSIM_VAR_ROOT} /var/log/opensim
-    # && /usr/share/opensim-cli/quick-install.sh
+    # && /usr/share/opensim-cli/kickstart.sh
 
 RUN rm -rf /pkgs /var/lib/apt/lists/*
 

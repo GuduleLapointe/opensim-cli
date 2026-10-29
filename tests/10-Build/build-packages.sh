@@ -20,7 +20,10 @@ while IFS=$'\t' read -r composer_package repository_path; do
 	[[ -n "$composer_package" ]] || continue
 	case "$repository_path" in
 	../*) relative_path=${repository_path#../} ;;
-	*) printf 'unsupported Composer path repository for %s: %s\n' "$composer_package" "$repository_path" >&2; exit 1 ;;
+	*)
+		printf 'unsupported Composer path repository for %s: %s\n' "$composer_package" "$repository_path" >&2
+		exit 1
+		;;
 	esac
 	[[ -n "$relative_path" && "$relative_path" != *../* && "$relative_path" != /* ]] || {
 		printf 'Composer path repository escapes the build workspace: %s\n' "$repository_path" >&2
@@ -69,9 +72,9 @@ cli_zip=$(find dist -maxdepth 1 -type f -name '*.zip' -size +0c -print -quit)
 }
 cp "$cli_deb" "$DEPLOY_STAGE/debs/"
 cp "$cli_zip" "$ARTIFACT_STAGE/opensim-cli.zip"
-cp "$OPENSIM_ROOT/quick-install.sh" "$DEPLOY_STAGE/quick-install.sh"
+cp "$OPENSIM_ROOT/kickstart.sh" "$DEPLOY_STAGE/kickstart.sh"
 
 [[ $(find "$DEPLOY_STAGE/debs" -maxdepth 1 -type f -name '*.deb' | wc -l | tr -d ' ') == 1 ]]
 (cd "$DEPLOY_STAGE/debs" && shasum -a 256 ./*.deb >SHA256SUMS)
-(cd "$DEPLOY_STAGE" && shasum -a 256 quick-install.sh debs/*.deb >MANIFEST)
+(cd "$DEPLOY_STAGE" && shasum -a 256 kickstart.sh debs/*.deb >MANIFEST)
 printf 'Built and staged the OpenSim CLI .deb and .zip from the Composer-installed sources.\n'

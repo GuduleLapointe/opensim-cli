@@ -58,7 +58,7 @@
 
 Complete rewrite of opensim terminal tools, using new opensim-engine 3.x API
 
-- new quick-install.sh: allow simple download and install all required packages
+- new kickstart.sh: allow simple download and install all required packages
     - configurable sources : from git repo, local .deb package or official projet apt repo
     - configurable mode: full install or separate main packages, dotnet, opensim engine...
 - rewrite opensim CLI, wrapper for all OpenSim controls:
@@ -72,7 +72,7 @@ Complete rewrite of opensim terminal tools, using new opensim-engine 3.x API
 
 **Enabled features**:
 
-- `quick-install.sh`: automated installation script
+- `kickstart.sh`: automated installation script
     - apt official repo (linux, stable by default)
     - from local git clone
     - from local deb packages

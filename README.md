@@ -9,14 +9,14 @@ The command line to set up and manage OpenSimulator, in bash. It asks the questi
 This will install OpenSimulator, OpenSim Engine and all required packages from official apt repository.
 
 ```
-curl -fsSL https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/refs/heads/dev/quick-install.sh -o quick-install.sh
-chmod +x quick-install.sh
-./quick-install.sh --setup
+curl -fsSL https://raw.githubusercontent.com/GuduleLapointe/opensim-cli/refs/heads/dev/kickstart.sh -o kickstart.sh
+chmod +x kickstart.sh
+./kickstart.sh --setup
 ```
 
-See `./quick-install.sh --help` for other options.
+See `./kickstart.sh --help` for other options.
 
-To run the installer on an SSH server, download it locally first, then run `./quick-install.sh --remote root@server --setup`.
+To run the installer on an SSH server, download it locally first, then run `./kickstart.sh --remote root@server --setup`.
 
 ## Requirements
 
@@ -30,7 +30,7 @@ To run the installer on an SSH server, download it locally first, then run `./qu
 
 ## Features
 
-### First installation: `quick-install.sh`
+### First installation: `kickstart.sh`
 
 - [x] apt official repo (linux, stable by default)
 - [x] from local git clone
