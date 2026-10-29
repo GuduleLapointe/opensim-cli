@@ -1,5 +1,7 @@
 # opensim-cli
 
+![Stable](https://img.shields.io/github/release/GuduleLapointe/opensim-cli?label=stable&color=green&include_prerelease) ![GitHub Tag](https://img.shields.io/github/tag/GuduleLapointe/opensim-cli?label=latest&include_prereleases) ![GitHub commits since latest release](https://img.shields.io/github/commits-since/GuduleLapointe/opensim-cli/latest?label=dev) ![PHP](https://img.shields.io/badge/PHP-8.2+-7884bf) ![Bash](https://img.shields.io/badge/bash-5+) [![License](https://img.shields.io/badge/license-AGPL--3.0-552b55)](LICENSE) ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/GuduleLapointe/opensim-cli/total) [![Donate](https://img.shields.io/badge/-Donate-yellow)](https://magiiic.org/donate/)
+
 The command line to set up and manage OpenSimulator, in bash. It asks the questions and shows the results; the rules and the work are the [OpenSim engine](https://github.com/GuduleLapointe/opensim-engine)'s. It needs nothing else of the OpenSim ecosystem: not the core, not the helpers, not the modules.
 
 **Under construction.** The quick setup asks what to set up and a few answers, checks them with the engine and shows the setup they stand for. Besides it: status, ports, start, stop, restart, console and install-dotnet. `dev/build.sh` makes the Debian package and the zip into `dist/`. The package installs the bash completion (`share/bash-completion/opensim`).
@@ -20,13 +22,19 @@ To run the installer on an SSH server, download it locally first, then run `./ki
 
 ## Requirements
 
-- Bash 5+
+- Bash 5+ (standard on Linux, `brew install bash` on macOS)
 - PHP CLI 8.2+ with cURL, intl, mbstring, MySQL and XML extensions
 - `jq`
 - MySQL or MariaDB server and client
 - Root access or `sudo`
 - `ssh` and `scp` (SSH installs)
 - `dialog` (optional; plain prompts are supported)
+
+Fully tested on:
+
+- Ubuntu 24.04 and 26.04
+- Debian 12 and 13
+- macOS 13.7.8 and later
 
 ## Features
 
