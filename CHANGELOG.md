@@ -1,6 +1,6 @@
 ## Changelog
 
-### 3.0.0-beta.3
+### Unreleased
 
 - magicoli/container-tools => ^0.1.0@alpha
 - magicoli/opensim-engine => ^3.0@beta

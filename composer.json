@@ -10,14 +10,14 @@
         }
     ],
     "require": {
-        "magicoli/container-tools": "^0.1.0-alpha.3",
-        "magicoli/opensim-engine": "^3.0.0-beta.13",
-        "magicoli/bash-tools": "^1.0.10",
-        "magicoli/build-tools": "^0.1.11"
+        "magicoli/container-tools": "^0.1.0@alpha",
+        "magicoli/opensim-engine": "^3.0@beta",
+        "magicoli/bash-tools": "^1.0"
     },
     "require-dev": {
         "magicoli/build-tools": "^0.1.11"
     },
+    "repositories": [],
     "minimum-stability": "dev",
     "prefer-stable": true,
     "config": {
