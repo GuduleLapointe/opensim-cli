@@ -2,6 +2,11 @@
 
 ### Unreleased
 
+- magicoli/container-tools => ^0.1.0@alpha
+- magicoli/opensim-engine => ^3.0@beta
+- magicoli/bash-tools => ^1.0
+- magicoli/build-tools => ^0.1.11
+
 ### 3.0.0-beta.2
 
 - fix (containers): map OpenSim user to bind mount owner
